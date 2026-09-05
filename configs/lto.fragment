@@ -1,0 +1,109 @@
+# config-fast -- the ITERATION instrument (SCOPE.md §3).
+# Base: allnoconfig. Every line below is something a boot, a module load, or a
+# ported lib/ function actually needs. Nothing is here "in case".
+#
+# Its stated limits live in logs/build-limits.md and were written while this
+# file was, not afterwards.
+
+# --- Machine.
+CONFIG_64BIT=y
+CONFIG_SMP=y
+CONFIG_NR_CPUS=4
+CONFIG_PRINTK=y
+CONFIG_PRINTK_TIME=y
+CONFIG_BUG=y
+CONFIG_MULTIUSER=y
+CONFIG_JUMP_LABEL=y
+
+# --- Console: qemu -nographic talks to the 8250.
+CONFIG_TTY=y
+CONFIG_SERIAL_8250=y
+CONFIG_SERIAL_8250_CONSOLE=y
+# CONFIG_SERIAL_8250_PCI was here and NEVER TOOK EFFECT: it depends on PCI,
+# which allnoconfig does not enable, so olddefconfig discarded it silently
+# every time. Found by rig/config.sh on its first run. The console has always
+# come up on the legacy 8250 port, which is why nobody noticed. Removed
+# rather than fixed -- config-fast does not want PCI.
+
+# --- Userspace: run an init, run a script, see /proc and /sys.
+CONFIG_BINFMT_ELF=y
+CONFIG_BINFMT_SCRIPT=y
+CONFIG_PROC_FS=y
+CONFIG_PROC_SYSCTL=y
+CONFIG_SYSFS=y
+CONFIG_DEVTMPFS=y
+CONFIG_DEVTMPFS_MOUNT=y
+CONFIG_TMPFS=y
+CONFIG_SHMEM=y
+
+# --- Root: an initramfs, nothing else. No disk, no net, no PCI storage.
+CONFIG_BLK_DEV_INITRD=y
+CONFIG_RD_GZIP=y
+
+# --- Criterion 4 is unmeasurable without these (SCOPE.md §3), and the
+# --- MODVERSIONS/GENDWARFKSYMS pair is what keeps CONFIG_RUST from being
+# --- silently dropped (PRIOR-ART.md §2).
+CONFIG_MODULES=y
+CONFIG_MODULE_UNLOAD=y
+CONFIG_MODVERSIONS=y
+CONFIG_GENDWARFKSYMS=y
+CONFIG_DEBUG_KERNEL=y
+CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT=y
+# CONFIG_DEBUG_INFO_REDUCED is not set
+# CONFIG_DEBUG_INFO_SPLIT is not set
+# CONFIG_DEBUG_INFO_BTF is not set
+# CONFIG_LTO_NONE is not set  -- superseded by CONFIG_LTO_CLANG_THIN below
+
+# --- Rust, and a built-in Rust module that prints during boot. Without the
+# --- last line this config can tell you the kernel booted but not that any
+# --- Rust ran -- which is precisely the failure this project exists to avoid.
+CONFIG_RUST=y
+CONFIG_SAMPLES=y
+CONFIG_SAMPLES_RUST=y
+CONFIG_SAMPLE_RUST_PRINT=y
+
+# --- lib/glob: the first ported module. GLOB has no prompt upstream (it is
+# --- select-only), so port/tree/lib/Kconfig uncomments upstream's own commented
+# --- prompt; see the note there. GLOB_SELFTEST is the SCOPE.md §4 class-A proof
+# --- caller and is not ours -- it ships in lib/globtest.c with a 63-case
+# --- corpus, and it is the reason this port needs no proof caller written for
+# --- it. It prints "glob: N self-tests passed, M failed" at boot.
+CONFIG_GLOB=y
+CONFIG_GLOB_SELFTEST=y
+
+# --- lib/math: int_pow, int_sqrt. The proof caller is lib/math/mathtest.c,
+# --- ours, because lib/math had no non-KUnit self-test to borrow.
+CONFIG_MATH_SELFTEST=y
+
+# --- lib/math/rational. Select-only upstream; port/tree/lib/math/Kconfig
+# --- gives it a prompt, for the same reason CONFIG_GLOB has one.
+CONFIG_RATIONAL=y
+
+# --- lib/{base64,memweight,net_utils,union_find}: the next ported batch, and
+# --- lib/libtest.c, their proof caller. GENERIC_NET_UTILS and UNION_FIND are
+# --- select-only upstream; port/tree/lib/Kconfig gives them prompts, for the
+# --- same reason CONFIG_GLOB has one.
+CONFIG_GENERIC_NET_UTILS=y
+CONFIG_UNION_FIND=y
+CONFIG_LIB_SELFTEST=y
+
+# --- lib/crc/crc16: select-only upstream, prompt added in
+# --- port/tree/lib/crc/Kconfig for the same reason as CONFIG_GLOB.
+CONFIG_CRC16=y
+
+# --- lib/{clz_ctz,crc/crc-ccitt,crypto/arc4}: the next ported batch.
+CONFIG_CRC_CCITT=y
+CONFIG_CRYPTO_LIB_ARC4=y
+
+# --- lib/crypto/{utils,chacha-block-generic}: __crypto_xor and the ChaCha core.
+CONFIG_CRYPTO_LIB_UTILS=y
+
+# --- lib/ucs2_string: UTF-16 to UTF-8, seven functions.
+CONFIG_UCS2_STRING=y
+
+# --- ThinLTO, with fat objects so gendwarfksyms still has an ELF to read ----
+# The point of this arm. GENDWARFKSYMS used to `depends on !LTO` -- "Requires
+# ELF object files" -- which, through `CONFIG_RUST depends on !MODVERSIONS ||
+# GENDWARFKSYMS`, made a Rust kernel with module versioning unable to use LTO
+# at all. -ffat-lto-objects emits the ELF object AND the bitcode in one file.
+CONFIG_LTO_CLANG_THIN=y

@@ -1,0 +1,99 @@
+# guard-except.txt -- symbols where rig/guard-check.sh PASS 1 flagged the
+# pristine C body, and a human decided where the guard went.
+#
+# Format:  <symbol>  <reason>
+#
+# A line here is a decision, not a silencer. Each one says what pass 1 saw
+# and why the port is still faithful. Adding a line without checking is the
+# same defect the script exists to catch, one level up.
+
+# --- branch hints inside a body that was ported whole ---------------------
+#
+# unlikely()/likely() is a hint to the branch predictor, not a guard: it
+# changes no result. Where the WHOLE body moved to Rust, every branch it
+# annotated moved with it, and only the hint is gone. Verified by reading
+# both sides, not assumed.
+
+minmax_running_max   likely/unlikely branch hints only; all four branches are in win_minmax_rs.rs running() (lines 108-117)
+minmax_running_min   likely/unlikely branch hints only; same running() body, called with the reversed comparator
+
+# --- an attribute on a definition nothing outside the file could see ------
+#
+# list_sort.c carried __attribute__((nonnull(2,3))) on the DEFINITION. It was
+# never on the declaration in include/linux/list_sort.h, so no caller ever
+# saw it and it constrained nothing outside that one translation unit; it let
+# the compiler assume non-null while compiling list_sort() itself.
+#
+# It is a real loss and it is recorded as one rather than papered over: the
+# Rust takes raw pointers and asserts nothing about them. Moving it to the
+# header would make it apply to callers for the first time, which is a
+# behaviour change upstream did not make, so it is deliberately NOT done here.
+# The `likely(bits)` hit on the same body is a branch hint, reproduced as
+# `if bits != 0` at list_sort_rs.rs:217.
+
+list_sort            nonnull was on the definition only, visible to no caller; likely(bits) is reproduced at list_sort_rs.rs:217
+
+# --- branch hints, again ---------------------------------------------------
+#
+# hex2bin's two `if (unlikely(hi < 0)) return -EINVAL;` guards ARE in the port,
+# at lib/hexdump_rs.rs -- the whole body moved. What pass 1 matched is the
+# `unlikely()` hint, which changes no result. Same case as win_minmax's.
+
+hex2bin              likely/unlikely branch hints only; both -EINVAL guards are in hexdump_rs.rs hex2bin() (the `if hi < 0` / `if lo < 0` returns)
+
+# --- A CONDITIONAL THAT WAS DELIBERATELY NOT REPRODUCED --------------------
+#
+# THIS IS NOT A FALSE POSITIVE. Pass 1 is right: the four siphash buffer
+# entry points each carry
+#
+#     #if defined(CONFIG_DCACHE_WORD_ACCESS) && BITS_PER_LONG == 64
+#
+# and lib/siphash_rs.rs compiles only the #else arm, on every configuration.
+# The #if arm reads the final partial word with load_unaligned_zeropad(): one
+# word load that may run past the end of the buffer, made safe by an
+# __ex_table entry that catches the fault. Reproducing it from Rust means
+# emitting kernel exception-table entries from asm!.
+#
+# THE HASH IS IDENTICAL either way -- both arms compute the same `b`, and
+# upstream's own lib/tests/siphash_kunit.c passes against the ported build.
+# What is lost is one load instead of up to three on the tail. CLAUDE.md:
+# performance is recorded, never a veto.
+#
+# Recorded in full in logs/deviations.md, with the fix shape. These four lines
+# are the acknowledgement that the check saw it and a human decided, which is
+# the whole point of this file.
+
+__siphash_unaligned  CONFIG_DCACHE_WORD_ACCESS arm deliberately not reproduced; portable tail always. Same hash, slower. logs/deviations.md
+__siphash_aligned    as __siphash_unaligned; and this symbol is not built on x86-64 at all
+__hsiphash_unaligned as __siphash_unaligned
+__hsiphash_aligned   as __siphash_unaligned; and this symbol is not built on x86-64 at all
+
+# --- a #ifdef that IS reproduced, in the Rust, as #[cfg] -------------------
+#
+# __iowrite64_copy forks on CONFIG_64BIT: quadword stores on 64-bit, and
+# `__iowrite32_copy(to, from, count * 2)` otherwise. Both arms are in
+# lib/iomap_copy_rs.rs under #[cfg(CONFIG_64BIT)] / #[cfg(not(...))], which is
+# the same fork in the same place. Pass 1 matches the CONSTRUCT, not whether
+# it survived, so it cannot tell those apart and says so.
+
+__iowrite64_copy     CONFIG_64BIT fork reproduced as #[cfg(CONFIG_64BIT)] in iomap_copy_rs.rs; both arms present
+
+# --- the WARN is reproduced; the likely()s are hints ------------------------
+#
+# errseq_set's WARN(err == 0 || (unsigned)-err > MAX_ERRNO, "err = %d\n", err)
+# IS in the port, as kernel::kabi_warn!() -- __warn_printk with the same
+# format and argument, then the bug-table trap with BUGFLAG_NO_CUT_HERE, which
+# is what __WARN_printf() does on an architecture with __WARN_FLAGS. That
+# macro was written for this file; see port/tree/rust/kernel/kabi.rs.
+#
+# The other two matches in these two entries are likely()/unlikely(), which
+# are branch-predictor hints and change no result. Same case as win_minmax's
+# and hex2bin's.
+
+errseq_set           WARN reproduced as kernel::kabi_warn! in errseq_rs.rs, same format and argument; the remaining match is a likely() hint
+errseq_check         likely() branch hint only; the `cur == since` test is in errseq_rs.rs errseq_check()
+
+# --- blake2s: one hint, and one guard that IS reproduced -------------------
+
+blake2s_update       unlikely() branch hint only; the `if inlen == 0 { return }` is in blake2s_rs.rs blake2s_update()
+blake2s_final        WARN_ON(IS_ENABLED(DEBUG) && !out) reproduced in blake2s_rs.rs as `if DEBUG && out.is_null()`, with DEBUG a const false -- IS_ENABLED(DEBUG) tests for DEBUG_ENABLED, which no Kconfig defines, so the C's guard is dead in every kernel build too

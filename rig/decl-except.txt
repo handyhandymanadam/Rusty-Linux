@@ -1,0 +1,4 @@
+__ctzsi2	declared in lib/clz_ctz.c itself, not a header -- the compiler builtins have no kernel prototype. Under GENKSYMS the CRC would come from that in-file declaration, so editing it (including `__weak` or an attribute) moves the fingerprint. Measured: dropping `__weak` moved it 0xc4777aa9 -> 0x5141d366.
+__clzsi2	as __ctzsi2.
+__clzdi2	as __ctzsi2.
+__ctzdi2	as __ctzsi2.

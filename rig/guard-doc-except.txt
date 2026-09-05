@@ -1,0 +1,18 @@
+# guard-doc-except.txt -- files whose comments name a guard construct without
+# claiming this file uses one. Read by rig/guard-doc-check.py (guard-check
+# PASS 2).
+#
+# Format:  <file>\t<family>\t<reason>
+#
+# KEEP THIS FILE SHORT. Pass 2's whole value is that naming a guard in a
+# comment IS a claim; every line here is a hole in that. A line is justified
+# only when the file is DOCUMENTATION about guards rather than a file that has
+# them -- not when a guard was removed and the comment was left behind, which
+# is the defect the check exists for.
+
+# EMPTY, and that is the right state. The only two entries this file ever had
+# were for lib/math/int_pow.c's doctrine note, which named WARN_ON and BUG_ON
+# while explaining the rule about them. That note now lives in
+# logs/c-entry-rule.md -- a .md file, which this pass does not scan -- and
+# int_pow.c has been deleted. Moving prose out of a C file was the better fix
+# than excusing it, and it is the fix to reach for next time.

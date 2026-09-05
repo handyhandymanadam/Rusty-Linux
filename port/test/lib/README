@@ -1,0 +1,17 @@
+Differential tests for the top-level lib/ ports.
+
+TWO KINDS OF ORACLE, and the second is better
+
+  Transcribed  ref_lib.c holds C bodies copied out of the kernel by hand.
+               Fine for a twenty-line function; a standing risk for anything
+               larger, and a copy that drifts is worse than no oracle at all.
+
+  Compiled     ref_sort.c is four lines: it #defines the exported names
+               aside and #includes port/pristine/lib/sort.c ITSELF, built
+               against the small shim headers in shim/linux/. Nothing is
+               transcribed, so nothing can drift, and a change to the
+               pristine file shows up as a test result rather than as
+               silence.
+
+The shims are deliberately minimal -- enough to compile one pristine file,
+not a userspace kernel. Add to them only when a port needs it.

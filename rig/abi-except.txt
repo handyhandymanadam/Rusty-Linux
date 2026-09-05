@@ -1,0 +1,62 @@
+# abi-except.txt -- the declared gaps in rig/abi-check.sh, one line each.
+#
+# THIS FILE IS THE ESCAPE HATCH AND IT IS DELIBERATELY SMALL. Everything not
+# named here fails closed: an unmeasurable type, and a rust_* hand-off that
+# never paired, are both hard failures unless a line below admits them.
+#
+# FORMAT
+#   <symbol> <slot>        `ret`, or `p0`/`p1`/... -- ONE slot that cannot be
+#                          measured. Every other slot is still compared and the
+#                          parameter count is still enforced.
+#   <symbol> nonpassthru   the C side and the Rust body are not the same
+#                          signature claim, so comparing them is meaningless.
+#
+# A line needs a reason, and a reason that CLAIMS COVERAGE ELSEWHERE must be one
+# someone actually tested. The first version of this file said a width change on
+# ZSTD_getErrorCode "would show on the Rust side as a non-enum type and still be
+# caught". Adversarial review changed that return to i64 and the guard reported
+# `0 MISMATCH`. The sentence was invented, not measured. Do not write another.
+#
+# Every `nonpassthru` reason below is the observed shape of the call site --
+# parameter and argument counts read from the source, not assumed.
+
+# ---- slots that cannot be measured by reading a signature
+reciprocal_value      ret  returns `struct reciprocal_value` BY VALUE. A signature carries no geometry, so two different structs of one size compare equal. Struct layout is covered by rig/layout-check.sh (criterion 11) via pahole member offsets; THE RETURN SLOT ITSELF IS UNMEASURED HERE. Both parameters and the count are still compared.
+reciprocal_value_adv  ret  same: returns `struct reciprocal_value_adv` by value. Same coverage, same limit.
+ZSTD_getErrorCode     ret  returns `ZSTD_ErrorCode`, a typedef to an ANONYMOUS enum. DWARF renders it `"enumeration "` with no name, so it cannot be looked up and its width cannot be read without assuming one. UNMEASURED, AND NOTHING ELSE COVERS IT -- a return-width change here would not be caught. The parameter is still compared.
+
+# ---- the thunk computes arguments, so the two signatures are different claims
+rust_crc_ccitt                nonpassthru  crc_ccitt/3 calls it with 4 args -- adds the crc_ccitt_table the C owns.
+rust_crypto_xor               nonpassthru  __crypto_xor/4 calls it with 6 args.
+rust_glob_match_str           nonpassthru  glob_match_len passes `str + len`, a computed end pointer, not a parameter.
+rust_sort_r                   nonpassthru  __sort_r/7 calls it with 8 args -- adds may_schedule.
+rust_xz_dec_bcj_init          nonpassthru  xz_dec_bcj_create/1 calls it with 2 args.
+rust_xz_dec_bcj_size          nonpassthru  xz_dec_bcj_create/1 calls it with 2 args.
+rust_xz_dec_init              nonpassthru  xz_dec_init/2 calls it with 4 args.
+rust_xz_dec_lzma2_init        nonpassthru  xz_dec_lzma2_create/2 calls it with 4 args -- adds a derived dict buffer.
+rust_xz_dec_microlzma_init    nonpassthru  xz_dec_microlzma_alloc/2 calls it with 4 args.
+rust_zlib_inflateInit2        nonpassthru  zlib_inflateInit2/2 calls it with 4 args -- derives a state pointer and a page-aligned window.
+
+# ---- the call is not the C function's last statement: dispatch, not delegation
+rust_binary_gcd                       nonpassthru  gcd() calls it inside a conditional; the C chooses an algorithm.
+rust_preboot_probe                    nonpassthru  called mid-body from extract_kernel with 1 of its 2 parameters.
+rust_xz_dec_bcj                       nonpassthru  called mid-body from xz_dec_end.
+rust_xz_dec_lzma2                     nonpassthru  called mid-body from xz_dec_end.
+rust_xz_dec_lzma2_dict_to_free        nonpassthru  called mid-body from xz_dec_lzma2_end.
+rust_xz_dec_lzma2_size                nonpassthru  called mid-body from xz_dec_lzma2_create.
+rust_xz_dec_microlzma_dict_size_valid nonpassthru  called mid-body from xz_dec_microlzma_alloc.
+rust_xz_dec_microlzma_dict_to_free    nonpassthru  called mid-body from xz_dec_microlzma_end.
+rust_xz_dec_microlzma_size            nonpassthru  called mid-body from xz_dec_microlzma_alloc.
+rust_xz_dec_size                      nonpassthru  called mid-body from xz_dec_init.
+
+# ---- NOT HAND-OFFS AT ALL: C helpers called FROM Rust, the other direction.
+# These are C functions that happen to carry the rust_ prefix by our own naming
+# convention, so the hand-off scan matches them. Nothing is being delegated to
+# Rust here, so there is no Rust body to compare against. Worth noting that the
+# convention makes the two directions indistinguishable by name alone.
+rust_chacha_zeroize_state     nonpassthru  a C helper DEFINED in chacha-block-generic.c and called from chacha_block_generic_rs.rs.
+rust_earlycpio_warn_long_name nonpassthru  a C helper DEFINED in earlycpio.c and called from earlycpio_rs.rs (needs pr_warn).
+rust_sort_cond_resched        nonpassthru  a C helper DEFINED in sort.c and called from sort_rs.rs (cond_resched is a static call patched at boot).
+
+# ---- surfaced when thunk-free (direct) symbols were brought into scope
+find_cpio_data        ret  returns `struct cpio_data` BY VALUE. Same class as reciprocal_value: a signature carries no geometry. Layout is covered by rig/layout-check.sh (criterion 11); THE RETURN SLOT ITSELF IS UNMEASURED HERE. Both parameters and the count are still compared.

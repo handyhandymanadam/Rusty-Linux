@@ -1,0 +1,11 @@
+lib/zlib_inflate/inflate.c	carries the upstream zlib `copy > whave` hunk from upstream/zlib-inflate-oob/ -- Adam 2026-09-03. See the file header.
+lib/Kconfig	adds a prompt to select-only symbols (GENERIC_NET_UTILS, GLOB) so a config fragment can turn them on -- olddefconfig silently discards =y on a promptless symbol. Each hunk carries a RUSTY-LINUX DIVERGENCE note; no in-tree user changes.
+lib/crc/Kconfig	same: prompts on CRC16 and CRC_CCITT so config-fast can exercise the ported code. RUSTY-LINUX DIVERGENCE notes in place.
+lib/crypto/Kconfig	same: prompts on CRYPTO_LIB_UTILS and CRYPTO_LIB_ARC4. RUSTY-LINUX DIVERGENCE notes in place.
+lib/math/Kconfig	same: prompt on RATIONAL. RUSTY-LINUX DIVERGENCE note in place.
+scripts/gendwarfksyms/kabi.c	kabi_read_rules() read only the FIRST .discard.gendwarfksyms.kabi_rules section; rustc emits one per #[used] static, so pins were silently dropped. Also errors on conflicting duplicate rules. THE CRC ORACLE IS BUILT FROM THIS -- see logs/thunk-free-ledger.md.
+scripts/Makefile.build	rule_rustc_o_rs had no symbol-versioning step, so a .rs object never reached gendwarfksyms. Adds gen_symversions_rs and records KBUILD_GENDWARFKSYMS_STABLE in the compile command so if_changed can see it.
+rust/kernel/lib.rs	adds "pub mod kabi;" -- macro definitions only, no codegen.
+init/Kconfig	adds CONFIG_CC_HAS_FAT_LTO_OBJECTS, a capability probe for -ffat-lto-objects. See logs/lto-fat-objects.md.
+kernel/module/Kconfig	GENDWARFKSYMS depends on !LTO becomes !LTO || CC_HAS_FAT_LTO_OBJECTS. The stated reason was 'Requires ELF object files'; a fat LTO object IS one. See logs/lto-fat-objects.md.
+Makefile	adds -ffat-lto-objects to CC_FLAGS_LTO when CONFIG_GENDWARFKSYMS is set, so the symbol-versioning step and the link-time optimizer are served by one compile.

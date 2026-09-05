@@ -1,0 +1,23 @@
+# The kernel tree is not ours to version -- extracted from a checksum-verified
+# upstream tarball at build time (see kbuild-env.sh), not committed.
+src/
+
+# Build trees
+build-*/
+
+# Build artifacts
+*.o
+*.ko
+*.a
+target/
+
+# Generated on every test run from the kernel tree; never edited by hand.
+port/test/*/corpus_generated.h
+port/test/*/ref_logtable_generated.h
+rig/cache/
+port/test/modabi/*.o
+port/test/modabi/*.ko
+port/test/modabi/*.mod*
+port/test/modabi/.*.cmd
+port/test/modabi/Module.symvers
+port/test/modabi/modules.order

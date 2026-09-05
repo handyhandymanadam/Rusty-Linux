@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config CORDIC
+	tristate "CORDIC algorithm"
+	help
+	  This option provides an implementation of the CORDIC algorithm;
+	  calculations are in fixed point. Module will be called cordic.
+
+config PRIME_NUMBERS
+	tristate "Simple prime number generator for testing"
+	help
+	  This option provides a simple prime number generator for test
+	  modules.
+
+	  If unsure, say N.
+
+config RATIONAL
+	tristate "rational_best_approximation() function"
+	help
+	  Provides rational_best_approximation(), which finds the best
+	  rational approximation of a fraction within given numerator and
+	  denominator limits. Drivers that need it select it.
+
+	  RUSTY-LINUX DIVERGENCE: upstream has no prompt here, so the
+	  symbol is select-only and CONFIG_RATIONAL=y in a fragment is
+	  silently discarded by olddefconfig -- the same shape as
+	  CONFIG_GLOB, and caught the same way, by rig/config.sh reading
+	  the built .config back. config-fast needs it so the ported
+	  function is exercised on the iteration instrument too. No
+	  existing config changes: every in-tree user still selects it.
+
+	  Say N unless you are working on the Rust port.
+
+config MATH_SELFTEST
+	tristate "lib/math self-test on init"
+	help
+	  A handful of vectors for the lib/math functions that have been
+	  ported to Rust, run from an initcall. It prints
+	  "mathtest: N self-tests passed, M failed" and refuses to load if
+	  any failed.
+
+	  It is not a correctness suite -- that lives in userspace and runs
+	  tens of millions of cases. This answers the one question a
+	  userspace test cannot: whether the Rust ran, in the kernel.
+
+	  Say N unless you are working on the Rust port.

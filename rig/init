@@ -1,0 +1,128 @@
+#!/bin/busybox sh
+# The initramfs init. It exists to answer four questions and then get out of
+# the way: did the kernel boot, is there a userspace, did any Rust run, and
+# does the module ABI machinery work.
+/bin/busybox --install -s /bin 2>/dev/null
+mount -t proc  proc  /proc 2>/dev/null
+mount -t sysfs sysfs /sys  2>/dev/null
+mount -t devtmpfs dev /dev 2>/dev/null
+
+echo "RIG: init running"
+echo "RIG: version $(cat /proc/version)"
+
+# Ordinary userspace, not just a stub: a pipeline, a fork, a script, the
+# filesystem.
+echo "RIG: userspace $(echo hello | tr a-z A-Z) $(ls /proc | wc -l) $(uname -m)"
+
+# Criterion 5 rehearsal: the Rust sample prints during boot. Read it back from
+# the ring buffer rather than assuming it happened.
+if dmesg | grep -qi "rust_print\|Rust printing macros sample"; then
+        echo "RIG: rust-ran YES"
+        dmesg | grep -i "rust" | head -5
+else
+        echo "RIG: rust-ran NO"
+fi
+
+# Every ported body is named rust_*. LIST them rather than checking a
+# hand-kept list: a list that has to be edited per port goes stale, and a
+# stale list reports absence as silence.
+# The kernel crate already exports ~350 rust_helper_* thunks plus a few
+# fixed names of its own. Those are not ours and listing them buries the
+# handful that are, so they are excluded by name -- and the exclusion is a
+# fixed list of things that exist upstream, not a list that grows per port.
+echo "RIG: ported rust_* bodies in kallsyms:"
+if [ -f /proc/kallsyms ]; then
+        ours=$(grep -oE ' rust_[a-z0-9_]+$' /proc/kallsyms | sort -u \
+               | grep -vE ' rust_(helper_|do_trace_|fmt_argument|begin_unwind|build_error)')
+        if [ -n "$ours" ]; then
+                echo "$ours" | sed 's/^/RIG:  /'
+        else
+                echo "RIG:  NONE -- no ported body is in this kernel"
+        fi
+        echo "RIG: ported rust_* bodies: $(echo "$ours" | grep -c . )"
+else
+        echo "RIG:  no /proc/kallsyms"
+fi
+
+# --- Ported modules. One block per module, and each reports what it READ
+# --- from the ring buffer or from kallsyms -- never that it ran something.
+# --- This is the GOALS.md §3 extension point: test tooling hooks in here.
+
+# lib/glob -- proof caller is the in-tree CONFIG_GLOB_SELFTEST (lib/globtest.c),
+# which prints "glob: N self-tests passed, M failed" from an initcall.
+dmesg | grep 'glob:' | sed 's/^/RIG: glob-log /'
+if dmesg | grep -q 'glob: [0-9]* self-tests passed, 0 failed'; then
+        echo "RIG: glob PASS"
+elif dmesg | grep -q 'glob: .* self-tests passed'; then
+        echo "RIG: glob FAIL -- the self-test reported failures"
+else
+        echo "RIG: glob ABSENT -- no self-test line in the ring buffer"
+fi
+
+# lib/math -- proof caller is lib/math/mathtest.c (ours; CONFIG_MATH_SELFTEST).
+dmesg | grep 'mathtest:' | sed 's/^/RIG: math-log /'
+if dmesg | grep -q 'mathtest: [0-9]* self-tests passed, 0 failed'; then
+        echo "RIG: math PASS"
+elif dmesg | grep -q 'mathtest: .* self-tests passed'; then
+        echo "RIG: math FAIL -- the self-test reported failures"
+else
+        echo "RIG: math ABSENT -- no self-test line in the ring buffer"
+fi
+
+# lib/ -- proof caller is lib/libtest.c (ours; CONFIG_LIB_SELFTEST).
+dmesg | grep 'libtest:' | sed 's/^/RIG: lib-log /'
+if dmesg | grep -q 'libtest: [0-9]* self-tests passed, 0 failed'; then
+        echo "RIG: lib PASS"
+elif dmesg | grep -q 'libtest: .* self-tests passed'; then
+        echo "RIG: lib FAIL -- the self-test reported failures"
+else
+        echo "RIG: lib ABSENT -- no self-test line in the ring buffer"
+fi
+
+# lib/hexdump -- proof caller is the in-tree CONFIG_TEST_HEXDUMP
+# (lib/test_hexdump.c), which prints "test_hexdump: all N tests passed" from an
+# initcall, or "failed M out of N tests". Upstream's corpus, not ours.
+dmesg | grep 'test_hexdump:' | sed 's/^/RIG: hexdump-log /'
+if dmesg | grep -q 'test_hexdump: all [0-9]* tests passed'; then
+        echo "RIG: hexdump PASS"
+elif dmesg | grep -q 'test_hexdump: failed'; then
+        echo "RIG: hexdump FAIL -- the self-test reported failures"
+else
+        echo "RIG: hexdump ABSENT -- no self-test line in the ring buffer"
+fi
+
+# KUnit -- upstream's own corpora for ported modules. lib/tests/ carries them
+# for siphash, cmdline, seq_buf, string, checksum, usercopy, iov_iter and
+# xarray, and CONFIG_TEST_HEXDUMP already showed what that is worth against a
+# port: 1,184 tests, and one sabotage caught that our own vectors missed.
+#
+# THE SIGNAL IS THE TOP-LEVEL TAP LINE, `ok N <suite>` / `not ok N <suite>`,
+# not the `# <suite>: pass:N fail:M` totals -- a suite with a single test case
+# prints the TAP line and no totals line, which is how the first version of
+# this block reported the siphash suite as absent while it was passing.
+kunit_ok=$(dmesg | grep -cE '^\[[^]]*\] ok [0-9]+ ')
+kunit_no=$(dmesg | grep -cE '^\[[^]]*\] not ok [0-9]+ ')
+dmesg | sed -n 's/^\[[^]]*\] \(not ok [0-9]* .*\)/RIG: kunit-log \1/p'
+dmesg | sed -n 's/.*# \([a-z_0-9]*\): \(pass:.*\)/RIG: kunit-log \1 \2/p'
+if [ "$kunit_ok" -eq 0 ] && [ "$kunit_no" -eq 0 ]; then
+        echo "RIG: kunit ABSENT -- no TAP lines in the ring buffer"
+elif [ "$kunit_no" -ne 0 ]; then
+        echo "RIG: kunit FAIL -- $kunit_no suite(s) failed, $kunit_ok passed"
+else
+        echo "RIG: kunit PASS -- $kunit_ok suite(s), 0 failed"
+fi
+
+# Criterion 4 machinery: are symbol CRCs present at all.
+if [ -f /proc/kallsyms ]; then
+        echo "RIG: kallsyms $(wc -l < /proc/kallsyms) symbols"
+fi
+echo "RIG: done"
+sync
+# ACPI poweroff needs CONFIG_ACPI, which config-fast does not carry. `reboot -f`
+# works on any kernel, and qemu's -no-reboot turns it into a clean exit -- so
+# both builds finish in seconds instead of sitting until the timeout.
+# NOT `poweroff -f`: without CONFIG_ACPI the kernel reports
+#   "Power off not available: System halted instead"
+# and halts, so any fallback after it never runs. `reboot -f` triple-faults,
+# which qemu's -no-reboot turns into a clean exit on both builds.
+reboot -f
