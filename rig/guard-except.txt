@@ -97,3 +97,54 @@ errseq_check         likely() branch hint only; the `cur == since` test is in er
 
 blake2s_update       unlikely() branch hint only; the `if inlen == 0 { return }` is in blake2s_rs.rs blake2s_update()
 blake2s_final        WARN_ON(IS_ENABLED(DEBUG) && !out) reproduced in blake2s_rs.rs as `if DEBUG && out.is_null()`, with DEBUG a const false -- IS_ENABLED(DEBUG) tests for DEBUG_ENABLED, which no Kconfig defines, so the C's guard is dead in every kernel build too
+
+# --- kstrtox: one hint, the check itself is reproduced ----------------------
+
+_parse_integer_limit  unlikely() branch hint only; the `if res & (!0u64 << 60) != 0` overflow-threshold check it guards is in kstrtox_rs.rs _parse_integer_limit(), condition and consequence both intact
+
+# --- bust_spinlocks: the whole function moved, nothing left behind --------
+
+bust_spinlocks        no WARN/BUG_ON/unlikely/static_branch in the original -- the entire if/else body (increment, console_unblank(), decrement, conditional wake_up_klogd()) is reproduced in bust_spinlocks_rs.rs bust_spinlocks(), not a thunk calling out to it
+
+# --- timerqueue: both WARN_ON_ONCE guards are reproduced -------------------
+
+timerqueue_add        WARN_ON_ONCE(!RB_EMPTY_NODE(&node->node)) reproduced in timerqueue_rs.rs timerqueue_add() as kernel::kabi_warn_on_once!(!rb_empty_node(n)), same condition
+timerqueue_del        WARN_ON_ONCE(RB_EMPTY_NODE(&node->node)) reproduced in timerqueue_rs.rs timerqueue_del() as kernel::kabi_warn_on_once!(rb_empty_node(n)), same condition
+
+# --- asn1_decoder: unlikely() hints only, the whole body moved -------------
+
+asn1_ber_decoder      unlikely() branch hints only; every flagged bounds check (pc >= machlen, pc + op_len > machlen, datalen - dp, ASN1_LONG_TAG, ASN1_INDEFINITE_LENGTH, NR_CONS_STACK/NR_JUMP_STACK overflow, FLAG_MATCHED) is present as an ordinary `if` in asn1_decoder_rs.rs's decode loop -- verified line-for-line, not assumed
+
+# --- mpicoder: #if BYTES_PER_MPI_LIMB collapsed to the one live arm --------
+#
+# The C forks on BYTES_PER_MPI_LIMB (4 on 32-bit, 8 on 64-bit, #else for
+# anything wider). Both of this project's configs are x86_64-only, so the
+# ==8 arm is the only one that can ever be live here; mpicoder_rs.rs hardcodes
+# BYTES_PER_MPI_LIMB = 8 (line 96) rather than reproducing three arms of a
+# fork whose other two branches this build can never take. A preprocessor
+# selection is not a runtime guard the tool can see either way it's spelled.
+
+mpi_read_buffer       #if BYTES_PER_MPI_LIMB == 4/8/else is a compile-time fork; mpicoder_rs.rs hardcodes the ==8 arm (line 96), the only one live on this project's x86_64-only configs
+mpi_write_to_sgl      same #if BYTES_PER_MPI_LIMB fork, same mpicoder_rs.rs constant, same reasoning as mpi_read_buffer
+
+# --- flex_proportions: a hint, and a guard reproduced via a differently-
+# --- named retained thunk pass 1's same-name check cannot see -------------
+#
+# Both entries are genuinely accounted for; pass 1's `ported="$port/$rel"`
+# same-symbol-name check just cannot see either shape. __fprop_add_percpu_max
+# is the same likely()/unlikely()-hint-only case as errseq_check/blake2s_update
+# above -- the `max_frac < FPROP_FRAC_BASE` condition it guards is reproduced
+# in flex_proportions_rs.rs __fprop_add_percpu_max() verbatim, just without an
+# unlikely()-equivalent hint (this project has no such hint construct, and the
+# condition/consequence are what matters). fprop_local_init_percpu's
+# raw_spin_lock_init(&pl->lock) is a REAL operation, not a hint, and it IS
+# called -- via rust_flexprop_lock_init() (lib/flex_proportions.c), the
+# retained C thunk raw_spin_lock_irqsave()'s whole family needs for the same
+# reason as lib/ratelimit.c's rust_ratelimit_trylock_irqsave() (see
+# logs/porting-hazards.md, "spinlock + IRQ state"): preempt_disable()/
+# lockdep/qspinlock-slowpath baggage this port has no reason to reimplement.
+# Verified by reading both files, and by the differential
+# (port/test/flex_proportions/, ~6.9M cases, 0 fails) exercising it every run.
+
+__fprop_add_percpu_max  unlikely() branch hint only; the `max_frac < FPROP_FRAC_BASE` condition it guards is in flex_proportions_rs.rs __fprop_add_percpu_max(), condition and consequence both intact
+fprop_local_init_percpu  raw_spin_lock_init(&pl->lock) reproduced via rust_flexprop_lock_init() (lib/flex_proportions.c), a differently-named retained C thunk pass 1's same-symbol-name check does not look for

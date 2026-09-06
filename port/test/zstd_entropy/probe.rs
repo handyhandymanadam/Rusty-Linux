@@ -56,7 +56,7 @@ pub unsafe extern "C" fn rs_FSE_readNCount(
     hb: *const c_void, hbSize: usize,
 ) -> usize {
     // SAFETY: as above. This is the body the C entry thunk calls.
-    unsafe { p::rust_FSE_readNCount(nc, maxSV, tableLog, hb, hbSize) }
+    unsafe { p::FSE_readNCount(nc, maxSV, tableLog, hb, hbSize) }
 }
 
 /// `HUF_readStats_wksp` reached through the body its C entry thunk calls.
@@ -71,7 +71,7 @@ pub unsafe extern "C" fn rs_HUF_readStats_wksp(
 ) -> usize {
     // SAFETY: as above.
     unsafe {
-        p::rust_HUF_readStats_wksp(hw, hwSize, rank, nbSym, tableLog,
+        p::HUF_readStats_wksp(hw, hwSize, rank, nbSym, tableLog,
                                    src, srcSize, wksp, wkspSize, flags)
     }
 }
@@ -154,16 +154,16 @@ pub extern "C" fn rs_ZSTD_versionNumber() -> c_uint { zstd_common_rs::ZSTD_versi
 pub extern "C" fn rs_ZSTD_versionString() -> *const c_char { zstd_common_rs::ZSTD_versionString() }
 /// `ZSTD_isError`, through the body its C entry thunk calls.
 #[no_mangle]
-pub extern "C" fn rs_ZSTD_isError(code: usize) -> c_uint { zstd_common_rs::rust_ZSTD_isError(code) }
+pub extern "C" fn rs_ZSTD_isError(code: usize) -> c_uint { zstd_common_rs::ZSTD_isError(code) }
 /// `ZSTD_getErrorName`, through the body its C entry thunk calls.
 #[no_mangle]
 pub extern "C" fn rs_ZSTD_getErrorName(code: usize) -> *const c_char {
-    zstd_common_rs::rust_ZSTD_getErrorName(code)
+    zstd_common_rs::ZSTD_getErrorName(code)
 }
 /// `ZSTD_getErrorCode`, through the body its C entry thunk calls.
 #[no_mangle]
 pub extern "C" fn rs_ZSTD_getErrorCode(code: usize) -> c_int {
-    zstd_common_rs::rust_ZSTD_getErrorCode(code)
+    zstd_common_rs::ZSTD_getErrorCode(code)
 }
 /// `ZSTD_getErrorString`: dead in-tree, still part of the API contract.
 #[no_mangle]

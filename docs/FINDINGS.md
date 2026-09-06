@@ -4,8 +4,69 @@ Concrete defects found along the way — in the port, in this project's own
 verification tooling, and in the kernel's fingerprinting machinery itself —
 what they looked like, what they actually were, and the general lesson each
 one left behind. Most of the numbering below follows this project's internal
-findings log; **one entry is withheld** pending responsible disclosure of a
-real upstream kernel bug it documents — see the note at the end.
+findings log; **two entries are withheld** pending responsible disclosure of
+real upstream bugs they document — see the note at the end.
+
+## A whole class of raw-pointer aliasing UB, found by a five-minute grep rule this project didn't have until it needed it
+
+This project's toolchain runs no Miri anywhere — differential testing proves
+two implementations agree on output, which structurally cannot see undefined
+behavior that doesn't (yet) change output. A pattern showed up repeatedly in
+files that take a C-style `*mut State` and reborrow it as `&mut State` partway
+through a function: `let d = unsafe { &mut *state }`, followed later by a call
+that takes the *original* raw pointer and does its own reborrow, followed by
+more uses of `d`. Under the aliasing model both rustc and Miri assume (Stacked
+/ Tree Borrows), the callee's reborrow invalidates `d`; every use of `d` after
+that call is a use of a pointer the model considers dead, independent of
+whether it happens to still compile to correct code today.
+
+One instance was found first by direct review. Rather than fix it and move
+on, it became a rule: `grep -n 'let .* = unsafe { &mut \*'`, then for each hit
+check whether the binding shadows the pointer's own name (safe by
+construction — the raw pointer becomes unnameable for the rest of the
+function) and, where it doesn't, whether the original raw pointer gets passed
+to another call before the reborrow's last use. Run once across every ported
+file (109 files, 56 candidate reborrow sites, all inspected), it found **five
+real instances** across four different files, each fixed the same way — read
+what's needed into locals before the call, re-borrow fresh afterward, so the
+raw pointer is never live across a call that might reborrow it too.
+
+**The general lesson:** a differential test suite with excellent coverage
+answers "does this compute the right answer," never "is this actually
+allowed." Those are different questions, and a test suite that only asks the
+first one will pass indefinitely on code that violates the second. The fix
+here wasn't a bigger test corpus — it was a five-line grep applied uniformly,
+because the shape of the bug was mechanical even though nothing in the
+toolchain flags it automatically.
+
+## A safe C convention that becomes undefined behavior on direct translation: `(NULL, 0)`
+
+A common C idiom for "empty buffer, don't care about the pointer":
+
+    while (len--) { /* use *p, then */ p++; }
+
+When `len == 0`, `p` is never dereferenced, so callers routinely pass
+`(NULL, 0)` and it is completely well-defined — an ordinary, widely-relied-on
+convention, not an edge case anyone is being careless about. Translating the
+same `(ptr, len)` pair directly into `std::slice::from_raw_parts(p, len)`
+does not preserve that: `from_raw_parts` requires a non-null, aligned pointer
+*regardless of length*, so a null `p` at `len == 0` is undefined behavior —
+silent in a release build, an immediate abort with `-C debug-assertions=on`.
+Reproduced directly against this project's pinned toolchain, not assumed.
+
+Found in one file by review; a retroactive grep across already-merged code
+turned up roughly eighteen more instances of the same shape. The fix, applied
+going forward, is to guard the zero-length case explicitly before
+constructing the slice:
+
+    let s: &[u8] = if len == 0 { &[] } else { unsafe { slice::from_raw_parts(p, len) } };
+
+**The general lesson:** a translation that is locally faithful — same
+pointer, same length, same operation — can still change a call's UB
+contract, because Rust's safe-construction preconditions are sometimes
+strictly stronger than what the equivalent C ever required. "It's the same
+pointer and the same length" is not the same claim as "it's the same
+contract."
 
 ## A Rust kernel can have module versioning and full LTO at the same time
 
@@ -356,7 +417,9 @@ restructuring first on the assumption that fewer crates must be better.
 
 ---
 
-**A note on what's not here yet.** A second real bug found the same way —
-in `lib/zlib_inflate/inflate.c`, also upstream, also present in mainline —
-is withheld from this document until it has actually been sent upstream.
-It will be added here once that's done.
+**A note on what's not here yet.** Two real bugs found the same way — both
+upstream, both present in mainline, neither introduced by this port — are
+withheld from this document until responsible disclosure has actually
+happened: one in `lib/zlib_inflate/inflate.c`, and a second, found more
+recently, in `lib/zstd`'s dictionary-hash-set probing logic. Both will be
+added here once that's done.

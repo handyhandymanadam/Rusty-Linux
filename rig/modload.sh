@@ -30,7 +30,7 @@
 #   Greps for MODTEST lines plus the three failure phrases that matter:
 #   "disagrees" (CRC mismatch), "no symbol version", "Unknown symbol".
 set -u
-RIG=$(cd "$(dirname "$0")" && pwd)
+RIG=/home/adam/Rusty-Linux/rig
 BUILD=$1; shift
 LOG=$1; shift
 BZ="$BUILD/arch/x86/boot/bzImage"

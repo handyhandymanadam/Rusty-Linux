@@ -17,8 +17,8 @@ As of this snapshot:
 
 | | files | lines |
 |---|---|---|
-| Ported (`config-full`, the authoritative build) | 58 / 125 buildable — **46.4%** | 13,252 / 40,532 — **32.7%** |
-| Ported (full candidate set) | 62 / 245 — 25.3% | 14,023 / 111,982 — 12.5% |
+| Ported (`config-full`, the authoritative build) | 98 / 128 buildable — **76.6%** | 23,135 / 41,570 — **55.7%** |
+| Ported (full candidate set) | 102 / 248 — 41.1% | 23,906 / 113,020 — 21.2% |
 
 `config-full` is the number that matters: it's the kernel configuration this
 project treats as authoritative, versus `config-fast`, a smaller build used

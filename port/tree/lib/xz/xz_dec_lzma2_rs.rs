@@ -626,9 +626,9 @@ const PROBS_TOTAL: usize = 1846 + LITERAL_CODERS_MAX * LITERAL_CODER_SIZE;
 /// [`MATCH_LEN_MIN`] at every call site, so the subtraction cannot underflow.
 const fn lzma_get_dist_state(len: u32) -> u32 {
     if len < DIST_STATES as u32 + MATCH_LEN_MIN {
-        len - MATCH_LEN_MIN
+        len.wrapping_sub(MATCH_LEN_MIN)
     } else {
-        DIST_STATES as u32 - 1
+        (DIST_STATES as u32).wrapping_sub(1)
     }
 }
 
@@ -1130,7 +1130,9 @@ fn dict_reset(dict: &mut Dictionary, b: &XzBuf) {
         // and `<*mut T>::add` on a null pointer is undefined even for a zero
         // offset. Nothing dereferences the result until `end` is nonzero.
         dict.buf = b.out.wrapping_add(b.out_pos);
-        dict.end = b.out_size - b.out_pos;
+        // `out_pos <= out_size` (a position within a capacity), an
+        // `include/linux/xz.h` invariant the C also relies on unchecked.
+        dict.end = b.out_size.wrapping_sub(b.out_pos);
         // `pos` is zeroed just below, so the buffer runs exactly `end` bytes
         // from the new `buf`.
         dict.alloc_len = dict.end;
@@ -1151,7 +1153,7 @@ fn dict_limit(dict: &mut Dictionary, out_max: usize) {
     if dict.end.wrapping_sub(dict.pos) <= out_max {
         dict.limit = dict.end;
     } else {
-        dict.limit = dict.pos + out_max;
+        dict.limit = dict.pos.wrapping_add(out_max);
     }
 }
 
@@ -1196,7 +1198,7 @@ fn dict_get(dict: &Dictionary, dist: u32) -> u32 {
 fn dict_put(dict: &mut Dictionary, byte: u8) {
     let pos = dict.pos;
     dict.store_byte(pos, byte);
-    dict.pos = pos + 1;
+    dict.pos = pos.wrapping_add(1);
 
     if dict.full < dict.pos {
         dict.full = dict.pos;
@@ -1220,8 +1222,10 @@ fn dict_repeat(dict: &mut Dictionary, len: &mut u32, dist: u32) -> bool {
     // `min_t(size_t, dict->limit - dict->pos, *len)` assigned to a uint32_t.
     // The `min` with `*len` bounds the result below 2^32, so the C's implicit
     // narrowing cannot lose anything.
-    let mut left = core::cmp::min(dict.limit - dict.pos, *len as usize) as u32;
-    *len -= left;
+    let mut left = core::cmp::min(dict.limit.wrapping_sub(dict.pos), *len as usize) as u32;
+    // `left <= *len` by construction (the `min` above), so this cannot
+    // underflow; wrapping_sub is faithful to the C's plain `-=` regardless.
+    *len = len.wrapping_sub(left);
 
     // As in `dict_get`: this underflows by design when `dist >= pos`, and the
     // next line adds `end` back.
@@ -1231,16 +1235,29 @@ fn dict_repeat(dict: &mut Dictionary, len: &mut u32, dist: u32) -> bool {
     }
 
     // The C's `do { ... } while (--left > 0)`. `left` is at least one at both
-    // call sites -- see divergence 9 -- so the decrement below is a plain `-=`
-    // and panics rather than wrapping if that ever stops being true.
-    debug_assert!(left > 0);
+    // call sites (see divergence 9); this is NOT the "wrapping is faithful to
+    // C regardless" shape despite starting out looking like every other
+    // loop-countdown in this pass. If the invariant is ever wrong, the C's
+    // own `--left` wraps to UINT32_MAX and the loop keeps writing through
+    // `dict->pos` for ~2^32 iterations -- nothing in this loop bounds `pos`
+    // against `dict.end`/`dict.limit` (only `back` wraps), so the C's
+    // wraparound is itself an unbounded out-of-bounds write, not a benign
+    // well-defined number. Reproducing that with `wrapping_sub` would trade
+    // Rust's panic for the C's heap overwrite, which is strictly worse, not
+    // faithful. Kept as a real `assert!` (not `debug_assert!`, which
+    // `xz_dec_lzma2_rs.o`'s own .cmd file confirms compiles to nothing under
+    // this kernel's debug-assertions=n) so the guard fires in the shipped
+    // build the same as the overflow-checked plain `-=` did. An earlier pass
+    // of this fix briefly wrapped it for consistency with the general
+    // doctrine; rusty-linux-e6 caught that it doesn't apply here, 2026-09-06.
+    assert!(left > 0, "dict_repeat: left underflowed");
     loop {
         let byte = dict.byte_at(back);
         let pos = dict.pos;
         dict.store_byte(pos, byte);
-        dict.pos = pos + 1;
+        dict.pos = pos.wrapping_add(1);
 
-        back += 1;
+        back = back.wrapping_add(1);
         if back == dict.end {
             back = 0;
         }
@@ -1262,15 +1279,19 @@ fn dict_repeat(dict: &mut Dictionary, len: &mut u32, dist: u32) -> bool {
 /// buffers.
 fn dict_uncompressed(dict: &mut Dictionary, b: &mut XzBuf, left: &mut u32) {
     while *left > 0 && b.in_pos < b.in_size && b.out_pos < b.out_size {
-        let mut copy_size = core::cmp::min(b.in_size - b.in_pos, b.out_size - b.out_pos);
-        if copy_size > dict.end - dict.pos {
-            copy_size = dict.end - dict.pos;
+        let mut copy_size =
+            core::cmp::min(b.in_size.wrapping_sub(b.in_pos), b.out_size.wrapping_sub(b.out_pos));
+        if copy_size > dict.end.wrapping_sub(dict.pos) {
+            copy_size = dict.end.wrapping_sub(dict.pos);
         }
         if copy_size > *left as usize {
             copy_size = *left as usize;
         }
 
-        *left -= copy_size as u32;
+        // `copy_size <= *left` (clamped just above), so this cannot
+        // underflow; wrapping_sub is faithful to the C's plain `-=`
+        // regardless.
+        *left = left.wrapping_sub(copy_size as u32);
 
         // If doing in-place decompression in single-call mode and the
         // uncompressed size of the file is larger than the caller thought
@@ -1294,7 +1315,7 @@ fn dict_uncompressed(dict: &mut Dictionary, b: &mut XzBuf, left: &mut u32) {
                 copy_size,
             );
         }
-        dict.pos += copy_size;
+        dict.pos = dict.pos.wrapping_add(copy_size);
 
         if dict.full < dict.pos {
             dict.full = dict.pos;
@@ -1321,8 +1342,8 @@ fn dict_uncompressed(dict: &mut Dictionary, b: &mut XzBuf, left: &mut u32) {
 
         dict.start = dict.pos;
 
-        b.out_pos += copy_size;
-        b.in_pos += copy_size;
+        b.out_pos = b.out_pos.wrapping_add(copy_size);
+        b.in_pos = b.in_pos.wrapping_add(copy_size);
     }
 }
 
@@ -1337,7 +1358,7 @@ fn dict_uncompressed(dict: &mut Dictionary, b: &mut XzBuf, left: &mut u32) {
 /// bounded by the `out_max` [`dict_limit`] was given, which is itself bounded
 /// by `s->lzma2.uncompressed`, a `uint32_t`.
 fn dict_flush(dict: &mut Dictionary, b: &mut XzBuf) -> u32 {
-    let copy_size = dict.pos - dict.start;
+    let copy_size = dict.pos.wrapping_sub(dict.start);
 
     if dec_is_multi(dict.mode) {
         if dict.pos == dict.end {
@@ -1376,7 +1397,7 @@ fn dict_flush(dict: &mut Dictionary, b: &mut XzBuf) -> u32 {
     }
 
     dict.start = dict.pos;
-    b.out_pos += copy_size;
+    b.out_pos = b.out_pos.wrapping_add(copy_size);
     copy_size as u32
 }
 
@@ -1407,9 +1428,9 @@ fn rc_read_init(rc: &mut RcDec, b: &mut XzBuf) -> bool {
         // says the first byte is ignored; Rust's `<<` on `u32` is defined to
         // discard, and `overflow-checks` does not apply to it. The `+` cannot
         // overflow because the shift leaves the low eight bits zero.
-        rc.code = (rc.code << RC_SHIFT_BITS) + u32::from(in_byte(b, b.in_pos));
-        b.in_pos += 1;
-        rc.init_bytes_left -= 1;
+        rc.code = (rc.code.wrapping_shl(RC_SHIFT_BITS)).wrapping_add(u32::from(in_byte(b, b.in_pos)));
+        b.in_pos = b.in_pos.wrapping_add(1);
+        rc.init_bytes_left = rc.init_bytes_left.wrapping_sub(1);
     }
 
     true
@@ -1432,9 +1453,9 @@ fn rc_normalize(rc: &mut RcDec, input: RcInput) {
         // `range` is below 2^24 in this branch, so nothing is shifted out of
         // it. `code` is a full 32-bit value and the C discards its top byte
         // here on purpose; see `rc_read_init`.
-        rc.range <<= RC_SHIFT_BITS;
-        rc.code = (rc.code << RC_SHIFT_BITS) + u32::from(input.byte(rc.in_pos));
-        rc.in_pos += 1;
+        rc.range = rc.range.wrapping_shl(RC_SHIFT_BITS);
+        rc.code = (rc.code.wrapping_shl(RC_SHIFT_BITS)).wrapping_add(u32::from(input.byte(rc.in_pos)));
+        rc.in_pos = rc.in_pos.wrapping_add(1);
     }
 }
 
@@ -1453,24 +1474,26 @@ fn rc_bit(rc: &mut RcDec, input: RcInput, prob: &mut u16) -> u32 {
     // RC_BIT_MODEL_TOTAL itself: it starts at RC_BIT_MODEL_TOTAL / 2 and the
     // update below adds `(2048 - prob) >> 5`, which is zero once prob is 2017
     // or above. So the multiply cannot overflow and a plain `*` is right.
-    let bound = (rc.range >> RC_BIT_MODEL_TOTAL_BITS) * u32::from(*prob);
+    let bound = (rc.range.wrapping_shr(RC_BIT_MODEL_TOTAL_BITS)).wrapping_mul(u32::from(*prob));
     let bit;
 
     if rc.code < bound {
         rc.range = bound;
         // `*prob <= RC_BIT_MODEL_TOTAL` is an invariant of the probability
         // model: it starts at RC_BIT_MODEL_TOTAL / 2 and each step moves it a
-        // 32nd of the way towards a bound it never crosses. So neither this
-        // `+` nor the `-` below can wrap a u16, and a plain operator is right.
-        *prob += ((RC_BIT_MODEL_TOTAL - u32::from(*prob)) >> RC_MOVE_BITS) as u16;
+        // 32nd of the way towards a bound it never crosses -- wrapping_*
+        // throughout this function is faithful to the C's plain arithmetic
+        // regardless, per the CONFIG_RUST_OVERFLOW_CHECKS sweep, 2026-09-06.
+        *prob = prob
+            .wrapping_add(((RC_BIT_MODEL_TOTAL.wrapping_sub(u32::from(*prob))).wrapping_shr(RC_MOVE_BITS)) as u16);
         bit = 0;
     } else {
         // `bound <= range` because `bound` is `(range >> 11) * prob` and
         // `prob <= 2048`, and `bound <= code` is the branch condition, so
-        // neither subtraction can underflow.
-        rc.range -= bound;
-        rc.code -= bound;
-        *prob -= *prob >> RC_MOVE_BITS;
+        // neither subtraction can underflow in practice.
+        rc.range = rc.range.wrapping_sub(bound);
+        rc.code = rc.code.wrapping_sub(bound);
+        *prob = prob.wrapping_sub(prob.wrapping_shr(RC_MOVE_BITS));
         bit = 1;
     }
 
@@ -1523,16 +1546,18 @@ fn rc_bittree_reverse(
 
     // The C is a do/while on `++i < limit`.
     loop {
-        if rc_bit(rc, input, &mut probs1[symbol as usize - 1]) != 0 {
-            symbol = (symbol << 1) + 1;
+        if rc_bit(rc, input, &mut probs1[(symbol as usize).wrapping_sub(1)]) != 0 {
+            symbol = (symbol.wrapping_shl(1)).wrapping_add(1);
             // `i < limit <= 30` and `*dest` is bounded by the caller's
-            // analysis in `lzma_match()`, so this cannot overflow.
-            *dest += 1 << i;
+            // analysis in `lzma_match()`, so this cannot overflow in
+            // practice; wrapping_* is faithful to the C's plain arithmetic
+            // regardless.
+            *dest = dest.wrapping_add(1u32.wrapping_shl(i));
         } else {
-            symbol <<= 1;
+            symbol = symbol.wrapping_shl(1);
         }
 
-        i += 1;
+        i = i.wrapping_add(1);
         if i >= limit {
             break;
         }
@@ -1549,7 +1574,7 @@ fn rc_direct(rc: &mut RcDec, input: RcInput, dest: &mut u32, limit: u32) {
     debug_assert!(limit > 0);
     loop {
         rc_normalize(rc, input);
-        rc.range >>= 1;
+        rc.range = rc.range.wrapping_shr(1);
         // Deliberate underflow: the C subtracts and then tests the sign bit of
         // the wrapped result to decide which half of the range was taken, and
         // adds the range back when it went negative. All three of these are
@@ -1559,9 +1584,9 @@ fn rc_direct(rc: &mut RcDec, input: RcInput, dest: &mut u32, limit: u32) {
         rc.code = rc.code.wrapping_add(rc.range & mask);
         // `mask` is 0 or 0xFFFFFFFF, so `mask + 1` is 1 or 0 -- the decoded
         // bit -- and the wrap is the whole point.
-        *dest = (*dest << 1).wrapping_add(mask.wrapping_add(1));
+        *dest = (dest.wrapping_shl(1)).wrapping_add(mask.wrapping_add(1));
 
-        limit -= 1;
+        limit = limit.wrapping_sub(1);
         if limit == 0 {
             break;
         }
@@ -1589,9 +1614,9 @@ fn lzma_literal(rc: &mut RcDec, input: RcInput, dict: &mut Dictionary, lzma: &mu
     // `lzma_props()`, so the shift counts are 4..=8 and 0..=4 and the sum is
     // below LITERAL_CODERS_MAX.
     let prev_byte = dict_get(dict, 0);
-    let low = prev_byte >> (8 - lzma.lc);
-    let high = ((dict.pos & lzma.literal_pos_mask as usize) as u32) << lzma.lc;
-    let coder = (low + high) as usize;
+    let low = prev_byte.wrapping_shr(8u32.wrapping_sub(lzma.lc));
+    let high = ((dict.pos & lzma.literal_pos_mask as usize) as u32).wrapping_shl(lzma.lc);
+    let coder = (low.wrapping_add(high)) as usize;
 
     // Read out of `lzma` before `probs` borrows it.
     let is_literal = lzma_state_is_literal(lzma.state);
@@ -1607,23 +1632,25 @@ fn lzma_literal(rc: &mut RcDec, input: RcInput, dict: &mut Dictionary, lzma: &mu
             let mut sym: u32 = 1;
             // `match_byte` is shifted left once per bit, at most eight times,
             // so its nine significant bits never leave a u32.
-            let mut match_byte = dict_get(dict, rep0) << 1;
+            let mut match_byte = dict_get(dict, rep0).wrapping_shl(1);
             let mut offset: u32 = 0x100;
 
             // The C is a do/while on `symbol < 0x100`.
             loop {
                 let match_bit = match_byte & offset;
-                match_byte <<= 1;
-                // `offset + match_bit + sym` is below 0x300: `offset` is
-                // 0x100 or 0, `match_bit` is `match_byte & offset`, and `sym`
-                // is below 0x100 for as long as the loop runs.
-                let i = (offset + match_bit + sym) as usize;
+                match_byte = match_byte.wrapping_shl(1);
+                // `offset + match_bit + sym` is below 0x300 in practice
+                // (`offset` is 0x100 or 0, `match_bit` is `match_byte &
+                // offset`, and `sym` is below 0x100 for as long as the loop
+                // runs); wrapping_add is faithful to the C's plain `+`
+                // regardless.
+                let i = (offset.wrapping_add(match_bit).wrapping_add(sym)) as usize;
 
                 if rc_bit(rc, input, &mut probs[i]) != 0 {
-                    sym = (sym << 1) + 1;
+                    sym = (sym.wrapping_shl(1)).wrapping_add(1);
                     offset &= match_bit;
                 } else {
-                    sym <<= 1;
+                    sym = sym.wrapping_shl(1);
                     offset &= !match_bit;
                 }
 
@@ -1671,9 +1698,10 @@ fn lzma_len(
         symbol = rc_bittree(rc, input, &mut l.high, limit);
     }
 
-    // `rc_bittree()` returns a value in [limit, 2 * limit), so the subtraction
-    // cannot underflow.
-    *len += symbol - limit;
+    // `rc_bittree()` returns a value in [limit, 2 * limit), so this cannot
+    // underflow in practice; wrapping_* is faithful to the C's plain
+    // arithmetic regardless.
+    *len = len.wrapping_add(symbol.wrapping_sub(limit));
 }
 
 /// Decode a match. The distance will be stored in `lzma.rep0`.
@@ -1688,25 +1716,27 @@ fn lzma_match(rc: &mut RcDec, input: RcInput, lzma: &mut LzmaDec, pos_state: u32
 
     let dist_state = lzma_get_dist_state(lzma.len) as usize;
     let dist_slot =
-        rc_bittree(rc, input, &mut lzma.dist_slot[dist_state], DIST_SLOTS) - DIST_SLOTS;
+        (rc_bittree(rc, input, &mut lzma.dist_slot[dist_state], DIST_SLOTS)).wrapping_sub(DIST_SLOTS);
 
     if dist_slot < DIST_MODEL_START {
         lzma.rep0 = dist_slot;
     } else {
-        let limit = (dist_slot >> 1) - 1;
-        lzma.rep0 = 2 + (dist_slot & 1);
+        let limit = (dist_slot.wrapping_shr(1)).wrapping_sub(1);
+        lzma.rep0 = 2u32.wrapping_add(dist_slot & 1);
 
         if dist_slot < DIST_MODEL_END {
             // `limit <= 5` here, so `rep0` stays below 96 and the shift loses
-            // nothing.
-            lzma.rep0 <<= limit;
+            // nothing in practice; wrapping_* throughout this function is
+            // faithful to the C's plain arithmetic regardless, per the
+            // CONFIG_RUST_OVERFLOW_CHECKS sweep, 2026-09-06.
+            lzma.rep0 = lzma.rep0.wrapping_shl(limit);
             // The C's `s->lzma.dist_special + s->lzma.rep0 - dist_slot - 1`,
             // written as `rc_bittree_reverse`'s base-plus-one slice: the `- 1`
             // is what that function's parameter absorbs. `rep0 - dist_slot` is
             // 0 for dist_slot == 4 and rises to 83 for dist_slot == 13, and
             // the largest index reached from there is 30, so the slice never
             // runs off the 114-element array.
-            let start = (lzma.rep0 - dist_slot) as usize;
+            let start = (lzma.rep0.wrapping_sub(dist_slot)) as usize;
             rc_bittree_reverse(
                 rc,
                 input,
@@ -1718,9 +1748,10 @@ fn lzma_match(rc: &mut RcDec, input: RcInput, lzma: &mut LzmaDec, pos_state: u32
             // `dist_slot <= 63`, so `limit <= 30` and this decodes at most 26
             // direct bits into a `rep0` that starts at 2 or 3: at most
             // 0x0FFFFFFF. The shift by ALIGN_BITS then leaves 0xFFFFFFF0 and
-            // the reverse bittree adds at most 15. Nothing overflows.
-            rc_direct(rc, input, &mut lzma.rep0, limit - ALIGN_BITS);
-            lzma.rep0 <<= ALIGN_BITS;
+            // the reverse bittree adds at most 15. Nothing overflows in
+            // practice; wrapping_* is faithful regardless.
+            rc_direct(rc, input, &mut lzma.rep0, limit.wrapping_sub(ALIGN_BITS));
+            lzma.rep0 = lzma.rep0.wrapping_shl(ALIGN_BITS);
             // The C passes `s->lzma.dist_align` itself, base offset zero, so
             // the base-plus-one slice is `dist_align[1..]`.
             rc_bittree_reverse(
@@ -1942,14 +1973,16 @@ fn lzma_props(s: &mut XzDecLzma2, props: u8) -> bool {
 /// what the C computes on every input, reachable or not. A plain `-` would be
 /// a kernel panic inside a decompressor on input the C survives.
 fn lzma2_lzma(s: &mut XzDecLzma2, b: &mut XzBuf) -> bool {
-    let mut in_avail = b.in_size - b.in_pos;
+    // `in_pos <= in_size` (an `include/linux/xz.h` invariant the C also
+    // relies on unchecked), so this cannot underflow in practice.
+    let mut in_avail = b.in_size.wrapping_sub(b.in_pos);
 
     if s.temp.size > 0 || s.lzma2.compressed == 0 {
         // `temp.size` is below LZMA_IN_REQUIRED at every entry to this
         // function -- every path that stores it either caps it there or sets
         // it from an `in_avail` that is already below it -- so this cannot
         // underflow.
-        let mut tmp = 2 * LZMA_IN_REQUIRED - s.temp.size;
+        let mut tmp = (2u32.wrapping_mul(LZMA_IN_REQUIRED)).wrapping_sub(s.temp.size);
         if tmp > s.lzma2.compressed.wrapping_sub(s.temp.size) {
             tmp = s.lzma2.compressed.wrapping_sub(s.temp.size);
         }
@@ -1972,17 +2005,17 @@ fn lzma2_lzma(s: &mut XzDecLzma2, b: &mut XzBuf) -> bool {
             s.temp.buf[ts + i] = in_byte(b, b.in_pos + i);
         }
 
-        if s.temp.size + tmp == s.lzma2.compressed {
+        if s.temp.size.wrapping_add(tmp) == s.lzma2.compressed {
             s.temp.buf[ts + tn..].fill(0);
             s.rc.in_limit = ts + tn;
-        } else if s.temp.size + tmp < LZMA_IN_REQUIRED {
-            s.temp.size += tmp;
-            b.in_pos += tn;
+        } else if s.temp.size.wrapping_add(tmp) < LZMA_IN_REQUIRED {
+            s.temp.size = s.temp.size.wrapping_add(tmp);
+            b.in_pos = b.in_pos.wrapping_add(tn);
             return true;
         } else {
             // This branch is exactly `temp.size + tmp >= LZMA_IN_REQUIRED`,
-            // so the subtraction cannot underflow.
-            s.rc.in_limit = ts + tn - LZMA_IN_REQUIRED as usize;
+            // so the subtraction cannot underflow in practice.
+            s.rc.in_limit = (ts.wrapping_add(tn)).wrapping_sub(LZMA_IN_REQUIRED as usize);
         }
 
         s.rc.in_pos = 0;
@@ -2003,21 +2036,22 @@ fn lzma2_lzma(s: &mut XzDecLzma2, b: &mut XzBuf) -> bool {
         s.lzma2.compressed = s.lzma2.compressed.wrapping_sub(s.rc.in_pos as u32);
 
         if s.rc.in_pos < s.temp.size as usize {
-            s.temp.size -= s.rc.in_pos as u32;
+            s.temp.size = s.temp.size.wrapping_sub(s.rc.in_pos as u32);
             // memmove(s->temp.buf, s->temp.buf + s->rc.in_pos, s->temp.size)
             // -- with the already-decremented size.
             let n = s.temp.size as usize;
-            s.temp.buf.copy_within(s.rc.in_pos..s.rc.in_pos + n, 0);
+            s.temp.buf
+                .copy_within(s.rc.in_pos..s.rc.in_pos.wrapping_add(n), 0);
             return true;
         }
 
-        // The branch above took the `in_pos < temp.size` case, so this cannot
-        // underflow.
-        b.in_pos += s.rc.in_pos - s.temp.size as usize;
+        // The branch above took the `in_pos < temp.size` case, so this
+        // cannot underflow in practice.
+        b.in_pos = b.in_pos.wrapping_add(s.rc.in_pos.wrapping_sub(s.temp.size as usize));
         s.temp.size = 0;
     }
 
-    in_avail = b.in_size - b.in_pos;
+    in_avail = b.in_size.wrapping_sub(b.in_pos);
     if in_avail >= LZMA_IN_REQUIRED as usize {
         s.rc.in_pos = b.in_pos;
 
@@ -2030,10 +2064,12 @@ fn lzma2_lzma(s: &mut XzDecLzma2, b: &mut XzBuf) -> bool {
         // this function's docs describe; on every ordinary path `compressed`
         // is at most 65536.
         if in_avail >= s.lzma2.compressed.wrapping_add(LZMA_IN_REQUIRED) as usize {
-            s.rc.in_limit = b.in_pos + s.lzma2.compressed as usize;
+            s.rc.in_limit = b.in_pos.wrapping_add(s.lzma2.compressed as usize);
         } else {
-            // `in_avail >= LZMA_IN_REQUIRED` bounds this from below.
-            s.rc.in_limit = b.in_size - LZMA_IN_REQUIRED as usize;
+            // `in_avail >= LZMA_IN_REQUIRED` bounds this from below in
+            // practice; wrapping_sub is faithful to the C's plain `-`
+            // regardless.
+            s.rc.in_limit = b.in_size.wrapping_sub(LZMA_IN_REQUIRED as usize);
         }
 
         let rc_in = RcInput {
@@ -2045,17 +2081,17 @@ fn lzma2_lzma(s: &mut XzDecLzma2, b: &mut XzBuf) -> bool {
             return false;
         }
 
-        in_avail = s.rc.in_pos - b.in_pos;
+        in_avail = s.rc.in_pos.wrapping_sub(b.in_pos);
         if in_avail > s.lzma2.compressed as usize {
             return false;
         }
 
         // Guarded by the test above.
-        s.lzma2.compressed -= in_avail as u32;
+        s.lzma2.compressed = s.lzma2.compressed.wrapping_sub(in_avail as u32);
         b.in_pos = s.rc.in_pos;
     }
 
-    in_avail = b.in_size - b.in_pos;
+    in_avail = b.in_size.wrapping_sub(b.in_pos);
     if in_avail < LZMA_IN_REQUIRED as usize {
         if in_avail > s.lzma2.compressed as usize {
             in_avail = s.lzma2.compressed as usize;
@@ -2064,11 +2100,11 @@ fn lzma2_lzma(s: &mut XzDecLzma2, b: &mut XzBuf) -> bool {
         // memcpy(s->temp.buf, b->in + b->in_pos, in_avail). At most 20 bytes;
         // see the copy above for why it is byte by byte.
         for i in 0..in_avail {
-            s.temp.buf[i] = in_byte(b, b.in_pos + i);
+            s.temp.buf[i] = in_byte(b, b.in_pos.wrapping_add(i));
         }
 
         s.temp.size = in_avail as u32;
-        b.in_pos += in_avail;
+        b.in_pos = b.in_pos.wrapping_add(in_avail);
     }
 
     true
@@ -2156,27 +2192,36 @@ fn lzma2_run(s: &mut XzDecLzma2, b: &mut XzBuf) -> c_int {
             }
 
             Sequence::Uncompressed1 => {
-                // At most 0x1F0000 + 0xFF00 + 0x100, so no overflow.
-                s.lzma2.uncompressed += u32::from(in_byte(b, b.in_pos)) << 8;
+                // At most 0x1F0000 + 0xFF00 + 0x100, so no overflow -- but
+                // wrapping_* is faithful to the C's plain unsigned
+                // arithmetic regardless, per the CONFIG_RUST_OVERFLOW_CHECKS
+                // sweep, 2026-09-06.
+                s.lzma2.uncompressed = s.lzma2
+                    .uncompressed
+                    .wrapping_add(u32::from(in_byte(b, b.in_pos)).wrapping_shl(8));
                 b.in_pos += 1;
                 s.lzma2.sequence = Sequence::Uncompressed2;
             }
 
             Sequence::Uncompressed2 => {
-                s.lzma2.uncompressed += u32::from(in_byte(b, b.in_pos)) + 1;
+                s.lzma2.uncompressed = s.lzma2
+                    .uncompressed
+                    .wrapping_add(u32::from(in_byte(b, b.in_pos)).wrapping_add(1));
                 b.in_pos += 1;
                 s.lzma2.sequence = Sequence::Compressed0;
             }
 
             Sequence::Compressed0 => {
                 // At most 0xFF00 + 0x100 == 0x10000.
-                s.lzma2.compressed = u32::from(in_byte(b, b.in_pos)) << 8;
+                s.lzma2.compressed = u32::from(in_byte(b, b.in_pos)).wrapping_shl(8);
                 b.in_pos += 1;
                 s.lzma2.sequence = Sequence::Compressed1;
             }
 
             Sequence::Compressed1 => {
-                s.lzma2.compressed += u32::from(in_byte(b, b.in_pos)) + 1;
+                s.lzma2.compressed = s.lzma2
+                    .compressed
+                    .wrapping_add(u32::from(in_byte(b, b.in_pos)).wrapping_add(1));
                 b.in_pos += 1;
                 s.lzma2.sequence = s.lzma2.next_sequence;
             }
@@ -2217,7 +2262,7 @@ fn lzma2_run(s: &mut XzDecLzma2, b: &mut XzBuf) -> c_int {
                 // this loop multiple times without changing
                 // s->lzma2.sequence.
                 let out_max = core::cmp::min(
-                    b.out_size - b.out_pos,
+                    b.out_size.wrapping_sub(b.out_pos),
                     s.lzma2.uncompressed as usize,
                 );
                 dict_limit(&mut s.dict, out_max);
@@ -2226,8 +2271,10 @@ fn lzma2_run(s: &mut XzDecLzma2, b: &mut XzBuf) -> c_int {
                 }
 
                 // `dict_flush()` returns at most the `out_max` above, which is
-                // at most `uncompressed`, so this cannot underflow.
-                s.lzma2.uncompressed -= dict_flush(&mut s.dict, b);
+                // at most `uncompressed`, so this cannot underflow in
+                // practice; wrapping_sub is faithful to the C's plain `-=`
+                // regardless.
+                s.lzma2.uncompressed = s.lzma2.uncompressed.wrapping_sub(dict_flush(&mut s.dict, b));
 
                 if s.lzma2.uncompressed == 0 {
                     if s.lzma2.compressed > 0

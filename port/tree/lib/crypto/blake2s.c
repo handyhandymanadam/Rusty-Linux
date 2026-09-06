@@ -41,6 +41,15 @@
 void rust_blake2s_compress_generic(struct blake2s_state *state, const u8 *block,
 				   size_t nblocks, const u32 inc);
 
+/* Forward-declared for the same reason: config-full's -Wmissing-prototypes
+ * is fatal (-Werror) and neither this symbol's only caller (Rust, via FFI)
+ * nor its lack of an EXPORT_SYMBOL gives the compiler anything else to
+ * infer a prototype from. Found when config-full was rebuilt for the first
+ * time since this file was added -- config-fast does not enable the
+ * warning as an error, which is why it went unnoticed until now. */
+void blake2s_compress_dispatch(struct blake2s_state *state, const u8 *block,
+			       size_t nblocks, const u32 inc);
+
 /*
  * The name $(SRCARCH)/blake2s.h expects to fall back to. A tail call to the
  * Rust body. Upstream's version also carried a debug-only assertion on

@@ -19,9 +19,19 @@ crc-t10dif-$(CONFIG_X86) += x86/crc16-msb-pclmul.o
 endif
 
 obj-$(CONFIG_CRC32) += crc32.o
-crc32-y := crc32-main.o
+# Base object varies by CONFIG_RUST (Rust owns the tables directly and
+# crc32-main.o no longer #includes crc32table.h -- see the norust arm's
+# separate crc32table.h dependency below). Must be set here, via `:=`,
+# BEFORE the arch fan-out below appends to it with `+=`: a `:=` anywhere
+# later in the file would silently wipe those arch objects back out.
+ifdef CONFIG_RUST
+crc32-y := crc32-main.o crc32_main_rs.o
+else
+crc32-y := crc32-main_norust.o
+endif
 ifeq ($(CONFIG_CRC32_ARCH),y)
 CFLAGS_crc32-main.o += -I$(src)/$(SRCARCH)
+CFLAGS_crc32-main_norust.o += -I$(src)/$(SRCARCH)
 crc32-$(CONFIG_ARM) += arm/crc32-core.o
 crc32-$(CONFIG_ARM64) += arm64/crc32-core.o
 crc32-$(CONFIG_PPC) += powerpc/crc32c-vpmsum_asm.o
@@ -45,7 +55,11 @@ obj-y += tests/
 hostprogs := gen_crc32table gen_crc64table
 clean-files := crc32table.h crc64table.h
 
-$(obj)/crc32-main.o: $(obj)/crc32table.h
+# crc32-main.o (the CONFIG_RUST=y arm) no longer #includes crc32table.h --
+# lib/crc/crc32_main_rs.rs owns the tables directly now -- so only the
+# CONFIG_RUST=n arm's crc32-main_norust.o (pristine C, still includes it)
+# needs this dependency.
+$(obj)/crc32-main_norust.o: $(obj)/crc32table.h
 $(obj)/crc64-main.o: $(obj)/crc64table.h
 
 quiet_cmd_crc32 = GEN     $@

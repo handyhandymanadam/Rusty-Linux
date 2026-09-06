@@ -143,7 +143,7 @@ be_check_rust() {
 
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
     if [ "${1:-}" = "--bootstrap" ]; then be_bootstrap; fi
-    source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)/kbuild-env.sh"
+    source /home/adam/Rusty-Linux/kbuild-env.sh
     be_probe && echo "cross toolchain: ok  ($BE_CACHE)"
     be_check_rust && echo "rust std for $BE_RUSTTARGET: ok"
 fi

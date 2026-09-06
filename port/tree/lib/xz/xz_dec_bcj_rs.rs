@@ -280,11 +280,19 @@ pub(crate) fn bcj_x86(pos: u32, prev_mask_state: &mut u32, buf: &mut [u8]) -> us
         if prev_pos > 3 {
             prev_mask = 0;
         } else {
-            // prev_pos is 1..=3 here, so the shift is 0..=2.
+            // prev_pos is 1..=3 here (debug_assert! below), so the shift
+            // amount is 0..=2 and the array indices are in range -- wrapping_*
+            // throughout this function matches the C's unguarded equivalent
+            // (found by the CONFIG_RUST_OVERFLOW_CHECKS sweep, 2026-09-06).
             debug_assert!(prev_pos >= 1);
-            prev_mask = (prev_mask << (prev_pos - 1)) & 7;
+            // The shift amount is masked to the type's bit width (`& 31`) so
+            // this is a defined shift even if the debug_assert!'s invariant
+            // were ever violated, matching the fact that C's shift-by->=width
+            // is UB here too -- not merely "wraps," so the amount itself
+            // needs constraining, not just the subtraction underneath it.
+            prev_mask = (prev_mask << (prev_pos.wrapping_sub(1) as u32 & 31)) & 7;
             if prev_mask != 0 {
-                let b = buf[i + 4 - MASK_TO_BIT_NUM[prev_mask as usize] as usize];
+                let b = buf[(i + 4).wrapping_sub(MASK_TO_BIT_NUM[prev_mask as usize] as usize)];
                 if !MASK_TO_ALLOWED_STATUS[prev_mask as usize] || bcj_x86_test_msbyte(b) {
                     prev_pos = i;
                     prev_mask = (prev_mask << 1) | 1;
@@ -296,8 +304,12 @@ pub(crate) fn bcj_x86(pos: u32, prev_mask_state: &mut u32, buf: &mut [u8]) -> us
 
         prev_pos = i;
 
-        if bcj_x86_test_msbyte(buf[i + 4]) {
-            let mut src = get_le32(buf, i + 1);
+        // `i`/`size` are `size_t` in the C; every `i + N` below is bounded by
+        // the `i < size` loop condition in practice (real buffer sizes, never
+        // near usize::MAX), matching the C's own unguarded pointer/index
+        // arithmetic. wrapping_* throughout the rest of this function.
+        if bcj_x86_test_msbyte(buf[i.wrapping_add(4)]) {
+            let mut src = get_le32(buf, i.wrapping_add(1));
             let dest;
             loop {
                 let d = src.wrapping_sub(pos.wrapping_add(i as u32).wrapping_add(5));
@@ -306,31 +318,39 @@ pub(crate) fn bcj_x86(pos: u32, prev_mask_state: &mut u32, buf: &mut [u8]) -> us
                     break;
                 }
 
-                let j = MASK_TO_BIT_NUM[prev_mask as usize] * 8;
-                let b = (d >> (24 - j)) as u8;
+                // `prev_mask != 0` here (the check above), so
+                // MASK_TO_BIT_NUM[prev_mask] is 1..=3 and j is 8..=24 --
+                // `32 - j` and `24 - j` both stay in 8..=24, never reaching a
+                // full-width shift.
+                let j = MASK_TO_BIT_NUM[prev_mask as usize].wrapping_mul(8);
+                let b = (d >> (24u32.wrapping_sub(j) & 31)) as u8;
                 if !bcj_x86_test_msbyte(b) {
                     dest = d;
                     break;
                 }
 
-                src = d ^ ((1u32 << (32 - j)) - 1);
+                src = d ^ ((1u32.wrapping_shl(32u32.wrapping_sub(j) & 31)).wrapping_sub(1));
             }
 
             let mut dest = dest & 0x01FF_FFFF;
             dest |= 0u32.wrapping_sub(dest & 0x0100_0000);
-            put_le32(buf, i + 1, dest);
-            i += 4;
+            put_le32(buf, i.wrapping_add(1), dest);
+            i = i.wrapping_add(4);
         } else {
             prev_mask = (prev_mask << 1) | 1;
         }
-        i += 1;
+        i = i.wrapping_add(1);
     }
 
     prev_pos = i.wrapping_sub(prev_pos);
+    // `prev_pos`/`prev_mask` are `size_t`/`unsigned int` in the C, which
+    // computes this same `prev_pos - 1` unconditionally and unchecked --
+    // wrapping_sub is faithful regardless of whether prev_pos==0 is
+    // reachable here.
     *prev_mask_state = if prev_pos > 3 {
         0
     } else {
-        prev_mask << (prev_pos - 1)
+        prev_mask << (prev_pos.wrapping_sub(1) as u32 & 31)
     };
     i
 }
@@ -350,7 +370,9 @@ pub(crate) fn bcj_powerpc(pos: u32, buf: &mut [u8]) -> usize {
             instr |= 0x4800_0001;
             put_be32(buf, i, instr);
         }
-        i += 4;
+        // `i` is bounded by `size` (a real buffer length, never near
+        // usize::MAX), matching the C's own unguarded `size_t` increment.
+        i = i.wrapping_add(4);
     }
 
     i
@@ -362,18 +384,21 @@ pub(crate) fn bcj_arm(pos: u32, buf: &mut [u8]) -> usize {
     let size = buf.len() & !3usize;
 
     let mut i = 0;
+    // `i + N` below is bounded by the `i < size` loop condition in practice
+    // (real buffer sizes), matching the C's own unguarded pointer arithmetic.
     while i < size {
-        if buf[i + 3] == 0xEB {
-            let mut addr =
-                buf[i] as u32 | ((buf[i + 1] as u32) << 8) | ((buf[i + 2] as u32) << 16);
+        if buf[i.wrapping_add(3)] == 0xEB {
+            let mut addr = buf[i] as u32
+                | ((buf[i.wrapping_add(1)] as u32) << 8)
+                | ((buf[i.wrapping_add(2)] as u32) << 16);
             addr <<= 2;
             addr = addr.wrapping_sub(pos.wrapping_add(i as u32).wrapping_add(8));
             addr >>= 2;
             buf[i] = addr as u8;
-            buf[i + 1] = (addr >> 8) as u8;
-            buf[i + 2] = (addr >> 16) as u8;
+            buf[i.wrapping_add(1)] = (addr >> 8) as u8;
+            buf[i.wrapping_add(2)] = (addr >> 16) as u8;
         }
-        i += 4;
+        i = i.wrapping_add(4);
     }
 
     i
@@ -386,24 +411,27 @@ pub(crate) fn bcj_armthumb(pos: u32, buf: &mut [u8]) -> usize {
         return 0;
     }
 
-    let size = buf.len() - 4;
+    // `buf.len() >= 4` (checked above), so this cannot underflow.
+    let size = buf.len().wrapping_sub(4);
     let mut i = 0;
+    // `i + N` below is bounded by the `i <= size` loop condition in practice
+    // (real buffer sizes), matching the C's own unguarded pointer arithmetic.
     while i <= size {
-        if buf[i + 1] & 0xF8 == 0xF0 && buf[i + 3] & 0xF8 == 0xF8 {
-            let mut addr = ((buf[i + 1] as u32 & 0x07) << 19)
+        if buf[i.wrapping_add(1)] & 0xF8 == 0xF0 && buf[i.wrapping_add(3)] & 0xF8 == 0xF8 {
+            let mut addr = ((buf[i.wrapping_add(1)] as u32 & 0x07) << 19)
                 | ((buf[i] as u32) << 11)
-                | ((buf[i + 3] as u32 & 0x07) << 8)
-                | (buf[i + 2] as u32);
+                | ((buf[i.wrapping_add(3)] as u32 & 0x07) << 8)
+                | (buf[i.wrapping_add(2)] as u32);
             addr <<= 1;
             addr = addr.wrapping_sub(pos.wrapping_add(i as u32).wrapping_add(4));
             addr >>= 1;
-            buf[i + 1] = (0xF0 | ((addr >> 19) & 0x07)) as u8;
+            buf[i.wrapping_add(1)] = (0xF0 | ((addr >> 19) & 0x07)) as u8;
             buf[i] = (addr >> 11) as u8;
-            buf[i + 3] = (0xF8 | ((addr >> 8) & 0x07)) as u8;
-            buf[i + 2] = addr as u8;
-            i += 2;
+            buf[i.wrapping_add(3)] = (0xF8 | ((addr >> 8) & 0x07)) as u8;
+            buf[i.wrapping_add(2)] = addr as u8;
+            i = i.wrapping_add(2);
         }
-        i += 2;
+        i = i.wrapping_add(2);
     }
 
     i
@@ -426,7 +454,8 @@ pub(crate) fn bcj_sparc(pos: u32, buf: &mut [u8]) -> usize {
                 | (instr & 0x3F_FFFF);
             put_be32(buf, i, instr);
         }
-        i += 4;
+        // `i` is bounded by `size` (a real buffer length).
+        i = i.wrapping_add(4);
     }
 
     i
@@ -452,7 +481,7 @@ pub(crate) fn bcj_arm64(pos: u32, buf: &mut [u8]) -> usize {
 
             // Only convert values in the range +/-512 MiB.
             if addr.wrapping_add(0x02_0000) & 0x1C_0000 != 0 {
-                i += 4;
+                i = i.wrapping_add(4);
                 continue;
             }
 
@@ -465,7 +494,8 @@ pub(crate) fn bcj_arm64(pos: u32, buf: &mut [u8]) -> usize {
 
             put_le32(buf, i, instr);
         }
-        i += 4;
+        // `i` is bounded by `size` (a real buffer length).
+        i = i.wrapping_add(4);
     }
 
     i
@@ -478,45 +508,49 @@ pub(crate) fn bcj_riscv(pos: u32, buf: &mut [u8]) -> usize {
         return 0;
     }
 
-    let size = buf.len() - 8;
+    // `buf.len() >= 8` (checked above), so this cannot underflow.
+    let size = buf.len().wrapping_sub(8);
     let mut i = 0;
+    // `i + N` below is bounded by the `i <= size` loop condition in practice
+    // (real buffer sizes), matching the C's own unguarded pointer arithmetic;
+    // every `i +=` is likewise a real byte count, never near usize::MAX.
     while i <= size {
         let mut instr = buf[i] as u32;
 
         if instr == 0xEF {
             // JAL
-            let b1 = buf[i + 1] as u32;
+            let b1 = buf[i.wrapping_add(1)] as u32;
             if b1 & 0x0D != 0 {
-                i += 2;
+                i = i.wrapping_add(2);
                 continue;
             }
 
-            let b2 = buf[i + 2] as u32;
-            let b3 = buf[i + 3] as u32;
+            let b2 = buf[i.wrapping_add(2)] as u32;
+            let b3 = buf[i.wrapping_add(3)] as u32;
 
             let mut addr = ((b1 & 0xF0) << 13) | (b2 << 9) | (b3 << 1);
             addr = addr.wrapping_sub(pos.wrapping_add(i as u32));
 
-            buf[i + 1] = ((b1 & 0x0F) | ((addr >> 8) & 0xF0)) as u8;
-            buf[i + 2] =
+            buf[i.wrapping_add(1)] = ((b1 & 0x0F) | ((addr >> 8) & 0xF0)) as u8;
+            buf[i.wrapping_add(2)] =
                 (((addr >> 16) & 0x0F) | ((addr >> 7) & 0x10) | ((addr << 4) & 0xE0)) as u8;
-            buf[i + 3] = (((addr >> 4) & 0x7F) | ((addr >> 13) & 0x80)) as u8;
+            buf[i.wrapping_add(3)] = (((addr >> 4) & 0x7F) | ((addr >> 13) & 0x80)) as u8;
 
-            i += 4 - 2;
+            i = i.wrapping_add(4).wrapping_sub(2);
         } else if instr & 0x7F == 0x17 {
             // AUIPC
             let instr2;
-            instr |= (buf[i + 1] as u32) << 8;
-            instr |= (buf[i + 2] as u32) << 16;
-            instr |= (buf[i + 3] as u32) << 24;
+            instr |= (buf[i.wrapping_add(1)] as u32) << 8;
+            instr |= (buf[i.wrapping_add(2)] as u32) << 16;
+            instr |= (buf[i.wrapping_add(3)] as u32) << 24;
 
             if instr & 0xE80 != 0 {
                 // AUIPC's rd doesn't equal x0 or x2.
-                let old2 = get_le32(buf, i + 4);
+                let old2 = get_le32(buf, i.wrapping_add(4));
 
                 if ((instr << 8) ^ old2.wrapping_sub(3)) & 0xF_8003 != 0 {
-                    i += 6 - 2;
-                    i += 2;
+                    i = i.wrapping_add(6).wrapping_sub(2);
+                    i = i.wrapping_add(2);
                     continue;
                 }
 
@@ -529,12 +563,12 @@ pub(crate) fn bcj_riscv(pos: u32, buf: &mut [u8]) -> usize {
                 let instr2_rs1 = instr >> 27;
 
                 if (instr.wrapping_sub(0x3117) << 18) >= (instr2_rs1 & 0x1D) {
-                    i += 4 - 2;
-                    i += 2;
+                    i = i.wrapping_add(4).wrapping_sub(2);
+                    i = i.wrapping_add(2);
                     continue;
                 }
 
-                let mut addr = get_be32(buf, i + 4);
+                let mut addr = get_be32(buf, i.wrapping_add(4));
                 addr = addr.wrapping_sub(pos.wrapping_add(i as u32));
 
                 instr2 = (instr >> 12) | (addr << 20);
@@ -545,11 +579,11 @@ pub(crate) fn bcj_riscv(pos: u32, buf: &mut [u8]) -> usize {
             }
 
             put_le32(buf, i, instr);
-            put_le32(buf, i + 4, instr2);
+            put_le32(buf, i.wrapping_add(4), instr2);
 
-            i += 8 - 2;
+            i = i.wrapping_add(8).wrapping_sub(2);
         }
-        i += 2;
+        i = i.wrapping_add(2);
     }
 
     i
@@ -601,7 +635,10 @@ fn bcj_apply(kind: u32, pos: &mut u32, prev_mask: &mut u32, buf: &mut [u8], off:
         _ => 0,
     };
 
-    *off += filtered;
+    // `off`/`filtered` are `size_t` in the C; wrapping_add is faithful to its
+    // own unguarded `+=` regardless of whether this could ever wrap in
+    // practice (real buffer sizes, never near usize::MAX).
+    *off = off.wrapping_add(filtered);
     *pos = pos.wrapping_add(filtered as u32);
 }
 
@@ -616,16 +653,21 @@ unsafe fn bcj_flush(s: &mut XzDecBcj, b: *mut XzBuf) {
     // SAFETY: the caller guarantees `b` is live for the duration of the call.
     let (out, out_pos, out_size) = unsafe { ((*b).out, (*b).out_pos, (*b).out_size) };
 
-    let copy_size = core::cmp::min(s.temp_filtered, out_size - out_pos);
+    // `out_pos <= out_size` (a position within a capacity) and `copy_size <=
+    // temp_filtered <= temp_size` throughout this function are `struct
+    // xz_buf`/`struct xz_dec_bcj` invariants the C also relies on
+    // unchecked; wrapping_* is faithful to its plain `-`/`+` either way.
+    let copy_size = core::cmp::min(s.temp_filtered, out_size.wrapping_sub(out_pos));
     // SAFETY: `out[out_pos..out_size]` is writable and `copy_size` fits in it;
     // the source is `s.temp_buf`, which does not overlap it.
     unsafe { core::ptr::copy_nonoverlapping(s.temp_buf.as_ptr(), out.add(out_pos), copy_size) };
     // SAFETY: as above.
-    unsafe { (*b).out_pos = out_pos + copy_size };
+    unsafe { (*b).out_pos = out_pos.wrapping_add(copy_size) };
 
-    s.temp_filtered -= copy_size;
-    s.temp_size -= copy_size;
-    s.temp_buf.copy_within(copy_size..copy_size + s.temp_size, 0);
+    s.temp_filtered = s.temp_filtered.wrapping_sub(copy_size);
+    s.temp_size = s.temp_size.wrapping_sub(copy_size);
+    s.temp_buf
+        .copy_within(copy_size..copy_size.wrapping_add(s.temp_size), 0);
 }
 
 /// Decode a raw BCJ + LZMA2 stream.
@@ -683,7 +725,8 @@ pub unsafe extern "C" fn xz_dec_bcj_run(
     // This needs to be always run when temp_size == 0 to handle a special case
     // where the output buffer is full and the next filter has no more output
     // coming but hasn't returned XZ_STREAM_END yet.
-    if s.temp_size < out_size - out_pos || s.temp_size == 0 {
+    // `out_pos <= out_size` throughout, same invariant as bcj_flush() above.
+    if s.temp_size < out_size.wrapping_sub(out_pos) || s.temp_size == 0 {
         let mut out_start = out_pos;
 
         // SAFETY: the branch condition established there is at least
@@ -691,7 +734,7 @@ pub unsafe extern "C" fn xz_dec_bcj_run(
         unsafe {
             core::ptr::copy_nonoverlapping(s.temp_buf.as_ptr(), out.add(out_pos), s.temp_size);
         }
-        out_pos += s.temp_size;
+        out_pos = out_pos.wrapping_add(s.temp_size);
         // SAFETY: `b` is live.
         unsafe { (*b).out_pos = out_pos };
 
@@ -716,8 +759,11 @@ pub unsafe extern "C" fn xz_dec_bcj_run(
             return XZ_STREAM_END;
         }
 
-        s.temp_size = out_pos - out_start;
-        out_pos -= s.temp_size;
+        // `out_start <= out_pos` (bcj_apply() only ever advances `off`
+        // forward), so `temp_size <= out_pos` too -- same faithful-to-the-C
+        // reasoning as above.
+        s.temp_size = out_pos.wrapping_sub(out_start);
+        out_pos = out_pos.wrapping_sub(s.temp_size);
         // SAFETY: `b` is live.
         unsafe { (*b).out_pos = out_pos };
         // SAFETY: `temp_size` is at most the 16-byte look-ahead the filters
@@ -729,7 +775,7 @@ pub unsafe extern "C" fn xz_dec_bcj_run(
         // If there wasn't enough input to the next filter to fill the output
         // buffer with unfiltered data, there's no point to try decoding more
         // data to temp.
-        if out_pos + s.temp_size < out_size {
+        if out_pos.wrapping_add(s.temp_size) < out_size {
             return XZ_OK;
         }
     }

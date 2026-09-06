@@ -29,14 +29,23 @@
 #   looks identical and does nothing. Use `kmake`, never bare `make`.
 #
 # USE
-#   source ./kbuild-env.sh    # from the repo root
+#   source /home/adam/Rusty-Linux/kbuild-env.sh
 #   kmake O=../../build-fast olddefconfig
 #   kmake O=../../build-fast -j"$(nproc)"
 #
 #   ./kbuild-env.sh          prints the toolchain it READ from disk, and exits
 #                            non-zero if a pinned path is missing.
 
-RUSTY_TOOLCHAIN="$HOME/.rustup/toolchains/1.98.0-x86_64-unknown-linux-gnu"
+# The repo root this file lives in -- NOT $(pwd) (this is sourced, and the
+# caller's cwd is whatever it happens to be) and NOT a hardcoded path (a
+# worktree at a different path sources its OWN copy of this file, and a
+# hardcoded path would silently point kmake() at the main checkout's tree
+# instead -- found by md5-porter, 2026-09-05, running from
+# ../Rusty-Linux-wt-md5). ${BASH_SOURCE[0]} is this file's own path
+# regardless of who sources it or from where.
+KB_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+RUSTY_TOOLCHAIN=/home/adam/.rustup/toolchains/1.98.0-x86_64-unknown-linux-gnu
 
 # Absolute paths -- deliberately NOT the ~/.cargo/bin shims.
 KB_RUSTC="$RUSTY_TOOLCHAIN/bin/rustc"
@@ -76,7 +85,7 @@ KB_LLVM=1
 KB_GENDWARFKSYMS_STABLE=1
 
 kmake() {
-    make -C "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/src/linux" \
+    make -C "$KB_ROOT/src/linux" \
         KBUILD_GENDWARFKSYMS_STABLE="$KB_GENDWARFKSYMS_STABLE" \
         LLVM="$KB_LLVM" \
         RUSTC="$KB_RUSTC" \

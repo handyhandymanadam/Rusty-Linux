@@ -26,7 +26,7 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 build=${1:-build-fast}
 G="$root/$build/scripts/gendwarfksyms/gendwarfksyms"
 KABI_RS="$root/port/tree/rust/kernel/kabi.rs"
-RUSTC="$HOME/.rustup/toolchains/1.98.0-x86_64-unknown-linux-gnu/bin/rustc"
+RUSTC=/home/adam/.rustup/toolchains/1.98.0-x86_64-unknown-linux-gnu/bin/rustc
 
 [ -x "$G" ] || { echo "no gendwarfksyms at $G -- build $build first"; exit 2; }
 [ -r "$KABI_RS" ] || { echo "no $KABI_RS"; exit 2; }

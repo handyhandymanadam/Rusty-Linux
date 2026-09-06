@@ -171,8 +171,12 @@ pub unsafe extern "C" fn zlib_inflate_table(
     let mut offs = [0u16; MAXBITS + 1];
 
     // Accumulate lengths for codes (assumes lens[] all in 0..MAXBITS).
+    // `count[]` is `unsigned short` in the C, so wrapping_* is faithful to
+    // its defined wraparound regardless of whether `codes` is ever large
+    // enough to matter -- per the CONFIG_RUST_OVERFLOW_CHECKS sweep,
+    // 2026-09-06 (see divergence 4).
     for sym in 0..codes as usize {
-        count[lens[sym] as usize] += 1;
+        count[lens[sym] as usize] = count[lens[sym] as usize].wrapping_add(1);
     }
 
     // Bound code lengths, force root to be within code lengths.
@@ -219,6 +223,17 @@ pub unsafe extern "C" fn zlib_inflate_table(
     }
 
     // Check for an over-subscribed or incomplete set of lengths.
+    //
+    // `left` is `int` in the C -- signed, so its overflow is undefined
+    // behaviour in C too, not a defined wraparound `wrapping_*` could be
+    // faithful to. There is nothing to be faithful to here; the choice is
+    // "checked" or "invents a Rust-only behavior the C never had." Left
+    // plain deliberately: this is the classical zlib Kraft-inequality
+    // bookkeeping (`left` bounded by `1 << MAXBITS == 32768` in magnitude
+    // at every step, `MAXBITS == 15` fixed by the deflate format), so the
+    // guard cannot fire on any input, corrupt or not -- unlike
+    // `dict_repeat`'s cross-function invariant in `xz_dec_lzma2_rs.rs`,
+    // this one is provable from this loop's own bounds alone, 2026-09-06.
     let mut left: i32 = 1;
     for len in 1..=MAXBITS {
         left <<= 1;
@@ -234,9 +249,11 @@ pub unsafe extern "C" fn zlib_inflate_table(
     }
 
     // Generate offsets into the symbol table for each length, for sorting.
+    // `offs[]` is `unsigned short` in the C; wrapping_* is faithful to its
+    // defined wraparound regardless, per divergence 4.
     offs[1] = 0;
     for len in 1..MAXBITS {
-        offs[len + 1] = offs[len] + count[len];
+        offs[len + 1] = offs[len].wrapping_add(count[len]);
     }
 
     // Sort symbols by length, by symbol order within each length.
@@ -244,7 +261,7 @@ pub unsafe extern "C" fn zlib_inflate_table(
         if lens[sym] != 0 {
             let o = offs[lens[sym] as usize] as usize;
             work[o] = sym as u16;
-            offs[lens[sym] as usize] += 1;
+            offs[lens[sym] as usize] = offs[lens[sym] as usize].wrapping_add(1);
         }
     }
 
@@ -283,7 +300,11 @@ pub unsafe extern "C" fn zlib_inflate_table(
         } else if (ws as i32) > end {
             match kind {
                 LENS => {
-                    let i = ws as usize - 257;
+                    // `ws > end == 256` is this branch's own condition, so
+                    // `ws >= 257` always; the subtraction cannot underflow.
+                    // wrapping_sub is faithful regardless, per the
+                    // CONFIG_RUST_OVERFLOW_CHECKS sweep, 2026-09-06.
+                    let i = (ws as usize).wrapping_sub(257);
                     (LEXT[i] as u8, LBASE[i])
                 }
                 DISTS => {
@@ -300,28 +321,36 @@ pub unsafe extern "C" fn zlib_inflate_table(
             // End of block.
             (32 + 64, 0)
         };
+        // `len >= drop` throughout: `drop` is 0 until the first sub-table
+        // transition sets it to `root`, and from then on `len > root` is
+        // this file's own loop condition for making that transition.
+        // `curr`/`len`/`drop` are all bounded by MAXBITS == 15, so the
+        // shift amounts below cannot reach 32 either way; wrapping_* is
+        // faithful to the C's defined unsigned wraparound and its shift
+        // masking regardless, per the CONFIG_RUST_OVERFLOW_CHECKS sweep,
+        // 2026-09-06.
         let this = Code {
             op,
-            bits: (len - drop) as u8,
+            bits: (len.wrapping_sub(drop)) as u8,
             val,
         };
 
         // Replicate for those indices with low len bits equal to huff.
-        let mut incr: u32 = 1u32 << (len - drop);
-        let mut fill: u32 = 1u32 << curr;
+        let mut incr: u32 = 1u32.wrapping_shl(len.wrapping_sub(drop));
+        let mut fill: u32 = 1u32.wrapping_shl(curr);
         min = fill; // save offset to next table -- the C reuses `min` here
         loop {
-            fill -= incr;
+            fill = fill.wrapping_sub(incr);
             // SAFETY: `(huff >> drop) + fill` is inside the table this call
             // has claimed; that is the C's own bound and `used` tracks it.
-            unsafe { *next.add(((huff >> drop) + fill) as usize) = this };
+            unsafe { *next.add(((huff >> drop).wrapping_add(fill)) as usize) = this };
             if fill == 0 {
                 break;
             }
         }
 
         // Backwards increment the len-bit code huff.
-        incr = 1u32 << (len - 1);
+        incr = 1u32.wrapping_shl(len.wrapping_sub(1));
         while huff & incr != 0 {
             incr >>= 1;
         }
@@ -333,8 +362,12 @@ pub unsafe extern "C" fn zlib_inflate_table(
         }
 
         // Go to the next symbol, update count, len.
+        // `count[]` is `unsigned short` in the C; wrapping_* is faithful
+        // regardless, per divergence 4. Reached only after `count[len]`
+        // was already incremented for this symbol when scanning `lens[]`
+        // above, so it cannot actually be zero here.
         sym += 1;
-        count[len as usize] -= 1;
+        count[len as usize] = count[len as usize].wrapping_sub(1);
         if count[len as usize] == 0 {
             if len == max {
                 break;
@@ -354,20 +387,26 @@ pub unsafe extern "C" fn zlib_inflate_table(
             // within the space this call has claimed.
             next = unsafe { next.add(min as usize) };
 
-            // Determine the length of the next table.
-            curr = len - drop;
-            left = 1i32 << curr;
-            while curr + drop < max {
-                left -= count[(curr + drop) as usize] as i32;
+            // Determine the length of the next table. `curr`/`drop` are
+            // bounded by MAXBITS == 15 as above; `left` is `int` in the C
+            // and this reuses the same reasoning as the over-subscribed
+            // check above -- signed, so left stays a plain, checked
+            // computation rather than a wrapping one (nothing to be
+            // faithful to; the invariant is structural, not stateful, so
+            // the guard is provably dead code either way), 2026-09-06.
+            curr = len.wrapping_sub(drop);
+            left = 1i32.wrapping_shl(curr);
+            while curr.wrapping_add(drop) < max {
+                left -= count[curr.wrapping_add(drop) as usize] as i32;
                 if left <= 0 {
                     break;
                 }
-                curr += 1;
+                curr = curr.wrapping_add(1);
                 left <<= 1;
             }
 
             // Check for enough space.
-            used += 1u32 << curr;
+            used = used.wrapping_add(1u32.wrapping_shl(curr));
             if kind == LENS && used >= ENOUGH - MAXD {
                 return 1;
             }
@@ -392,7 +431,7 @@ pub unsafe extern "C" fn zlib_inflate_table(
     // table to fill any remaining entries there.
     let mut this = Code {
         op: 64, // invalid code marker
-        bits: (len - drop) as u8,
+        bits: (len.wrapping_sub(drop)) as u8,
         val: 0,
     };
     while huff != 0 {

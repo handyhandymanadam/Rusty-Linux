@@ -331,7 +331,10 @@ const fn FSE_DTABLE_SIZE_U32(maxTableLog: c_uint) -> usize {
 /// `fse.h:246`.
 #[inline(always)]
 const fn FSE_DTABLE_SIZE(maxTableLog: c_uint) -> usize {
-    FSE_DTABLE_SIZE_U32(maxTableLog) * core::mem::size_of::<u32>()
+    // `maxTableLog <= FSE_TABLELOG_ABSOLUTE_MAX == 15` at every real call
+    // site, so this cannot overflow usize; wrapping_mul is faithful to the
+    // C's unsigned arithmetic regardless, 2026-09-06.
+    FSE_DTABLE_SIZE_U32(maxTableLog).wrapping_mul(core::mem::size_of::<u32>())
 }
 
 /// `fse.h:268` — `sizeof(short) * (maxSymbolValue + 1) + (1ULL << maxTableLog) + 8`.
@@ -355,17 +358,27 @@ const fn FSE_BUILD_DTABLE_WKSP_SIZE_U32(maxTableLog: c_uint, maxSymbolValue: c_u
 /// `fse.h:273`.
 #[inline(always)]
 const fn FSE_DECOMPRESS_WKSP_SIZE_U32(maxTableLog: c_uint, maxSymbolValue: c_uint) -> usize {
+    // Every term is provably small (bounded by FSE_MAX_TABLELOG/
+    // FSE_MAX_SYMBOL_VALUE on the internal path, and even the unbounded
+    // public path only feeds a `wrapping_shl` inside `FSE_DTABLE_SIZE_U32`);
+    // wrapping_add is faithful to the C's unsigned arithmetic regardless,
+    // 2026-09-06.
     FSE_DTABLE_SIZE_U32(maxTableLog)
-        + 1
-        + FSE_BUILD_DTABLE_WKSP_SIZE_U32(maxTableLog, maxSymbolValue)
-        + (FSE_MAX_SYMBOL_VALUE as usize + 1) / 2
-        + 1
+        .wrapping_add(1)
+        .wrapping_add(FSE_BUILD_DTABLE_WKSP_SIZE_U32(maxTableLog, maxSymbolValue))
+        .wrapping_add((FSE_MAX_SYMBOL_VALUE as usize + 1) / 2)
+        .wrapping_add(1)
 }
 
 /// `fse.h:274`.
 #[inline(always)]
 const fn FSE_DECOMPRESS_WKSP_SIZE(maxTableLog: c_uint, maxSymbolValue: c_uint) -> usize {
-    FSE_DECOMPRESS_WKSP_SIZE_U32(maxTableLog, maxSymbolValue) * core::mem::size_of::<u32>()
+    // Same reasoning as `FSE_DTABLE_SIZE`: provably bounded by
+    // FSE_TABLELOG_ABSOLUTE_MAX/FSE_MAX_SYMBOL_VALUE, so wrapping_mul is a
+    // no-op here and faithful to the C's unsigned arithmetic regardless,
+    // 2026-09-06.
+    FSE_DECOMPRESS_WKSP_SIZE_U32(maxTableLog, maxSymbolValue)
+        .wrapping_mul(core::mem::size_of::<u32>())
 }
 
 /// `huf.h:38`.
@@ -537,6 +550,13 @@ unsafe fn ncount_store(p: *mut i16, maxSV1: c_uint, i: c_uint, v: i16) {
 /// `istart` must point at `hbSize` readable bytes.
 #[inline(always)]
 unsafe fn header_read_le32(istart: *const u8, hbSize: isize, off: isize) -> u32 {
+    // This `assert!` is itself divergence 2's protective bounds check --
+    // its whole job is to be a hard stop before the unsafe read below, so
+    // its own condition stays plain, checked arithmetic rather than being
+    // wrapped. `off`/`hbSize` are signed (`isize`) precisely so this stays
+    // a checkable subtraction instead of C's pointer arithmetic (see the
+    // caller's comment); nothing about "C wraps unsigned arithmetic" applies
+    // to a deliberately defensive assert on signed offsets, 2026-09-06.
     assert!(off >= 0 && off + 4 <= hbSize);
     // SAFETY: class C (construction). `ip` is held as a signed byte offset
     // from `istart` exactly as the C holds it as a pointer. The C's invariant
@@ -649,6 +669,16 @@ unsafe fn FSE_readNCount_body(
     }
     bitStream >>= 4;
     bitCount = 4;
+    // `bitCount`, `remaining`, `threshold`, `count` and the `ip` bookkeeping
+    // below are `int`/`isize` throughout, matching the C's own signed types
+    // for this bit-parser -- C's signed overflow is undefined behaviour
+    // too, so there is nothing for wrapping_* to be faithful to. Every one
+    // of them is bounded to a small range by this function's own
+    // structure (bit positions within a 32-bit window, counts against a
+    // `tableLog <= FSE_TABLELOG_ABSOLUTE_MAX == 15`), so the guards below
+    // are provably dead code, not a live risk -- left checked rather than
+    // wrapped, same shape as `inftrees_rs.rs`'s `left` and
+    // `xz_dec_lzma2_rs.rs`'s `rc_direct` limit, 2026-09-06.
     // SAFETY: class B (boundary). Caller-owned out-parameter.
     unsafe { *tableLogPtr = nbBits as c_uint };
     remaining = (1i32 << nbBits) + 1;
@@ -780,7 +810,10 @@ unsafe fn FSE_readNCount_body(
     // SAFETY: class B (boundary). Caller-owned out-parameter. `charnum >= 1`
     // because the first pass through the loop always takes the `else` block
     // (`previous0` starts false) and that block increments it.
-    unsafe { *maxSVPtr = charnum - 1 };
+    // `charnum` is `c_uint` (unsigned), and `>= 1` here per the comment
+    // above; wrapping_sub is faithful to the C's arithmetic regardless,
+    // 2026-09-06.
+    unsafe { *maxSVPtr = charnum.wrapping_sub(1) };
 
     ip += ((bitCount + 7) >> 3) as isize;
     ip as usize // return ip - istart
@@ -1069,7 +1102,10 @@ unsafe fn HUF_readStats_body(
 
     // get last non-null symbol weight (implied, total must be 2^n)
     {
-        let tableLog: u32 = ZSTD_highbit32(weightTotal) + 1;
+        // `ZSTD_highbit32` returns 0..=31 for the nonzero `weightTotal`
+        // checked above, so this never approaches u32::MAX; wrapping_add is
+        // faithful to the C's unsigned arithmetic regardless, 2026-09-06.
+        let tableLog: u32 = ZSTD_highbit32(weightTotal).wrapping_add(1);
         if tableLog > HUF_TABLELOG_MAX {
             return ERROR(ZSTD_error_corruption_detected);
         }
@@ -1078,9 +1114,17 @@ unsafe fn HUF_readStats_body(
         // determine last weight
         {
             let total: u32 = 1u32 << tableLog;
-            let rest: u32 = total - weightTotal;
-            let verif: u32 = 1u32 << ZSTD_highbit32(rest);
-            let lastWeight: u32 = ZSTD_highbit32(rest) + 1;
+            // `total` is the next power of 2 strictly above `weightTotal`
+            // (that is what `tableLog = highbit32(weightTotal) + 1` gives),
+            // so `total > weightTotal` and `rest >= 1` always -- the
+            // subtraction cannot underflow and `highbit32(rest)` is always
+            // a valid 0..=31 shift amount. wrapping_* is faithful to the
+            // C's unsigned arithmetic regardless, 2026-09-06.
+            let rest: u32 = total.wrapping_sub(weightTotal);
+            let verif: u32 = 1u32.wrapping_shl(ZSTD_highbit32(rest));
+            // Bounded the same way as `tableLog` above; wrapping_add is
+            // faithful regardless, 2026-09-06.
+            let lastWeight: u32 = ZSTD_highbit32(rest).wrapping_add(1);
             if verif != rest {
                 // last value must be a clean power of 2
                 return ERROR(ZSTD_error_corruption_detected);
@@ -1382,15 +1426,17 @@ unsafe fn BIT_initDStream(bitD: &mut BitDStream, srcBuffer: *const u8, srcSize: 
 
     if srcSize >= SIZE_BYTES {
         // normal case
-        bitD.ptr = srcBuffer.wrapping_add(srcSize - SIZE_BYTES);
+        bitD.ptr = srcBuffer.wrapping_add(srcSize.wrapping_sub(SIZE_BYTES));
         bitD.bitContainer = bitD.read_st();
         {
             // SAFETY: class C (construction). `srcSize >= 1`, so
             // `srcBuffer[srcSize - 1]` is the caller's last byte.
-            let lastByte = unsafe { *srcBuffer.add(srcSize - 1) };
-            // ensures bitsConsumed is always set
+            let lastByte = unsafe { *srcBuffer.add(srcSize.wrapping_sub(1)) };
+            // ensures bitsConsumed is always set. `highbit32` of a nonzero
+            // byte is 0..=7, so this never underflows; unsigned in the C,
+            // so wrapping_* is faithful regardless, 2026-09-06.
             bitD.bitsConsumed = if lastByte != 0 {
-                8 - ZSTD_highbit32(lastByte as u32)
+                8u32.wrapping_sub(ZSTD_highbit32(lastByte as u32))
             } else {
                 0
             };
@@ -1437,9 +1483,11 @@ unsafe fn BIT_initDStream(bitD: &mut BitDStream, srcBuffer: *const u8, srcSize: 
                     .wrapping_add((*srcBuffer.add(1) as usize) << 8);
             }
             {
-                let lastByte = *srcBuffer.add(srcSize - 1);
+                // `srcSize >= 1` as above; unsigned, wrapping_* is faithful
+                // regardless, 2026-09-06.
+                let lastByte = *srcBuffer.add(srcSize.wrapping_sub(1));
                 bitD.bitsConsumed = if lastByte != 0 {
-                    8 - ZSTD_highbit32(lastByte as u32)
+                    8u32.wrapping_sub(ZSTD_highbit32(lastByte as u32))
                 } else {
                     0
                 };
@@ -1452,7 +1500,12 @@ unsafe fn BIT_initDStream(bitD: &mut BitDStream, srcBuffer: *const u8, srcSize: 
                 }
             }
         }
-        bitD.bitsConsumed += ((SIZE_BYTES - srcSize) * 8) as u32;
+        // `srcSize < SIZE_BYTES` is this whole `else` branch's own guard, so
+        // the subtraction cannot underflow; unsigned throughout in the C,
+        // so wrapping_* is faithful regardless, 2026-09-06.
+        bitD.bitsConsumed = bitD
+            .bitsConsumed
+            .wrapping_add((SIZE_BYTES.wrapping_sub(srcSize).wrapping_mul(8)) as u32);
     }
 
     srcSize
@@ -1494,7 +1547,11 @@ fn BIT_lookBitsFast(bitD: &BitDStream, nbBits: u32) -> usize {
     let regMask: u32 = SIZE_BITS - 1;
     bitD.bitContainer
         .wrapping_shl(bitD.bitsConsumed & regMask)
-        .wrapping_shr(((regMask + 1) - nbBits) & regMask)
+        // `nbBits <= SIZE_BITS == regMask + 1` at every call (bounded by a
+        // table this file built with `tableLog <= FSE_MAX_TABLELOG`); the
+        // C's arithmetic is unsigned throughout, so wrapping_* is faithful
+        // regardless, 2026-09-06.
+        .wrapping_shr((regMask.wrapping_add(1).wrapping_sub(nbBits)) & regMask)
 }
 
 /// `bitstream.h:338` — `BIT_skipBits()`.
@@ -1558,12 +1615,15 @@ fn BIT_reloadDStream(bitD: &mut BitDStream) -> BIT_DStream_status {
         let mut nbBytes: u32 = bitD.bitsConsumed >> 3;
         let mut result = BIT_DStream_status::unfinished;
         if bitD.ptr.wrapping_sub(nbBytes as usize) < bitD.start {
-            // ptr > start
-            nbBytes = (bitD.ptr as usize - bitD.start as usize) as u32;
+            // ptr > start, per this branch's own condition; wrapping_sub on
+            // the pointer-derived usizes is faithful to the C's pointer
+            // subtraction regardless, 2026-09-06.
+            nbBytes = ((bitD.ptr as usize).wrapping_sub(bitD.start as usize)) as u32;
             result = BIT_DStream_status::endOfBuffer;
         }
         bitD.ptr = bitD.ptr.wrapping_sub(nbBytes as usize);
-        bitD.bitsConsumed -= nbBytes * 8;
+        // Unsigned in the C; wrapping_* is faithful regardless, 2026-09-06.
+        bitD.bitsConsumed = bitD.bitsConsumed.wrapping_sub(nbBytes.wrapping_mul(8));
         // reminder : srcSize > sizeof(bitContainer), otherwise ptr == start
         bitD.bitContainer = bitD.read_st();
         result
@@ -1603,7 +1663,12 @@ fn FSE_decodeSymbol(DStatePtr: &mut FSE_DState_t<'_>, bitD: &mut BitDStream) -> 
     let symbol = DInfo.symbol;
     let lowBits = BIT_readBits(bitD, nbBits);
 
-    DStatePtr.state = DInfo.newState as usize + lowBits;
+    // Bounds-checked by the slice index on the next decode; the
+    // table-construction invariant above already bounds it in the
+    // well-formed case (`newState + (1 << nbBits) <= tableSize`).
+    // Unsigned in the C; wrapping_add is faithful regardless,
+    // 2026-09-06.
+    DStatePtr.state = (DInfo.newState as usize).wrapping_add(lowBits);
     symbol
 }
 
@@ -1616,7 +1681,12 @@ fn FSE_decodeSymbolFast(DStatePtr: &mut FSE_DState_t<'_>, bitD: &mut BitDStream)
     let symbol = DInfo.symbol;
     let lowBits = BIT_readBitsFast(bitD, nbBits);
 
-    DStatePtr.state = DInfo.newState as usize + lowBits;
+    // Bounds-checked by the slice index on the next decode; the
+    // table-construction invariant above already bounds it in the
+    // well-formed case (`newState + (1 << nbBits) <= tableSize`).
+    // Unsigned in the C; wrapping_add is faithful regardless,
+    // 2026-09-06.
+    DStatePtr.state = (DInfo.newState as usize).wrapping_add(lowBits);
     symbol
 }
 
@@ -1633,7 +1703,12 @@ fn FSE_decodeSymbolFast(DStatePtr: &mut FSE_DState_t<'_>, bitD: &mut BitDStream)
 /// `spread` must point at `spread_capacity` writable bytes.
 #[inline(always)]
 unsafe fn spread_write64(spread: *mut u8, spread_capacity: usize, pos: usize, sv: u64) {
-    assert!(pos + 8 <= spread_capacity);
+    // Unlike `header_read_le32`'s assert (signed offsets, C UB on
+    // overflow), `pos`/`spread_capacity` are `usize` matching the C's
+    // unsigned `size_t` here, so wrapping_add is faithful to the C's
+    // defined arithmetic regardless of whether `pos` is ever actually
+    // large enough to matter, 2026-09-06.
+    assert!(pos.wrapping_add(8) <= spread_capacity);
     // SAFETY: class C (construction). THIS WRITE IS DELIBERATELY PAST THE END
     // OF THE USED PART OF `spread`, and the C says so: "We use a uint64_t to
     // lay down 8 bytes at a time... We ensure we have 8 bytes at the end of
@@ -1676,7 +1751,14 @@ unsafe fn FSE_buildDTable_internal(
     // SAFETY: class C (construction). `2 * maxSV1` bytes into the workspace;
     // the size check below rejects a workspace too small for that plus
     // `tableSize + 8`. No dereference here.
-    let spread = unsafe { (symbolNext as *mut u8).add(2 * (maxSymbolValue as usize + 1)) };
+    // `maxSymbolValue` is `c_uint`, so widening to `usize` (64-bit on every
+    // target this builds for) before doubling can never overflow --
+    // structurally safe regardless of `maxSymbolValue`'s value, not merely
+    // on the checked path. wrapping_* is faithful to the C's unsigned
+    // arithmetic regardless, 2026-09-06.
+    let spread = unsafe {
+        (symbolNext as *mut u8).add(2usize.wrapping_mul((maxSymbolValue as usize).wrapping_add(1)))
+    };
 
     let maxSV1: u32 = maxSymbolValue.wrapping_add(1);
     // `wrapping_shl`: `tableLog` is unchecked until three lines down, and the
@@ -1698,7 +1780,11 @@ unsafe fn FSE_buildDTable_internal(
     // Everything below is now bounded: tableLog <= 12, maxSymbolValue <= 255,
     // and the workspace holds at least 2 * maxSV1 + tableSize + 8 bytes.
     let table_size = tableSize as usize;
-    let spread_capacity = wkspSize - 2 * (maxSymbolValue as usize + 1);
+    // The size check above guarantees `wkspSize >= 2 * maxSV1 + tableSize +
+    // 8`, so this cannot underflow; unsigned in the C, so wrapping_* is
+    // faithful regardless, 2026-09-06.
+    let spread_capacity =
+        wkspSize.wrapping_sub(2usize.wrapping_mul(maxSymbolValue as usize + 1));
 
     // Init, lay down lowprob symbols
     {
@@ -1773,11 +1859,17 @@ unsafe fn FSE_buildDTable_internal(
                 while i < n {
                     // SAFETY: class C (construction). `i < n` and
                     // `pos + n <= tableSize`, so `pos + i < tableSize` and the
-                    // 8 bytes land inside `tableSize + 8`.
-                    unsafe { spread_write64(spread, spread_capacity, pos + i as usize, sv) };
+                    // 8 bytes land inside `tableSize + 8`. Unsigned in the C
+                    // (`pos` is `size_t`); wrapping_add is faithful
+                    // regardless, 2026-09-06.
+                    unsafe {
+                        spread_write64(spread, spread_capacity, pos.wrapping_add(i as usize), sv)
+                    };
                     i += 8;
                 }
-                pos += n as usize;
+                // Unsigned in the C; wrapping_add is faithful regardless,
+                // 2026-09-06.
+                pos = pos.wrapping_add(n as usize);
                 sv = sv.wrapping_add(ADD);
             }
         }
@@ -1793,7 +1885,11 @@ unsafe fn FSE_buildDTable_internal(
             let mut s: usize = 0;
             while s < table_size {
                 for u in 0..UNROLL {
-                    let uPosition = (position + (u * step)) & tableMask;
+                    // `position`/`step`/`tableMask` are all bounded by
+                    // `table_size <= 1 << FSE_MAX_TABLELOG == 4096`;
+                    // unsigned in the C, so wrapping_* is faithful
+                    // regardless, 2026-09-06.
+                    let uPosition = (position.wrapping_add(u.wrapping_mul(step))) & tableMask;
                     // SAFETY: class C (construction). `uPosition <= tableMask`
                     // by the mask, so it indexes `tableDecode`'s `tableSize`
                     // entries. `spread[s + u]` is inside the `tableSize` bytes
@@ -1808,17 +1904,22 @@ unsafe fn FSE_buildDTable_internal(
                     // kernel reaches it: `FSE_readNCount()` yields
                     // `tableLog >= FSE_MIN_TABLELOG`.
                     unsafe {
-                        assert!(s + u < spread_capacity);
-                        (*tableDecode.add(uPosition)).symbol = *spread.add(s + u);
+                        let su = s.wrapping_add(u);
+                        assert!(su < spread_capacity);
+                        (*tableDecode.add(uPosition)).symbol = *spread.add(su);
                     }
                 }
-                position = (position + (UNROLL * step)) & tableMask;
+                position = (position.wrapping_add(UNROLL.wrapping_mul(step))) & tableMask;
                 s += UNROLL;
             }
             // assert(position == 0)
         }
     } else {
-        let tableMask: u32 = tableSize - 1;
+        // `tableSize >= 1` (it is `1 << tableLog`); `tableSize`/`step` are
+        // bounded by `FSE_MAX_TABLELOG == 12`, so none of this overflows
+        // u32. Unsigned in the C, so wrapping_* is faithful regardless,
+        // 2026-09-06.
+        let tableMask: u32 = tableSize.wrapping_sub(1);
         let step: u32 = FSE_TABLESTEP(table_size) as u32;
         let mut position: u32 = 0;
         for s in 0..maxSV1 {
@@ -1832,10 +1933,10 @@ unsafe fn FSE_buildDTable_internal(
                     assert!((position as usize) < table_size);
                     (*tableDecode.add(position as usize)).symbol = s as u8;
                 }
-                position = (position + step) & tableMask;
+                position = (position.wrapping_add(step)) & tableMask;
                 while position > highThreshold {
                     // lowprob area
-                    position = (position + step) & tableMask;
+                    position = (position.wrapping_add(step)) & tableMask;
                 }
                 i += 1;
             }
@@ -2033,8 +2134,14 @@ unsafe fn FSE_decompress_usingDTable_generic<const FAST: bool>(
     // The C's loop condition uses `&` rather than `&&`. It makes no
     // difference: `BIT_reloadDStream()` is the left operand and is evaluated
     // either way, and `op < olimit` has no side effects.
+    // `op`/`omax` are unsigned (`size_t` in the C) and `op` is checked
+    // against `omax` before every use below, so none of the `op + N`/
+    // `op += N` bookkeeping in this loop can actually go wrong; wrapping_*
+    // is faithful to the C's unsigned arithmetic regardless, 2026-09-06.
     loop {
-        if !(BIT_reloadDStream(&mut bitD) == BIT_DStream_status::unfinished && op + 3 < omax) {
+        if !(BIT_reloadDStream(&mut bitD) == BIT_DStream_status::unfinished
+            && op.wrapping_add(3) < omax)
+        {
             break;
         }
         // SAFETY: class C (construction). `op + 3 < omax` was just checked, so
@@ -2046,57 +2153,78 @@ unsafe fn FSE_decompress_usingDTable_generic<const FAST: bool>(
         }
 
         // SAFETY: class C (construction). As above.
-        unsafe { store_symbol(ostart, omax, op + 1, get_symbol::<FAST>(&mut state2, &mut bitD)) };
+        unsafe {
+            store_symbol(
+                ostart,
+                omax,
+                op.wrapping_add(1),
+                get_symbol::<FAST>(&mut state2, &mut bitD),
+            )
+        };
 
         if RELOAD_4 {
             if BIT_reloadDStream(&mut bitD) > BIT_DStream_status::unfinished {
-                op += 2;
+                op = op.wrapping_add(2);
                 break;
             }
         }
 
         // SAFETY: class C (construction). As above.
-        unsafe { store_symbol(ostart, omax, op + 2, get_symbol::<FAST>(&mut state1, &mut bitD)) };
+        unsafe {
+            store_symbol(
+                ostart,
+                omax,
+                op.wrapping_add(2),
+                get_symbol::<FAST>(&mut state1, &mut bitD),
+            )
+        };
 
         if RELOAD_2 {
             BIT_reloadDStream(&mut bitD);
         }
 
         // SAFETY: class C (construction). As above.
-        unsafe { store_symbol(ostart, omax, op + 3, get_symbol::<FAST>(&mut state2, &mut bitD)) };
+        unsafe {
+            store_symbol(
+                ostart,
+                omax,
+                op.wrapping_add(3),
+                get_symbol::<FAST>(&mut state2, &mut bitD),
+            )
+        };
 
-        op += 4;
+        op = op.wrapping_add(4);
     }
 
     // tail
     // note : BIT_reloadDStream(&bitD) >= FSE_DStream_partiallyFilled;
     // Ends at exactly BIT_DStream_completed
     loop {
-        if op + 2 > omax {
+        if op.wrapping_add(2) > omax {
             return ERROR(ZSTD_error_dstSize_tooSmall);
         }
         // SAFETY: class C (construction). `op + 2 <= omax` was just checked,
         // so `op < omax`.
         unsafe { store_symbol(ostart, omax, op, get_symbol::<FAST>(&mut state1, &mut bitD)) };
-        op += 1;
+        op = op.wrapping_add(1);
         if BIT_reloadDStream(&mut bitD) == BIT_DStream_status::overflow {
             // SAFETY: class C (construction). `op` was `<= omax - 2` before
             // the increment, so it is `<= omax - 1` now.
             unsafe { store_symbol(ostart, omax, op, get_symbol::<FAST>(&mut state2, &mut bitD)) };
-            op += 1;
+            op = op.wrapping_add(1);
             break;
         }
 
-        if op + 2 > omax {
+        if op.wrapping_add(2) > omax {
             return ERROR(ZSTD_error_dstSize_tooSmall);
         }
         // SAFETY: class C (construction). As above.
         unsafe { store_symbol(ostart, omax, op, get_symbol::<FAST>(&mut state2, &mut bitD)) };
-        op += 1;
+        op = op.wrapping_add(1);
         if BIT_reloadDStream(&mut bitD) == BIT_DStream_status::overflow {
             // SAFETY: class C (construction). As above.
             unsafe { store_symbol(ostart, omax, op, get_symbol::<FAST>(&mut state1, &mut bitD)) };
-            op += 1;
+            op = op.wrapping_add(1);
             break;
         }
     }
@@ -2186,7 +2314,9 @@ unsafe fn FSE_decompress_wksp_body(
         // `hbSize`, which is `cSrcSize` here, so `ip` stays inside the
         // caller's buffer.
         ip = unsafe { ip.add(NCountLength) };
-        cSrcSize -= NCountLength;
+        // `NCountLength <= cSrcSize` per the comment above; unsigned in the
+        // C, so wrapping_sub is faithful regardless, 2026-09-06.
+        cSrcSize = cSrcSize.wrapping_sub(NCountLength);
     }
 
     if FSE_DECOMPRESS_WKSP_SIZE(tableLog, maxSymbolValue) > wkspSize {
@@ -2198,10 +2328,13 @@ unsafe fn FSE_decompress_wksp_body(
     // `FSE_DTABLE_SIZE(tableLog) + 4 + BUILD_DTABLE_WKSP + 512 + 4`, so the
     // advance is strictly inside the workspace and the subtraction below
     // cannot underflow.
-    workSpace = unsafe {
-        (workSpace as *mut u8).add(SIZEOF_FSE_DECOMPRESS_WKSP + FSE_DTABLE_SIZE(tableLog))
-    } as *mut c_void;
-    wkspSize -= SIZEOF_FSE_DECOMPRESS_WKSP + FSE_DTABLE_SIZE(tableLog);
+    // The check above gives `wkspSize >= FSE_DECOMPRESS_WKSP_SIZE(...)`,
+    // whose expansion contains this exact sum as a term, so neither the
+    // addition nor the subtraction below can go wrong; unsigned in the C,
+    // so wrapping_* is faithful regardless, 2026-09-06.
+    let advance = SIZEOF_FSE_DECOMPRESS_WKSP.wrapping_add(FSE_DTABLE_SIZE(tableLog));
+    workSpace = unsafe { (workSpace as *mut u8).add(advance) } as *mut c_void;
+    wkspSize = wkspSize.wrapping_sub(advance);
 
     // CHECK_F(FSE_buildDTable_internal(...))
     // SAFETY: class C (construction). `dtable` has `FSE_DTABLE_SIZE(tableLog)`

@@ -228,9 +228,15 @@ kernel::kabi_export! {
 /// for `inlen` bytes.
 #[no_mangle]
 pub unsafe extern "C" fn blake2s_update(state: *mut Blake2sState, in_: *const u8, inlen: usize) {
-    // SAFETY: the caller guarantees a valid state.
-    let st = unsafe { &mut *state };
-    let fill = BLOCK_SIZE - st.buflen as usize;
+    // No named `&mut *state` reborrow here: `blake2s_compress_dispatch`
+    // takes the raw `state` and (being a foreign, externally-defined
+    // function) may access it in a way that a live Rust reference across
+    // the call cannot safely assume survives -- same shape as the
+    // zstd_decompress_block_rs.rs fix (found by the same sweep,
+    // 2026-09-06). Every field access below goes through a fresh
+    // `(*state).field` instead.
+    // SAFETY: the caller guarantees a valid state, for every access below.
+    let fill = BLOCK_SIZE - unsafe { (*state).buflen } as usize;
     let mut in_ = in_;
     let mut inlen = inlen;
 
@@ -242,9 +248,10 @@ pub unsafe extern "C" fn blake2s_update(state: *mut Blake2sState, in_: *const u8
         // SAFETY: `fill <= 64 - buflen`, so the copy fits in `buf`, and the
         // caller guarantees `inlen > fill` readable bytes.
         unsafe {
-            core::ptr::copy_nonoverlapping(in_, st.buf.as_mut_ptr().add(st.buflen as usize), fill);
-            blake2s_compress_dispatch(state, st.buf.as_ptr(), 1, BLOCK_SIZE as u32);
-            st.buflen = 0;
+            let buflen = (*state).buflen as usize;
+            core::ptr::copy_nonoverlapping(in_, (*state).buf.as_mut_ptr().add(buflen), fill);
+            blake2s_compress_dispatch(state, (*state).buf.as_ptr(), 1, BLOCK_SIZE as u32);
+            (*state).buflen = 0;
             in_ = in_.add(fill);
         }
         inlen -= fill;
@@ -263,9 +270,10 @@ pub unsafe extern "C" fn blake2s_update(state: *mut Blake2sState, in_: *const u8
 
     // SAFETY: `inlen <= 64 - buflen` here, so the copy fits.
     unsafe {
-        core::ptr::copy_nonoverlapping(in_, st.buf.as_mut_ptr().add(st.buflen as usize), inlen);
+        let buflen = (*state).buflen as usize;
+        core::ptr::copy_nonoverlapping(in_, (*state).buf.as_mut_ptr().add(buflen), inlen);
+        (*state).buflen += inlen as c_uint;
     }
-    st.buflen += inlen as c_uint;
 }
 
 kernel::kabi_export! {
@@ -287,27 +295,39 @@ pub unsafe extern "C" fn blake2s_final(state: *mut Blake2sState, out: *mut u8) {
         kernel::warn_on!(true);
     }
 
-    // SAFETY: the caller guarantees a valid state.
-    let st = unsafe { &mut *state };
+    // No named `&mut *state` reborrow held across `blake2s_compress_dispatch`
+    // -- same reasoning as `blake2s_update`'s fix above, found by the same
+    // sweep (2026-09-06). Every field access goes through a fresh
+    // `(*state).field` instead.
+    // SAFETY: the caller guarantees a valid state, for every access below.
+    unsafe {
+        // blake2s_set_lastblock().
+        (*state).f[0] = u32::MAX;
 
-    // blake2s_set_lastblock().
-    st.f[0] = u32::MAX;
-
-    let buflen = st.buflen as usize;
-    // Padding.
-    st.buf[buflen..].fill(0);
+        let buflen = (*state).buflen as usize;
+        // Padding. Not `(*state).buf[buflen..].fill(0)`: that indexing
+        // expression implicitly autorefs a `&mut` out of the raw
+        // dereference, exactly what this function no longer does anywhere
+        // else (`dangerous_implicit_autorefs` catches it at deny-level).
+        core::ptr::write_bytes((*state).buf.as_mut_ptr().add(buflen), 0, BLOCK_SIZE - buflen);
+    }
 
     // SAFETY: `state` is valid and `buf` is 64 bytes. `inc` is the number of
     // bytes actually present, NOT the block size -- the counter must end at
     // the true message length.
-    unsafe { blake2s_compress_dispatch(state, st.buf.as_ptr(), 1, buflen as u32) };
+    unsafe {
+        let buflen = (*state).buflen as usize;
+        blake2s_compress_dispatch(state, (*state).buf.as_ptr(), 1, buflen as u32);
+    };
 
     // cpu_to_le32_array(state->h, 8), then memcpy(out, state->h, outlen).
     let mut le = [0u8; 32];
-    for (i, w) in st.h.iter().enumerate() {
+    // SAFETY: `state` is valid.
+    for (i, w) in unsafe { (*state).h }.iter().enumerate() {
         le[i * 4..i * 4 + 4].copy_from_slice(&w.to_le_bytes());
     }
-    let outlen = st.outlen as usize;
+    // SAFETY: `state` is valid.
+    let outlen = unsafe { (*state).outlen } as usize;
     // SAFETY: the caller guarantees `outlen` writable bytes, and `outlen` is
     // at most BLAKE2S_HASH_SIZE (32) by construction of __blake2s_init().
     unsafe { core::ptr::copy_nonoverlapping(le.as_ptr(), out, outlen) };

@@ -542,9 +542,11 @@ fn BIT_lookBits(bitD: &BitDStream, nbBits: u32) -> usize {
 #[inline(always)]
 fn BIT_lookBitsFast(bitD: &BitDStream, nbBits: u32) -> usize {
     let regMask: u32 = SIZE_BITS - 1;
+    // `nbBits <= SIZE_BITS == regMask + 1` at every call; unsigned in the
+    // C, so wrapping_* is faithful regardless, 2026-09-06.
     bitD.bitContainer
         .wrapping_shl(bitD.bitsConsumed & regMask)
-        .wrapping_shr(((regMask + 1) - nbBits) & regMask)
+        .wrapping_shr((regMask.wrapping_add(1).wrapping_sub(nbBits)) & regMask)
 }
 
 /// `bitstream.h:338` — `BIT_skipBits()`.
@@ -629,12 +631,15 @@ fn BIT_reloadDStream(bitD: &mut BitDStream) -> BIT_DStream_status {
         let mut nbBytes: u32 = bitD.bitsConsumed >> 3;
         let mut result = BIT_DStream_status::unfinished;
         if bitD.ptr.wrapping_sub(nbBytes as usize) < bitD.start {
-            // ptr > start
-            nbBytes = (bitD.ptr as usize - bitD.start as usize) as u32;
+            // ptr > start, per this branch's own condition; wrapping_sub is
+            // faithful to the C's pointer subtraction regardless,
+            // 2026-09-06.
+            nbBytes = ((bitD.ptr as usize).wrapping_sub(bitD.start as usize)) as u32;
             result = BIT_DStream_status::endOfBuffer;
         }
         bitD.ptr = bitD.ptr.wrapping_sub(nbBytes as usize);
-        bitD.bitsConsumed -= nbBytes * 8;
+        // Unsigned in the C; wrapping_* is faithful regardless, 2026-09-06.
+        bitD.bitsConsumed = bitD.bitsConsumed.wrapping_sub(nbBytes.wrapping_mul(8));
         // reminder : srcSize > sizeof(bitContainer), otherwise ptr == start
         bitD.bitContainer = bitD.read_st();
         result
@@ -775,9 +780,10 @@ unsafe fn out_write1(p: *mut u8, oend: *const u8, b: u8) {
 /// `p` and `oend` must be derived from the same output allocation.
 #[inline(always)]
 unsafe fn out_write2(p: *mut u8, oend: *const u8, v: u16) {
-    // `p < oend` first, so that `oend - p` below is a real positive
-    // difference and cannot be a wrapped huge value.
-    assert!((p as *const u8) < oend && (oend as usize) - (p as usize) >= 2);
+    // `p < oend` first (short-circuit `&&`), so that `oend - p` below is a
+    // real positive difference; unsigned, so wrapping_sub is faithful to
+    // the C's pointer-difference arithmetic regardless, 2026-09-06.
+    assert!((p as *const u8) < oend && (oend as usize).wrapping_sub(p as usize) >= 2);
     // SAFETY: class C (construction). `p + 2 <= oend` was just checked.
     unsafe { MEM_write16(p, v) }
 }
@@ -999,10 +1005,13 @@ unsafe fn HUF_DecompressFastArgs_init(
     args.ip[3] = istart.wrapping_add(srcSize).wrapping_sub(8);
 
     // op[] contains the output pointers.
+    // `dstSize` is a real allocation size, nowhere near `usize::MAX - 3` on
+    // any target this builds for; unsigned in the C, so wrapping_add is
+    // faithful regardless, 2026-09-06.
     args.op[0] = dst as *mut u8;
-    args.op[1] = args.op[0].wrapping_add((dstSize + 3) / 4);
-    args.op[2] = args.op[1].wrapping_add((dstSize + 3) / 4);
-    args.op[3] = args.op[2].wrapping_add((dstSize + 3) / 4);
+    args.op[1] = args.op[0].wrapping_add((dstSize.wrapping_add(3)) / 4);
+    args.op[2] = args.op[1].wrapping_add((dstSize.wrapping_add(3)) / 4);
+    args.op[3] = args.op[2].wrapping_add((dstSize.wrapping_add(3)) / 4);
 
     // No point to call the ASM loop for tiny outputs.
     if (args.op[3] as *const u8) >= (oend as *const u8) {
@@ -1345,7 +1354,9 @@ pub unsafe extern "C" fn HUF_readDTableX1_wksp(
         let nLimit: isize = nbSymbols as isize - unroll as isize + 1;
         for n in 0..(tableLog as usize + 1) {
             let curr = nextRankStart;
-            nextRankStart += wksp.rankVal[n];
+            // `rankVal[]` sums to `nbSymbols <= 256`; unsigned, so
+            // wrapping_add is faithful regardless, 2026-09-06.
+            nextRankStart = nextRankStart.wrapping_add(wksp.rankVal[n]);
             wksp.rankStart[n] = curr;
         }
         let mut n: isize = 0;
@@ -1354,7 +1365,9 @@ pub unsafe extern "C" fn HUF_readDTableX1_wksp(
                 let idx = (n as usize) + u;
                 let w = wksp.huffWeight[idx] as usize;
                 wksp.symbols[wksp.rankStart[w] as usize] = idx as u8;
-                wksp.rankStart[w] += 1;
+                // Unsigned, bounded by nbSymbols <= 256; wrapping_add is
+                // faithful regardless, 2026-09-06.
+                wksp.rankStart[w] = wksp.rankStart[w].wrapping_add(1);
             }
             n += unroll as isize;
         }
@@ -1362,7 +1375,7 @@ pub unsafe extern "C" fn HUF_readDTableX1_wksp(
             let idx = n as usize;
             let w = wksp.huffWeight[idx] as usize;
             wksp.symbols[wksp.rankStart[w] as usize] = idx as u8;
-            wksp.rankStart[w] += 1;
+            wksp.rankStart[w] = wksp.rankStart[w].wrapping_add(1);
             n += 1;
         }
     }
@@ -1379,7 +1392,9 @@ pub unsafe extern "C" fn HUF_readDTableX1_wksp(
             let symbolCount: usize = wksp.rankVal[w as usize] as usize;
             let length: usize = (1usize << w) >> 1;
             let mut uStart: usize = rankStart;
-            let nbBits: u8 = (tableLog + 1 - w) as u8;
+            // `w` runs `1..=tableLog`, so this is always in `1..=tableLog`;
+            // unsigned, so wrapping_* is faithful regardless, 2026-09-06.
+            let nbBits: u8 = (tableLog.wrapping_add(1).wrapping_sub(w)) as u8;
             match length {
                 1 => {
                     for s in 0..symbolCount {
@@ -1387,6 +1402,9 @@ pub unsafe extern "C" fn HUF_readDTableX1_wksp(
                             nbBits,
                             byte: wksp.symbols[symbol + s],
                         };
+                        // `symbol + s < 256` -- `symbol`/`s` are both
+                        // bounded by the 256-symbol alphabet -- and
+                        // unsigned, so wrapping_* is faithful regardless.
                         // SAFETY: class C (construction). `uStart` walks the
                         // table in weight order and the weights sum to
                         // `1 << tableLog == dtCap` -- `HUF_readStats_wksp()`
@@ -1394,7 +1412,7 @@ pub unsafe extern "C" fn HUF_readDTableX1_wksp(
                         // two and `HUF_rescaleStats()` scaled it to
                         // `1 << tableLog`. `dtx1_set` asserts it.
                         unsafe { dtx1_set(dt, dtCap, uStart, D) };
-                        uStart += 1;
+                        uStart = uStart.wrapping_add(1);
                     }
                 }
                 2 => {
@@ -1406,9 +1424,9 @@ pub unsafe extern "C" fn HUF_readDTableX1_wksp(
                         // SAFETY: class C (construction). As `case 1`.
                         unsafe {
                             dtx1_set(dt, dtCap, uStart, D);
-                            dtx1_set(dt, dtCap, uStart + 1, D);
+                            dtx1_set(dt, dtCap, uStart.wrapping_add(1), D);
                         }
-                        uStart += 2;
+                        uStart = uStart.wrapping_add(2);
                     }
                 }
                 4 => {
@@ -1417,7 +1435,7 @@ pub unsafe extern "C" fn HUF_readDTableX1_wksp(
                         // SAFETY: class C (construction). As `case 1`; four
                         // entries at a time.
                         unsafe { dtx1_set4(dt, dtCap, uStart, D4) };
-                        uStart += 4;
+                        uStart = uStart.wrapping_add(4);
                     }
                 }
                 8 => {
@@ -1426,9 +1444,9 @@ pub unsafe extern "C" fn HUF_readDTableX1_wksp(
                         // SAFETY: class C (construction). As `case 1`.
                         unsafe {
                             dtx1_set4(dt, dtCap, uStart, D4);
-                            dtx1_set4(dt, dtCap, uStart + 4, D4);
+                            dtx1_set4(dt, dtCap, uStart.wrapping_add(4), D4);
                         }
-                        uStart += 8;
+                        uStart = uStart.wrapping_add(8);
                     }
                 }
                 _ => {
@@ -1441,19 +1459,23 @@ pub unsafe extern "C" fn HUF_readDTableX1_wksp(
                             // the step of 16 divides it exactly -- which is the
                             // C's `assert(u == length)` after the loop.
                             unsafe {
-                                dtx1_set4(dt, dtCap, uStart + u, D4);
-                                dtx1_set4(dt, dtCap, uStart + u + 4, D4);
-                                dtx1_set4(dt, dtCap, uStart + u + 8, D4);
-                                dtx1_set4(dt, dtCap, uStart + u + 12, D4);
+                                dtx1_set4(dt, dtCap, uStart.wrapping_add(u), D4);
+                                dtx1_set4(dt, dtCap, uStart.wrapping_add(u).wrapping_add(4), D4);
+                                dtx1_set4(dt, dtCap, uStart.wrapping_add(u).wrapping_add(8), D4);
+                                dtx1_set4(dt, dtCap, uStart.wrapping_add(u).wrapping_add(12), D4);
                             }
-                            u += 16;
+                            u = u.wrapping_add(16);
                         }
-                        uStart += length;
+                        uStart = uStart.wrapping_add(length);
                     }
                 }
             }
-            symbol += symbolCount;
-            rankStart += symbolCount * length;
+            // `symbol`/`rankStart` accumulate up to `dtCap == 1 <<
+            // tableLog <= 4096` by construction (the weights sum to
+            // exactly the table size); unsigned in the C, so wrapping_* is
+            // faithful regardless, 2026-09-06.
+            symbol = symbol.wrapping_add(symbolCount);
+            rankStart = rankStart.wrapping_add(symbolCount.wrapping_mul(length));
         }
     }
     iSize
@@ -1663,7 +1685,10 @@ unsafe fn HUF_decompress4X1_usingDTable_internal_body(
         let istart2 = istart1.wrapping_add(length1);
         let istart3 = istart2.wrapping_add(length2);
         let istart4 = istart3.wrapping_add(length3);
-        let segmentSize = (dstSize + 3) / 4;
+        // `dstSize` is a real allocation size, nowhere near `usize::MAX - 3`;
+        // unsigned in the C, so wrapping_add is faithful regardless,
+        // 2026-09-06.
+        let segmentSize = (dstSize.wrapping_add(3)) / 4;
         let opStart2 = ostart.wrapping_add(segmentSize);
         let opStart3 = opStart2.wrapping_add(segmentSize);
         let opStart4 = opStart3.wrapping_add(segmentSize);
@@ -2034,7 +2059,10 @@ unsafe fn HUF_decompress4X1_usingDTable_internal_fast_body(
 
     // finish bit streams one by one.
     {
-        let segmentSize = (dstSize + 3) / 4;
+        // `dstSize` is a real allocation size, nowhere near `usize::MAX - 3`;
+        // unsigned in the C, so wrapping_add is faithful regardless,
+        // 2026-09-06.
+        let segmentSize = (dstSize.wrapping_add(3)) / 4;
         let mut segmentEnd = dst as *mut u8;
         for i in 0..4usize {
             let mut bit = BitDStream {
@@ -2501,16 +2529,18 @@ unsafe fn HUF_fillDTableX2ForWeight(
     // makes the shift total for the same reason.
     let length: usize = 1usize.wrapping_shl(tableLog.wrapping_sub(nbBits) & 0x1F);
     // assert(level >= 1 && level <= 2)
+    //
+    // `rank` walks the rank the caller reserved (the reservation is
+    // `rankVal[w]` plus the running `length`, tiling `1 << targetLog`
+    // entries exactly, which `dtx2_set`/`dtx2_set2` assert); unsigned in
+    // the C, so wrapping_* is faithful regardless, 2026-09-06.
     match length {
         1 => {
             for p in begin..end {
                 let DElt = HUF_buildDEltX2(sorted[p] as u32, nbBits, baseSeq as u32, level);
-                // SAFETY: class C (construction). `rank` walks the rank the
-                // caller reserved; the reservation is `rankVal[w]` plus the
-                // running `length`, and the ranks tile `1 << targetLog`
-                // entries exactly. `dtx2_set` asserts it.
+                // SAFETY: class C (construction). As the comment above.
                 unsafe { dtx2_set(dt, cap, rank, DElt) };
-                rank += 1;
+                rank = rank.wrapping_add(1);
             }
         }
         2 => {
@@ -2519,9 +2549,9 @@ unsafe fn HUF_fillDTableX2ForWeight(
                 // SAFETY: class C (construction). As `case 1`.
                 unsafe {
                     dtx2_set(dt, cap, rank, DElt);
-                    dtx2_set(dt, cap, rank + 1, DElt);
+                    dtx2_set(dt, cap, rank.wrapping_add(1), DElt);
                 }
-                rank += 2;
+                rank = rank.wrapping_add(2);
             }
         }
         4 => {
@@ -2531,9 +2561,9 @@ unsafe fn HUF_fillDTableX2ForWeight(
                 // a time.
                 unsafe {
                     dtx2_set2(dt, cap, rank, DEltX2);
-                    dtx2_set2(dt, cap, rank + 2, DEltX2);
+                    dtx2_set2(dt, cap, rank.wrapping_add(2), DEltX2);
                 }
-                rank += 4;
+                rank = rank.wrapping_add(4);
             }
         }
         8 => {
@@ -2542,28 +2572,28 @@ unsafe fn HUF_fillDTableX2ForWeight(
                 // SAFETY: class C (construction). As `case 1`.
                 unsafe {
                     dtx2_set2(dt, cap, rank, DEltX2);
-                    dtx2_set2(dt, cap, rank + 2, DEltX2);
-                    dtx2_set2(dt, cap, rank + 4, DEltX2);
-                    dtx2_set2(dt, cap, rank + 6, DEltX2);
+                    dtx2_set2(dt, cap, rank.wrapping_add(2), DEltX2);
+                    dtx2_set2(dt, cap, rank.wrapping_add(4), DEltX2);
+                    dtx2_set2(dt, cap, rank.wrapping_add(6), DEltX2);
                 }
-                rank += 8;
+                rank = rank.wrapping_add(8);
             }
         }
         _ => {
             for p in begin..end {
                 let DEltX2 = HUF_buildDEltX2U64(sorted[p] as u32, nbBits, baseSeq, level);
-                let rankEnd = rank + length;
+                let rankEnd = rank.wrapping_add(length);
                 while rank != rankEnd {
                     // SAFETY: class C (construction). As `case 1`. `length` is
                     // a power of two >= 16 in this arm, so the step of 8
                     // divides it exactly and `rank` lands on `rankEnd`.
                     unsafe {
                         dtx2_set2(dt, cap, rank, DEltX2);
-                        dtx2_set2(dt, cap, rank + 2, DEltX2);
-                        dtx2_set2(dt, cap, rank + 4, DEltX2);
-                        dtx2_set2(dt, cap, rank + 6, DEltX2);
+                        dtx2_set2(dt, cap, rank.wrapping_add(2), DEltX2);
+                        dtx2_set2(dt, cap, rank.wrapping_add(4), DEltX2);
+                        dtx2_set2(dt, cap, rank.wrapping_add(6), DEltX2);
                     }
-                    rank += 8;
+                    rank = rank.wrapping_add(8);
                 }
             }
         }
@@ -2611,10 +2641,11 @@ unsafe fn HUF_fillDTableX2Level2(
             }
             4 => {
                 // assert(skipSize <= 4)
-                // SAFETY: class C (construction). As above.
+                // SAFETY: class C (construction). As above. Unsigned in the
+                // C, so wrapping_add is faithful regardless, 2026-09-06.
                 unsafe {
                     dtx2_set2(dt, cap, base, DEltX2);
-                    dtx2_set2(dt, cap, base + 2, DEltX2);
+                    dtx2_set2(dt, cap, base.wrapping_add(2), DEltX2);
                 }
             }
             _ => {
@@ -2624,14 +2655,15 @@ unsafe fn HUF_fillDTableX2Level2(
                     // length` and `length` is a multiple of 8 in this arm, so
                     // the round-up to `i + 8` stays inside the reservation --
                     // that over-write of up to 7 entries past `skipSize` is
-                    // deliberate in the C and is kept.
+                    // deliberate in the C and is kept. Unsigned in the C, so
+                    // wrapping_* is faithful regardless, 2026-09-06.
                     unsafe {
-                        dtx2_set2(dt, cap, base + i, DEltX2);
-                        dtx2_set2(dt, cap, base + i + 2, DEltX2);
-                        dtx2_set2(dt, cap, base + i + 4, DEltX2);
-                        dtx2_set2(dt, cap, base + i + 6, DEltX2);
+                        dtx2_set2(dt, cap, base.wrapping_add(i), DEltX2);
+                        dtx2_set2(dt, cap, base.wrapping_add(i).wrapping_add(2), DEltX2);
+                        dtx2_set2(dt, cap, base.wrapping_add(i).wrapping_add(4), DEltX2);
+                        dtx2_set2(dt, cap, base.wrapping_add(i).wrapping_add(6), DEltX2);
                     }
-                    i += 8;
+                    i = i.wrapping_add(8);
                 }
             }
         }
@@ -2646,12 +2678,13 @@ unsafe fn HUF_fillDTableX2Level2(
             let nbBits = nbBitsBaseline.wrapping_sub(w as u32);
             let totalBits = nbBits.wrapping_add(consumedBits);
             // SAFETY: class C (construction). Preconditions forwarded; the
-            // rank base is inside the caller's reservation.
+            // rank base is inside the caller's reservation. Unsigned in the
+            // C, so wrapping_add is faithful regardless, 2026-09-06.
             unsafe {
                 HUF_fillDTableX2ForWeight(
                     dt,
                     cap,
-                    base + rankVal[w as usize] as usize,
+                    base.wrapping_add(rankVal[w as usize] as usize),
                     sortedSymbols,
                     begin,
                     end,
@@ -2733,7 +2766,9 @@ unsafe fn HUF_fillDTableX2(
                         sortedList[s] as u16,
                     )
                 };
-                start += length;
+                // Unsigned in the C; wrapping_add is faithful regardless,
+                // 2026-09-06.
+                start = start.wrapping_add(length);
             }
         } else {
             // Only a single symbol.
@@ -2877,23 +2912,28 @@ pub unsafe extern "C" fn HUF_readDTableX2_wksp(
 
     // Get start index of each weight
     {
+        // Unsigned in the C throughout, and `w`/`maxW <= HUF_TABLELOG_MAX`;
+        // wrapping_* is faithful regardless, 2026-09-06.
         let mut nextRankStart: u32 = 0;
         for w in 1..(maxW + 1) {
             let curr = nextRankStart;
-            nextRankStart += wksp.rankStats[w as usize];
-            wksp.rankStart0[w as usize + 1] = curr;
+            nextRankStart = nextRankStart.wrapping_add(wksp.rankStats[w as usize]);
+            wksp.rankStart0[(w as usize).wrapping_add(1)] = curr;
         }
         // put all 0w symbols at the end of sorted list
         wksp.rankStart0[1] = nextRankStart;
-        wksp.rankStart0[maxW as usize + 2] = nextRankStart;
+        wksp.rankStart0[(maxW as usize).wrapping_add(2)] = nextRankStart;
     }
 
     // sort symbols by weight
     {
         for s in 0..nbSymbols as usize {
             let w = wksp.weightList[s] as usize;
-            let r = wksp.rankStart0[w + 1] as usize;
-            wksp.rankStart0[w + 1] += 1;
+            // `w <= HUF_TABLELOG_MAX`, well within bounds; unsigned in the
+            // C, so wrapping_* is faithful regardless, 2026-09-06.
+            let r = wksp.rankStart0[w.wrapping_add(1)] as usize;
+            wksp.rankStart0[w.wrapping_add(1)] =
+                wksp.rankStart0[w.wrapping_add(1)].wrapping_add(1);
             wksp.sortedSymbol[r] = s as u8;
         }
         // forget 0w symbols; this is beginning of weight(1)
@@ -2903,7 +2943,13 @@ pub unsafe extern "C" fn HUF_readDTableX2_wksp(
     // Build rankVal
     {
         {
-            // tableLog <= maxTableLog, so `rescale` is >= -1
+            // tableLog <= maxTableLog, so `rescale` is >= -1. `rescale` and
+            // `w + rescale` are `i32`, matching the C's own signed types,
+            // and both are tiny (bounded by HUF_TABLELOG_MAX on every
+            // operand) -- nothing for wrapping_* to be faithful to since
+            // C's signed overflow is undefined too, and the guard is
+            // provably dead code, same shape as the two sites above,
+            // 2026-09-06.
             let rescale: i32 = (maxTableLog as i32 - tableLog as i32) - 1;
             let mut nextRankVal: u32 = 0;
             for w in 1..(maxW + 1) {
@@ -2915,15 +2961,18 @@ pub unsafe extern "C" fn HUF_readDTableX2_wksp(
             }
         }
         {
-            let minBits: u32 = tableLog + 1 - maxW;
+            // `nbBits == tableLog + 1 - weight` by construction of every
+            // weight assigned above, so `tableLog + 1 >= maxW`; unsigned in
+            // the C, so wrapping_* is faithful regardless, 2026-09-06.
+            let minBits: u32 = (tableLog.wrapping_add(1)).wrapping_sub(maxW);
             let mut consumed: u32 = minBits;
-            while consumed < maxTableLog - minBits + 1 {
+            while consumed < (maxTableLog.wrapping_sub(minBits)).wrapping_add(1) {
                 let rankVal0 = wksp.rankVal[0];
                 let rankValPtr = &mut wksp.rankVal[consumed as usize];
                 for w in 1..(maxW + 1) {
                     rankValPtr[w as usize] = rankVal0[w as usize] >> consumed;
                 }
-                consumed += 1;
+                consumed = consumed.wrapping_add(1);
             }
         }
     }
@@ -2940,7 +2989,9 @@ pub unsafe extern "C" fn HUF_readDTableX2_wksp(
             &wksp.rankStart0,
             &wksp.rankVal,
             maxW,
-            tableLog + 1,
+            // `tableLog <= HUF_TABLELOG_MAX`, tiny; unsigned in the C, so
+            // wrapping_add is faithful regardless, 2026-09-06.
+            tableLog.wrapping_add(1),
         )
     };
 
@@ -3214,7 +3265,10 @@ unsafe fn HUF_decompress4X2_usingDTable_internal_body(
         let istart2 = istart1.wrapping_add(length1);
         let istart3 = istart2.wrapping_add(length2);
         let istart4 = istart3.wrapping_add(length3);
-        let segmentSize = (dstSize + 3) / 4;
+        // `dstSize` is a real allocation size, nowhere near `usize::MAX - 3`;
+        // unsigned in the C, so wrapping_add is faithful regardless,
+        // 2026-09-06.
+        let segmentSize = (dstSize.wrapping_add(3)) / 4;
         let opStart2 = ostart.wrapping_add(segmentSize);
         let opStart3 = opStart2.wrapping_add(segmentSize);
         let opStart4 = opStart3.wrapping_add(segmentSize);
@@ -3578,7 +3632,10 @@ unsafe fn HUF_decompress4X2_usingDTable_internal_fast_body(
 
     // finish bitStreams one by one
     {
-        let segmentSize = (dstSize + 3) / 4;
+        // `dstSize` is a real allocation size, nowhere near `usize::MAX - 3`;
+        // unsigned in the C, so wrapping_add is faithful regardless,
+        // 2026-09-06.
+        let segmentSize = (dstSize.wrapping_add(3)) / 4;
         let mut segmentEnd = dst as *mut u8;
         for i in 0..4usize {
             let mut bit = BitDStream {

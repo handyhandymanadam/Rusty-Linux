@@ -10,7 +10,8 @@ quiet_cmd_perlasm_with_args = PERLASM $@
 
 obj-$(CONFIG_KUNIT)				+= tests/
 
-obj-$(CONFIG_CRYPTO_HASH_INFO)			+= hash_info.o
+# hash_info.o is gone: the Rust defines and exports both tables itself and
+# carries their ABI contracts. See the CONFIG_RUST arms below.
 
 obj-$(CONFIG_CRYPTO_LIB_UTILS)			+= libcryptoutils.o
 # memneq.o is gone: the Rust defines and exports __crypto_memneq itself and
@@ -18,8 +19,17 @@ obj-$(CONFIG_CRYPTO_LIB_UTILS)			+= libcryptoutils.o
 # and logs/c-entry-rule.md.
 libcryptoutils-y				:=
 
+# aes.o is gone: the Rust defines and exports crypto_aes_sbox/
+# crypto_aes_inv_sbox/aes_expandkey/aes_encrypt/aes_decrypt itself and
+# carries their ABI contracts. No arch dispatch to retain -- there is no
+# CONFIG_CRYPTO_LIB_AES_ARCH; AES-NI lives in arch/x86/crypto, outside
+# lib/crypto. See the CONFIG_RUST arms below and aes_rs.rs's module doc.
 obj-$(CONFIG_CRYPTO_LIB_AES)			+= libaes.o
-libaes-y					:= aes.o
+ifdef CONFIG_RUST
+libaes-y					:= aes_rs.o
+else
+libaes-y					:= aes_norust.o
+endif
 
 obj-$(CONFIG_CRYPTO_LIB_AESCFB)			+= libaescfb.o
 libaescfb-y					:= aescfb.o
@@ -112,10 +122,14 @@ libdes-y					:= des.o
 
 ################################################################################
 
+# md5.o is gone: the Rust defines and exports all ten symbols itself and
+# carries their ABI contracts, via kernel::kabi_export!(). Unlike blake2s
+# and the rest of lib/crypto, this file has NO x86 arch dispatch to retain --
+# CONFIG_CRYPTO_LIB_MD5_ARCH defaults to y only for MIPS+Cavium-Octeon, PPC
+# and SPARC64, never x86 -- so this is the bcd/int_pow shape, not the
+# blake2s one. See the CONFIG_RUST arms below and md5_rs.rs's module doc.
 obj-$(CONFIG_CRYPTO_LIB_MD5) += libmd5.o
-libmd5-y := md5.o
 ifeq ($(CONFIG_CRYPTO_LIB_MD5_ARCH),y)
-CFLAGS_md5.o += -I$(src)/$(SRCARCH)
 libmd5-$(CONFIG_PPC) += powerpc/md5-asm.o
 libmd5-$(CONFIG_SPARC) += sparc/md5_asm.o
 endif # CONFIG_CRYPTO_LIB_MD5_ARCH
@@ -194,9 +208,18 @@ clean-files += arm/poly1305-core.S \
 ################################################################################
 
 obj-$(CONFIG_CRYPTO_LIB_SHA1) += libsha1.o
-libsha1-y := sha1.o
+# sha1.o is the ARCHITECTURE DISPATCH ONLY under CONFIG_RUST; the algorithm
+# and every exported entry point are in sha1_rs.o. CONFIG_RUST=n takes the
+# pristine body instead -- same split as lib/crypto/sha512.c, see
+# logs/c-entry-rule.md.
+ifdef CONFIG_RUST
+libsha1-y := sha1.o sha1_rs.o
+else
+libsha1-y := sha1_norust.o
+endif
 ifeq ($(CONFIG_CRYPTO_LIB_SHA1_ARCH),y)
 CFLAGS_sha1.o += -I$(src)/$(SRCARCH)
+CFLAGS_sha1_norust.o += -I$(src)/$(SRCARCH)
 ifeq ($(CONFIG_ARM),y)
 libsha1-y += arm/sha1-armv4-large.o
 libsha1-$(CONFIG_KERNEL_MODE_NEON) += arm/sha1-armv7-neon.o \
@@ -216,9 +239,18 @@ endif # CONFIG_CRYPTO_LIB_SHA1_ARCH
 ################################################################################
 
 obj-$(CONFIG_CRYPTO_LIB_SHA256) += libsha256.o
-libsha256-y := sha256.o
+# sha256.o is the ARCHITECTURE DISPATCH ONLY under CONFIG_RUST; the
+# algorithm and every exported entry point are in sha256_rs.o. CONFIG_RUST=n
+# takes the pristine body instead -- same split as lib/crypto/sha512.c, see
+# logs/c-entry-rule.md.
+ifdef CONFIG_RUST
+libsha256-y := sha256.o sha256_rs.o
+else
+libsha256-y := sha256_norust.o
+endif
 ifeq ($(CONFIG_CRYPTO_LIB_SHA256_ARCH),y)
 CFLAGS_sha256.o += -I$(src)/$(SRCARCH)
+CFLAGS_sha256_norust.o += -I$(src)/$(SRCARCH)
 
 ifeq ($(CONFIG_ARM),y)
 libsha256-y += arm/sha256-ce.o arm/sha256-core.o
@@ -246,9 +278,18 @@ endif # CONFIG_CRYPTO_LIB_SHA256_ARCH
 ################################################################################
 
 obj-$(CONFIG_CRYPTO_LIB_SHA512) += libsha512.o
-libsha512-y := sha512.o
+# sha512.o is the ARCHITECTURE DISPATCH ONLY under CONFIG_RUST; the algorithm
+# and every exported entry point are in sha512_rs.o. CONFIG_RUST=n takes the
+# pristine body instead -- same split as lib/crypto/blake2s.c, see
+# logs/c-entry-rule.md.
+ifdef CONFIG_RUST
+libsha512-y := sha512.o sha512_rs.o
+else
+libsha512-y := sha512_norust.o
+endif
 ifeq ($(CONFIG_CRYPTO_LIB_SHA512_ARCH),y)
 CFLAGS_sha512.o += -I$(src)/$(SRCARCH)
+CFLAGS_sha512_norust.o += -I$(src)/$(SRCARCH)
 
 ifeq ($(CONFIG_ARM),y)
 libsha512-y += arm/sha512-core.o
@@ -292,13 +333,32 @@ clean-files += arm64/sha256-core.S arm64/sha512-core.S
 ifdef CONFIG_RUST
 libcryptoutils-y += utils.o utils_rs.o memneq_rs.o
 obj-y            += blake2s_rs.o
+obj-$(CONFIG_CRYPTO_HASH_INFO) += hash_info_rs.o
 libarc4-y        := arc4_rs.o
 obj-y            += chacha-block-generic.o chacha_block_generic_rs.o
+libmd5-y         := md5_rs.o
 else
 libcryptoutils-y += utils_norust.o memneq_norust.o
 # blake2s.c above is OUR file in both arms -- the dispatch is needed either
 # way -- so the CONFIG_RUST=n arm takes the pristine body INSTEAD of it.
+#
+# CFLAGS_blake2s.o's -I is keyed to that object's own name, so it does not
+# carry over to blake2s_norust.o -- kbuild's per-object CFLAGS_<file>.o
+# variables are exactly that, per FILE. Without this line
+# blake2s_norust.c's `#include "blake2s.h"` cannot find $(SRCARCH)/blake2s.h
+# and CONFIG_RUST=n fails to build. Found the same way RAISE 2 exists to be
+# found: by actually building it, the first time config-norust was rebuilt
+# after this file was added.
+CFLAGS_blake2s_norust.o += -I$(src)/$(SRCARCH)
 obj-y            += blake2s_norust.o
+obj-$(CONFIG_CRYPTO_HASH_INFO) += hash_info_norust.o
 libarc4-y        := arc4_norust.o
 obj-y            += chacha-block-generic_norust.o
+# md5_norust.c's `#include "md5.h"` needs this on any arch where
+# CONFIG_CRYPTO_LIB_MD5_ARCH=y (PPC, SPARC64) -- CFLAGS_md5.o above does not
+# carry over to a differently-named object, the same gap blake2s_norust.o
+# had. Neither of this project's configs sets this, so it is unexercised
+# here; kept so a PPC/SPARC build does not silently fail to find the header.
+CFLAGS_md5_norust.o += -I$(src)/$(SRCARCH)
+libmd5-y         := md5_norust.o
 endif

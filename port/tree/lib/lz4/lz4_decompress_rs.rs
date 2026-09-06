@@ -326,7 +326,7 @@ unsafe fn decompress_generic<const END_ON_INPUT: bool, const PARTIAL: bool, cons
                     // loop condition, leaves this byte readable.
                     s = unsafe { *ip } as usize;
                     ip = ip.wrapping_add(1);
-                    length += s;
+                    length = length.wrapping_add(s);
                     let more = (if END_ON_INPUT {
                         ip < iend.wrapping_offset(-(RUN_MASK as isize))
                     } else {
@@ -363,7 +363,16 @@ unsafe fn decompress_generic<const END_ON_INPUT: bool, const PARTIAL: bool, cons
                     if cpy > oend {
                         /* stop in the middle of a literal segment */
                         cpy = oend;
-                        length = oend as usize - op as usize;
+                        // `op <= oend` is an algorithm invariant maintained
+                        // throughout (matching the C's own pointer
+                        // subtraction and this file's nearby
+                        // `debug_assert!(op <= oend)`), not provable by
+                        // LLVM across this function's control flow.
+                        // wrapping_sub matches the C rather than panicking
+                        // on a path the invariant rules out. Found by the
+                        // CONFIG_RUST_OVERFLOW_CHECKS panic-symbol sweep,
+                        // 2026-09-06.
+                        length = (oend as usize).wrapping_sub(op as usize);
                     }
                     if END_ON_INPUT && ip.wrapping_add(length) > iend {
                         /* read attempt beyond end of input buffer */
@@ -455,7 +464,7 @@ unsafe fn decompress_generic<const END_ON_INPUT: bool, const PARTIAL: bool, cons
                     return output_error(ip, src);
                 }
 
-                length += s;
+                length = length.wrapping_add(s);
                 if s != 255 {
                     break;
                 }
@@ -467,7 +476,17 @@ unsafe fn decompress_generic<const END_ON_INPUT: bool, const PARTIAL: bool, cons
             }
         }
 
-        length += MINMATCH;
+        // `length` is C's `size_t` -- a defined unsigned wraparound the
+        // algorithm's own downstream `(op).wrapping_add(length) < op`
+        // overflow-DETECTION check (module doc, divergence 2) relies on
+        // seeing: an attacker chains 0xFF run-length bytes to grow `length`
+        // past usize::MAX on purpose, and the detector only works if the
+        // wraparound actually happened rather than panicking first. Found
+        // by the CONFIG_RUST_OVERFLOW_CHECKS panic-symbol sweep, 2026-09-06
+        // -- the accumulation itself (`length += s` above, and this `+=
+        // MINMATCH`) was still plain `+=`, which would have panicked
+        // before the existing, already-correct detection check ever ran.
+        length = length.wrapping_add(MINMATCH);
 
         /* match starting within external dictionary */
         if DICT == USING_EXT_DICT && m < low_prefix {
@@ -496,7 +515,13 @@ unsafe fn decompress_generic<const END_ON_INPUT: bool, const PARTIAL: bool, cons
                     core::ptr::copy_nonoverlapping(dict_end.wrapping_sub(copy_size), op, copy_size)
                 };
                 op = op.wrapping_add(copy_size);
-                if rest_size > op as usize - low_prefix as usize {
+                // `op >= low_prefix` is an algorithm invariant (op only
+                // ever advances forward from low_prefix in the output
+                // buffer), matching the C's own `(size_t)(op - lowPrefix)`
+                // pointer subtraction. wrapping_sub rather than a panic on
+                // a path the invariant rules out. Found by the
+                // CONFIG_RUST_OVERFLOW_CHECKS panic-symbol sweep, 2026-09-06.
+                if rest_size > (op as usize).wrapping_sub(low_prefix as usize) {
                     /* overlap copy */
                     let end_of_match = op.wrapping_add(rest_size);
                     let mut copy_from = low_prefix;
@@ -524,7 +549,8 @@ unsafe fn decompress_generic<const END_ON_INPUT: bool, const PARTIAL: bool, cons
         /* partialDecoding may not respect endBlock parsing restrictions */
         debug_assert!(op <= oend);
         if PARTIAL && cpy > oend.wrapping_offset(-MATCH_SAFEGUARD_DISTANCE) {
-            let mlen = core::cmp::min(length, oend as usize - op as usize);
+            // `op <= oend` invariant again (debug_assert! just above).
+            let mlen = core::cmp::min(length, (oend as usize).wrapping_sub(op as usize));
             let match_end = m.wrapping_add(mlen);
             let copy_end = op.wrapping_add(mlen);
 
@@ -586,7 +612,12 @@ unsafe fn decompress_generic<const END_ON_INPUT: bool, const PARTIAL: bool, cons
                 // SAFETY: `o_copy_limit` is `WILDCOPYLENGTH - 1` short of
                 // `oend`, which is exactly the overrun `wild_copy` may make.
                 unsafe { wild_copy(op, m, o_copy_limit) };
-                m = m.wrapping_offset(o_copy_limit as isize - op as isize);
+                // Pointer difference bounded by real buffer sizes (never
+                // remotely near isize::MAX), matching the C's own `+=`
+                // pointer arithmetic. wrapping_sub rather than a panic on
+                // a path that's unreachable in practice. Found by the
+                // CONFIG_RUST_OVERFLOW_CHECKS panic-symbol sweep, 2026-09-06.
+                m = m.wrapping_offset((o_copy_limit as isize).wrapping_sub(op as isize));
                 op = o_copy_limit;
             }
             while op < cpy {
@@ -609,19 +640,24 @@ unsafe fn decompress_generic<const END_ON_INPUT: bool, const PARTIAL: bool, cons
     }
 
     /* end of decoding */
+    // Pointer differences below are bounded by real buffer sizes (never
+    // remotely near isize::MAX/MIN), matching the C's own pointer
+    // subtraction cast to `(int)`. wrapping_sub rather than a panic on a
+    // path that's unreachable in practice. Found by the
+    // CONFIG_RUST_OVERFLOW_CHECKS panic-symbol sweep, 2026-09-06.
     if END_ON_INPUT {
         /* Nb of output bytes decoded */
-        (op as isize - dst as isize) as c_int
+        (op as isize).wrapping_sub(dst as isize) as c_int
     } else {
         /* Nb of input bytes read */
-        (ip as isize - src as isize) as c_int
+        (ip as isize).wrapping_sub(src as isize) as c_int
     }
 }
 
 /// `goto _output_error`: `-(ip - src) - 1`.
 #[inline]
 fn output_error(ip: *const u8, src: *const u8) -> c_int {
-    (-(ip as isize - src as isize)) as c_int - 1
+    ((ip as isize).wrapping_sub(src as isize).wrapping_neg() as c_int).wrapping_sub(1)
 }
 
 // ---------------------------------------------------------------------------
@@ -1009,7 +1045,12 @@ pub unsafe extern "C" fn LZ4_decompress_safe_continue(
         if result <= 0 {
             return result;
         }
-        lz4sd.prefix_size += result as usize;
+        // `prefix_size` accumulates across streaming calls, bounded by real
+        // buffer sizes the caller allocated (never remotely near
+        // usize::MAX). wrapping_add matches the C's own plain `+=` rather
+        // than panicking on a path that's unreachable in practice. Found
+        // by the CONFIG_RUST_OVERFLOW_CHECKS panic-symbol sweep, 2026-09-06.
+        lz4sd.prefix_size = lz4sd.prefix_size.wrapping_add(result as usize);
         lz4sd.prefix_end = lz4sd.prefix_end.wrapping_add(result as usize);
     } else {
         /* The buffer wraps around, or they're switching to another buffer. */
@@ -1086,7 +1127,7 @@ pub unsafe extern "C" fn LZ4_decompress_fast_continue(
         if result <= 0 {
             return result;
         }
-        lz4sd.prefix_size += original_size as usize;
+        lz4sd.prefix_size = lz4sd.prefix_size.wrapping_add(original_size as usize);
         lz4sd.prefix_end = lz4sd.prefix_end.wrapping_add(original_size as usize);
     } else {
         lz4sd.ext_dict_size = lz4sd.prefix_size;

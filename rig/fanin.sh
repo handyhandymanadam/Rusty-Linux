@@ -14,8 +14,7 @@
 # symbol, so it counts zero here even if the Rust version would need a real one.
 set -u
 BUILD=${1:?usage: fanin.sh <build-dir>}
-root=$(cd "$(dirname "$0")/.." && pwd)
-OUT="$root/logs/fanin-$(basename "$BUILD").tsv"
+OUT=/home/adam/Rusty-Linux/logs/fanin-$(basename "$BUILD").tsv
 TMP=$(mktemp -d)
 
 # 1. Every symbol defined by an object built from lib/, and which object.

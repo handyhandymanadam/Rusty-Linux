@@ -207,7 +207,15 @@ pub unsafe extern "C" fn lzo1x_decompress_safe(
                 if offset > MAX_255_COUNT {
                     bail!(LZO_E_ERROR);
                 }
-                offset = (offset << 8) - offset;
+                // MAX_255_COUNT = (usize::MAX/255) - 2 is chosen specifically
+                // so offset*255 (computed here as (offset<<8)-offset) never
+                // overflows usize -- a deliberate bound in the algorithm's
+                // own design (lzo1x_decompress_safe.c's own comment on the
+                // constant), not merely unproven by the compiler.
+                // wrapping_shl/wrapping_sub are exact, not a fallback.
+                // Found by the CONFIG_RUST_OVERFLOW_CHECKS panic-symbol
+                // sweep, 2026-09-06.
+                offset = offset.wrapping_shl(8).wrapping_sub(offset);
                 t += offset + $base + next_byte!();
             }};
         }
@@ -366,7 +374,14 @@ pub unsafe extern "C" fn lzo1x_decompress_safe(
                             *op = *ip;
                             op = op.add(1);
                             ip = ip.add(1);
-                            t -= 1;
+                            // `t > 0` on entry (debug_assert! above) and the
+                            // loop breaks the instant t reaches 0, so this
+                            // never decrements past 0 -- an invariant LLVM
+                            // can't see through the loop structure.
+                            // wrapping_sub matches the C's plain `t--`.
+                            // Found by the CONFIG_RUST_OVERFLOW_CHECKS
+                            // panic-symbol sweep, 2026-09-06.
+                            t = t.wrapping_sub(1);
                             if t == 0 {
                                 break;
                             }

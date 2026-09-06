@@ -692,10 +692,19 @@ fn hash_crc32(h: &XzDecHash) -> u32 {
 fn fill_temp(s: &mut XzDec, b: Buf) -> bool {
     let in_pos = b.in_pos();
     let input = b.input();
-    let copy_size = core::cmp::min(input.len() - in_pos, s.temp.size - s.temp.pos);
+    // `in_pos <= input.len()` and `s.temp.pos <= s.temp.size` are maintained
+    // by every caller (each sets `temp.size`/resets `temp.pos` together
+    // before calling this), unlike the `dec_block_header()` subtractions in
+    // divergence 4 -- wrapping_* is faithful to the C's plain arithmetic on
+    // these unsigned types regardless, per the CONFIG_RUST_OVERFLOW_CHECKS
+    // sweep, 2026-09-06.
+    let copy_size = core::cmp::min(
+        input.len().wrapping_sub(in_pos),
+        s.temp.size.wrapping_sub(s.temp.pos),
+    );
 
-    s.temp.buf[s.temp.pos..s.temp.pos + copy_size]
-        .copy_from_slice(&input[in_pos..in_pos + copy_size]);
+    s.temp.buf[s.temp.pos..s.temp.pos.wrapping_add(copy_size)]
+        .copy_from_slice(&input[in_pos..in_pos.wrapping_add(copy_size)]);
     b.set_in_pos(in_pos + copy_size);
     s.temp.pos += copy_size;
 
@@ -801,9 +810,17 @@ fn dec_block(s: &mut XzDec, b: Buf) -> c_int {
     // Byte counts of data this call actually moved, so they are bounded by
     // real I/O and cannot overflow a u64. The C's own comment says the
     // validation below "assumes that no integer overflow occurs, since
-    // vli_type is normally uint64_t".
-    s.block.compressed += (b.in_pos() - s.in_start) as VliType;
-    s.block.uncompressed += (b.out_pos() - s.out_start) as VliType;
+    // vli_type is normally uint64_t" -- wrapping_* is faithful to that
+    // unsigned arithmetic regardless, per the CONFIG_RUST_OVERFLOW_CHECKS
+    // sweep, 2026-09-06.
+    s.block.compressed = s
+        .block
+        .compressed
+        .wrapping_add((b.in_pos().wrapping_sub(s.in_start)) as VliType);
+    s.block.uncompressed = s
+        .block
+        .uncompressed
+        .wrapping_add((b.out_pos().wrapping_sub(s.out_start)) as VliType);
 
     // There is no need to separately check for VLI_UNKNOWN, since the observed
     // sizes are always smaller than VLI_UNKNOWN.
@@ -830,21 +847,32 @@ fn dec_block(s: &mut XzDec, b: Buf) -> c_int {
             return XZ_DATA_ERROR;
         }
 
-        s.block.hash.unpadded += VliType::from(s.block_header.size) + s.block.compressed;
+        // Unsigned throughout in the C; wrapping_* is faithful to it
+        // regardless of whether these hash accumulators are ever provably
+        // bounded, per the CONFIG_RUST_OVERFLOW_CHECKS sweep, 2026-09-06.
+        s.block.hash.unpadded = s
+            .block
+            .hash
+            .unpadded
+            .wrapping_add(VliType::from(s.block_header.size).wrapping_add(s.block.compressed));
 
         #[cfg(XZ_DEC_ANY_CHECK)]
         {
-            s.block.hash.unpadded += VliType::from(CHECK_SIZES[s.check_type as usize]);
+            s.block.hash.unpadded = s
+                .block
+                .hash
+                .unpadded
+                .wrapping_add(VliType::from(CHECK_SIZES[s.check_type as usize]));
         }
         #[cfg(not(XZ_DEC_ANY_CHECK))]
         if s.check_type == XZ_CHECK_CRC32 {
-            s.block.hash.unpadded += 4;
+            s.block.hash.unpadded = s.block.hash.unpadded.wrapping_add(4);
         }
 
-        s.block.hash.uncompressed += s.block.uncompressed;
+        s.block.hash.uncompressed = s.block.hash.uncompressed.wrapping_add(s.block.uncompressed);
         s.block.hash.crc32 = hash_crc32(&s.block.hash);
 
-        s.block.count += 1;
+        s.block.count = s.block.count.wrapping_add(1);
     }
 
     ret
@@ -852,9 +880,16 @@ fn dec_block(s: &mut XzDec, b: Buf) -> c_int {
 
 /// Update the Index size and the CRC32 value.
 fn index_update(s: &mut XzDec, b: Buf) {
-    let in_used = b.in_pos() - s.in_start;
-    s.index.size += in_used as VliType;
-    s.crc32 = xz_crc32(&b.input()[s.in_start..s.in_start + in_used], s.crc32);
+    // `in_start <= in_pos` is a `dec_main`/`dec_index` invariant the C also
+    // relies on unchecked; wrapping_* is faithful to the C's plain unsigned
+    // arithmetic regardless, per the CONFIG_RUST_OVERFLOW_CHECKS sweep,
+    // 2026-09-06.
+    let in_used = b.in_pos().wrapping_sub(s.in_start);
+    s.index.size = s.index.size.wrapping_add(in_used as VliType);
+    s.crc32 = xz_crc32(
+        &b.input()[s.in_start..s.in_start.wrapping_add(in_used)],
+        s.crc32,
+    );
 }
 
 /// Decode the Number of Records, Unpadded Size, and Uncompressed Size fields
@@ -903,8 +938,16 @@ fn dec_index(s: &mut XzDec, b: Buf) -> c_int {
                 s.index.hash.uncompressed = s.index.hash.uncompressed.wrapping_add(s.vli);
                 s.index.hash.crc32 = hash_crc32(&s.index.hash);
                 // Only reached with `count > 0`: the do/while below exits at
-                // zero and the Count arm above is the only other way in.
-                s.index.count -= 1;
+                // zero and the Count arm above is the only other way in --
+                // a purely local, single-function loop invariant enforced by
+                // this same `if s.index.count == 0 { break }` after every
+                // iteration, unlike `dict_repeat`'s cross-function one (see
+                // that file's note, 2026-09-06). Even if it were ever wrong,
+                // nothing here is an unsafe write or an unbounded loop: this
+                // function only accumulates `wrapping_add`-already hash state
+                // and returns once the input runs out. wrapping_sub is
+                // faithful to the C's plain unsigned decrement regardless.
+                s.index.count = s.index.count.wrapping_sub(1);
                 s.index.sequence = IndexSequence::Unpadded;
             }
         }
@@ -937,13 +980,23 @@ fn crc32_validate(s: &mut XzDec, b: Buf) -> c_int {
         in_pos += 1;
 
         // `s->pos` is 0, 8, 16 or 24 here; the C would be undefined at 32.
+        // `wrapping_shr` masks the shift to the type's bit width, matching
+        // the C's own behavior on every target that compiles `>>` to a
+        // hardware shift instruction, per the CONFIG_RUST_OVERFLOW_CHECKS
+        // sweep, 2026-09-06.
         debug_assert!(s.pos < 32);
-        if ((s.crc32 >> s.pos) & 0xFF) as u8 != byte {
+        if ((s.crc32.wrapping_shr(s.pos)) & 0xFF) as u8 != byte {
             b.set_in_pos(in_pos);
             return XZ_DATA_ERROR;
         }
 
-        s.pos += 8;
+        // Converting the shift above to `wrapping_shr` removed the implicit
+        // proof LLVM previously drew from the plain `>>`'s own guard that
+        // `s.pos < 32`; without that, this addition needs its own guard too.
+        // `s.pos` is a bit-offset counter with no downstream unsafe use, so
+        // wrapping_* is faithful regardless, same as everywhere else in this
+        // pass.
+        s.pos = s.pos.wrapping_add(8);
         if s.pos >= 32 {
             break;
         }
@@ -1314,7 +1367,9 @@ fn dec_main(s: &mut XzDec, b: Buf) -> c_int {
                         return XZ_DATA_ERROR;
                     }
 
-                    s.block.compressed += 1;
+                    // Unsigned in the C; wrapping_* is faithful regardless,
+                    // per the CONFIG_RUST_OVERFLOW_CHECKS sweep, 2026-09-06.
+                    s.block.compressed = s.block.compressed.wrapping_add(1);
                 }
 
                 b.set_in_pos(in_pos);
@@ -1356,7 +1411,13 @@ fn dec_main(s: &mut XzDec, b: Buf) -> c_int {
                 let input = b.input();
                 let mut in_pos = b.in_pos();
 
-                while (s.index.size + (in_pos - s.in_start) as VliType) & 3 != 0 {
+                // `in_start <= in_pos` as elsewhere; unsigned arithmetic in
+                // the C throughout, so wrapping_* is faithful regardless,
+                // per the CONFIG_RUST_OVERFLOW_CHECKS sweep, 2026-09-06.
+                while (s.index.size.wrapping_add((in_pos.wrapping_sub(s.in_start)) as VliType))
+                    & 3
+                    != 0
+                {
                     if in_pos == input.len() {
                         b.set_in_pos(in_pos);
                         index_update(s, b);

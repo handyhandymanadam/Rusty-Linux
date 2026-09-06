@@ -127,3 +127,17 @@ CONFIG_KUNIT=y
 CONFIG_SIPHASH_KUNIT_TEST=y
 CONFIG_CMDLINE_KUNIT_TEST=y
 CONFIG_CRYPTO_LIB_BLAKE2S_KUNIT_TEST=y
+
+# --- lib/usercopy: check_zeroed_user()'s only in-tree callers (sockptr.h's
+# --- check_zeroed_sockptr(), from net/ipv4/tcp.c's TCP zerocopy receive and
+# --- net/tls/tls_main.c's TLS ULP setsockopt path; kernel/seccomp.c's
+# --- notify-addfd ioctl; kernel/bpf/syscall.c's BPF_PROG_LOAD padding check)
+# --- are not reached by this project's minimal boot + busybox userspace --
+# --- none of TCP zerocopy, TLS, seccomp or bpf() get exercised. Same
+# --- "upstream's own test does the hard part" reasoning as siphash/cmdline:
+# --- lib/tests/usercopy_kunit.c already builds a real userspace mapping
+# --- (kunit_vm_mmap()) and drives check_zeroed_user() against every
+# --- [start,end] pair over a 1024-byte, page-boundary-crossing region,
+# --- checked against memchr_inv() as the independent oracle -- exactly the
+# --- corpus this port would otherwise have to hand-write, and better.
+CONFIG_USERCOPY_KUNIT_TEST=y

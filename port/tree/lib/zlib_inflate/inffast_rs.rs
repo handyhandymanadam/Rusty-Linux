@@ -57,14 +57,23 @@
 //!    Both configs this project builds set the option, so this changes no
 //!    generated code today.
 //!
-//! 3. **Bit accounting uses `wrapping_*` where the C relies on unsigned
-//!    wraparound.** `CONFIG_RUST_OVERFLOW_CHECKS=y` on both configs, so a
-//!    plain `-` here would turn an impossible case into a kernel panic
-//!    inside the decompressor. The invariants that make those subtractions
-//!    safe come from the decode tables rather than from a local `if`, so
-//!    each one carries a `debug_assert!` stating the invariant instead. The
-//!    userspace differential runs with `-C debug-assertions=on` and would
-//!    stop on a violation; the kernel wraps exactly as the C does.
+//! 3. **All arithmetic on values bounded by an invariant rather than a
+//!    local `if` uses `wrapping_*` (bit accounting, window-copy pointer
+//!    offsets, the `avail_in`/`avail_out` epilogue, the `len`/`loops`
+//!    countdown loops, the `(1 << bits) - 1` mask constructions).**
+//!    `CONFIG_RUST_OVERFLOW_CHECKS=y` on both configs, so a plain `-`/`<<`
+//!    here would turn an impossible case into a kernel panic inside the
+//!    decompressor. The invariants that make those operations safe come
+//!    from the entry contract and the decode tables rather than from a
+//!    local `if`, so each one carries a `debug_assert!` stating the
+//!    invariant instead (where one wasn't already present). Originally
+//!    this point covered only the bit-accounting subtractions; the
+//!    pointer-offset and mask-construction sites were still plain
+//!    arithmetic, found later by the CONFIG_RUST_OVERFLOW_CHECKS
+//!    panic-symbol sweep, 2026-09-06 -- a real, if narrow, gap in this
+//!    point's own original coverage claim. The userspace differential
+//!    runs with `-C debug-assertions=on` and would stop on a violation;
+//!    the kernel wraps exactly as the C does.
 //!
 //! # Layout is the caller's
 //!
@@ -241,10 +250,14 @@ pub unsafe extern "C" fn inflate_fast(strm: *mut ZStream, start: c_uint) {
         let mut inp: *const u8 = (*strm).next_in;
         // Only read by the debug assertion after the epilogue.
         let entry_in: *const u8 = inp;
-        let last: *const u8 = inp.add(((*strm).avail_in - 5) as usize);
+        // avail_in >= 6 / avail_out >= 258 are the entry contract (module
+        // doc above), so these never actually underflow; wrapping_sub
+        // matches the C's plain `- 5`/`- 257` instead of panicking on a
+        // path the contract rules out.
+        let last: *const u8 = inp.add(((*strm).avail_in.wrapping_sub(5)) as usize);
         let mut out: *mut u8 = (*strm).next_out;
         let beg: *mut u8 = out.sub((start as c_ulong).wrapping_sub((*strm).avail_out) as usize);
-        let end: *mut u8 = out.add(((*strm).avail_out - 257) as usize);
+        let end: *mut u8 = out.add(((*strm).avail_out.wrapping_sub(257)) as usize);
 
         let wsize: c_uint = (*state).wsize;
         let whave: c_uint = (*state).whave;
@@ -254,8 +267,11 @@ pub unsafe extern "C" fn inflate_fast(strm: *mut ZStream, start: c_uint) {
         let mut bits: c_uint = (*state).bits;
         let lcode: *const Code = (*state).lencode;
         let dcode: *const Code = (*state).distcode;
-        let lmask: c_uint = (1u32 << (*state).lenbits) - 1;
-        let dmask: c_uint = (1u32 << (*state).distbits) - 1;
+        // lenbits/distbits are bounded by the decode tables' own build
+        // limits (well under 32), matching the C's own unguarded
+        // `(1U << bits) - 1`.
+        let lmask: c_uint = (1u32.wrapping_shl((*state).lenbits)).wrapping_sub(1);
+        let dmask: c_uint = (1u32.wrapping_shl((*state).distbits)).wrapping_sub(1);
 
         // Declared up here rather than at first use so the copy macro below
         // can name them: `macro_rules!` resolves outer identifiers at the
@@ -271,7 +287,10 @@ pub unsafe extern "C" fn inflate_fast(strm: *mut ZStream, start: c_uint) {
         // stops while five bytes remain rather than at the end.
         macro_rules! pull_byte {
             () => {{
-                hold += (*inp as c_ulong) << bits;
+                // `bits` stays well under 64 (called only while bits < 15,
+                // at most twice per outer iteration), matching the C's own
+                // unguarded `hold += (unsigned long)(*in++) << bits`.
+                hold = hold.wrapping_add((*inp as c_ulong).wrapping_shl(bits));
                 inp = inp.add(1);
                 bits += 8;
             }};
@@ -289,7 +308,10 @@ pub unsafe extern "C" fn inflate_fast(strm: *mut ZStream, start: c_uint) {
                     *out = *from;
                     out = out.add(1);
                     from = from.add(1);
-                    n -= 1;
+                    // n >= 1 on entry (debug_assert! above) and the loop
+                    // breaks the instant n reaches 0, so this never
+                    // decrements past 0.
+                    n = n.wrapping_sub(1);
                     if n == 0 {
                         break;
                     }
@@ -309,7 +331,7 @@ pub unsafe extern "C" fn inflate_fast(strm: *mut ZStream, start: c_uint) {
                 // The table guarantees a code is at most 15 bits and the
                 // accumulator held at least 15 — see divergence 3.
                 debug_assert!(bits >= op, "length code wider than the accumulator");
-                hold >>= op;
+                hold = hold.wrapping_shr(op);
                 bits = bits.wrapping_sub(op);
 
                 op = this.op as c_uint;
@@ -327,7 +349,7 @@ pub unsafe extern "C" fn inflate_fast(strm: *mut ZStream, start: c_uint) {
                         }
                         len += hold as c_uint & ((1u32 << op) - 1);
                         debug_assert!(bits >= op, "length extra wider than the accumulator");
-                        hold >>= op;
+                        hold = hold.wrapping_shr(op);
                         bits = bits.wrapping_sub(op);
                     }
                     if bits < 15 {
@@ -339,7 +361,7 @@ pub unsafe extern "C" fn inflate_fast(strm: *mut ZStream, start: c_uint) {
                     'dodist: loop {
                         op = this.bits as c_uint;
                         debug_assert!(bits >= op, "distance code wider than the accumulator");
-                        hold >>= op;
+                        hold = hold.wrapping_shr(op);
                         bits = bits.wrapping_sub(op);
 
                         op = this.op as c_uint;
@@ -355,7 +377,7 @@ pub unsafe extern "C" fn inflate_fast(strm: *mut ZStream, start: c_uint) {
                             }
                             dist += hold as c_uint & ((1u32 << op) - 1);
                             debug_assert!(bits >= op, "distance extra wider than the accumulator");
-                            hold >>= op;
+                            hold = hold.wrapping_shr(op);
                             bits = bits.wrapping_sub(op);
 
                             // How far back we can reach inside this call's
@@ -376,7 +398,10 @@ pub unsafe extern "C" fn inflate_fast(strm: *mut ZStream, start: c_uint) {
                                     // Very common case: the window has not
                                     // wrapped, so the tail of it is the most
                                     // recent output.
-                                    from = from.add((wsize - op) as usize);
+                                    // `op <= whave <= wsize` is checked
+                                    // above (MSG_DIST_TOO_FAR), matching
+                                    // the C's own unguarded `wsize - op`.
+                                    from = from.add((wsize.wrapping_sub(op)) as usize);
                                     if op < len {
                                         len -= op;
                                         copy_bytes!(op);
@@ -385,7 +410,11 @@ pub unsafe extern "C" fn inflate_fast(strm: *mut ZStream, start: c_uint) {
                                 } else if write < op {
                                     // The match starts before the wrap point
                                     // and may run through it.
-                                    from = from.add((wsize + write - op) as usize);
+                                    // `op <= wsize` (as above) and `write >=
+                                    // 0`, so `wsize + write >= op` always;
+                                    // matches the C's own unguarded
+                                    // `wsize + write - op`.
+                                    from = from.add((wsize.wrapping_add(write).wrapping_sub(op)) as usize);
                                     op -= write;
                                     if op < len {
                                         len -= op;
@@ -455,7 +484,9 @@ pub unsafe extern "C" fn inflate_fast(strm: *mut ZStream, start: c_uint) {
                                     *out = *from;
                                     out = out.add(1);
                                     from = from.add(1);
-                                    len -= 1;
+                                    // len >= 3 on entry (debug_assert! above)
+                                    // and this branch fires at most once.
+                                    len = len.wrapping_sub(1);
                                 }
                                 debug_assert!(out as usize % 2 == 0, "16-bit store left unaligned");
                                 debug_assert!(len >= 2, "halved copy entered with fewer than two bytes");
@@ -471,7 +502,8 @@ pub unsafe extern "C" fn inflate_fast(strm: *mut ZStream, start: c_uint) {
                                         sout.write_unaligned(sfrom.read_unaligned());
                                         sout = sout.add(1);
                                         sfrom = sfrom.add(1);
-                                        loops -= 1;
+                                        // loops starts >= 1 (len >= 2, debug_assert! above) and breaks at 0.
+                                        loops = loops.wrapping_sub(1);
                                         if loops == 0 {
                                             break;
                                         }
@@ -496,7 +528,8 @@ pub unsafe extern "C" fn inflate_fast(strm: *mut ZStream, start: c_uint) {
                                     loop {
                                         sout.write_unaligned(pat16);
                                         sout = sout.add(1);
-                                        loops -= 1;
+                                        // loops starts >= 1 (len >= 2, debug_assert! above) and breaks at 0.
+                                        loops = loops.wrapping_sub(1);
                                         if loops == 0 {
                                             break;
                                         }
@@ -518,7 +551,7 @@ pub unsafe extern "C" fn inflate_fast(strm: *mut ZStream, start: c_uint) {
                         } else if op & 64 == 0 {
                             // Second-level distance table.
                             this = *dcode
-                                .add((this.val as c_uint + (hold as c_uint & ((1u32 << op) - 1))) as usize);
+                                .add((this.val as c_uint + (hold as c_uint & (1u32.wrapping_shl(op).wrapping_sub(1)))) as usize);
                             continue 'dodist;
                         } else {
                             (*strm).msg = MSG_INVALID_DIST.as_ptr() as *mut c_char;
@@ -530,7 +563,7 @@ pub unsafe extern "C" fn inflate_fast(strm: *mut ZStream, start: c_uint) {
                 } else if op & 64 == 0 {
                     // Second-level length table.
                     this = *lcode
-                        .add((this.val as c_uint + (hold as c_uint & ((1u32 << op) - 1))) as usize);
+                        .add((this.val as c_uint + (hold as c_uint & (1u32.wrapping_shl(op).wrapping_sub(1)))) as usize);
                     continue 'dolen;
                 } else if op & 32 != 0 {
                     // End of block.
@@ -564,15 +597,18 @@ pub unsafe extern "C" fn inflate_fast(strm: *mut ZStream, start: c_uint) {
         (*strm).next_out = out;
         // Both of these truncate to 32 bits before widening, as the C's
         // `(unsigned)` cast does.
+        // Pointer differences bounded by real buffer sizes (never remotely
+        // near i64::MAX), matching the C's own pointer arithmetic before
+        // its `(unsigned)` truncation.
         (*strm).avail_in = if inp < last {
-            (5i64 + last.offset_from(inp) as i64) as c_uint as c_ulong
+            5i64.wrapping_add(last.offset_from(inp) as i64) as c_uint as c_ulong
         } else {
-            (5i64 - inp.offset_from(last) as i64) as c_uint as c_ulong
+            5i64.wrapping_sub(inp.offset_from(last) as i64) as c_uint as c_ulong
         };
         (*strm).avail_out = if (out as *const u8) < (end as *const u8) {
-            (257i64 + end.offset_from(out) as i64) as c_uint as c_ulong
+            257i64.wrapping_add(end.offset_from(out) as i64) as c_uint as c_ulong
         } else {
-            (257i64 - out.offset_from(end) as i64) as c_uint as c_ulong
+            257i64.wrapping_sub(out.offset_from(end) as i64) as c_uint as c_ulong
         };
         (*state).hold = hold;
         (*state).bits = bits;

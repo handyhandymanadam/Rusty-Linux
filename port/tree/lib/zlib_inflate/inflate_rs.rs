@@ -357,9 +357,14 @@ pub(crate) fn adler32(adler: c_ulong, buf: &[u8]) -> c_ulong {
 
     while !rest.is_empty() {
         let k = core::cmp::min(rest.len(), ADLER_NMAX);
+        // `s1`/`s2` are `unsigned long` in the C, and NMAX is defined
+        // specifically so this loop's worst case never comes close to
+        // overflowing 32 bits regardless -- wrapping_* is faithful to the
+        // C's defined wraparound either way, per the
+        // CONFIG_RUST_OVERFLOW_CHECKS sweep, 2026-09-06.
         for &b in &rest[..k] {
-            s1 += b as u32;
-            s2 += s1;
+            s1 = s1.wrapping_add(b as u32);
+            s2 = s2.wrapping_add(s1);
         }
         rest = &rest[k..];
         s1 %= ADLER_BASE;
@@ -379,8 +384,16 @@ fn adler32_init() -> c_ulong {
 /// only what the shifts and masks leave.
 fn reverse(q: c_ulong) -> c_ulong {
     let q = q as u32;
-    (((q >> 24) & 0xff) + ((q >> 8) & 0xff00) + ((q & 0xff00) << 8) + ((q & 0xff) << 24))
-        as c_ulong
+    // The four terms occupy disjoint bit ranges, so this is really a
+    // bitwise OR wearing addition -- no carry is possible between them --
+    // but wrapping_add is applied anyway for the same reason as elsewhere:
+    // faithful to the C's unsigned arithmetic regardless, 2026-09-06. The
+    // shift amounts are all compile-time constants under 32, so they need
+    // no masking.
+    (((q >> 24) & 0xff)
+        .wrapping_add((q >> 8) & 0xff00)
+        .wrapping_add((q & 0xff00) << 8)
+        .wrapping_add((q & 0xff) << 24)) as c_ulong
 }
 
 // ---------------------------------------------------------------------------
@@ -415,10 +428,17 @@ impl Regs<'_> {
         if self.have == 0 {
             return false;
         }
+        // `have`/`hold`/`ipos`/`bits` are `unsigned`/`unsigned long`/size_t/
+        // `unsigned` in the C; `bits < 64` at every call (the accumulator
+        // never holds more than a `c_ulong`'s width), so the shift amount
+        // is always in range. wrapping_* is faithful to the C's defined
+        // wraparound and shift masking regardless, 2026-09-06.
         self.have -= 1;
-        self.hold += (self.inp[self.ipos] as c_ulong) << self.bits;
+        self.hold = self
+            .hold
+            .wrapping_add((self.inp[self.ipos] as c_ulong).wrapping_shl(self.bits));
         self.ipos += 1;
-        self.bits += 8;
+        self.bits = self.bits.wrapping_add(8);
         true
     }
 
@@ -436,14 +456,19 @@ impl Regs<'_> {
     /// `BITS(n)` — the low `n` bits of the accumulator, `n < 16`.
     #[inline]
     fn peek(&self, n: u32) -> u32 {
-        (self.hold as u32) & ((1u32 << n) - 1)
+        // `n < 16` at every call site; wrapping_shl masks the shift amount
+        // regardless, matching the C's own hardware shift, 2026-09-06.
+        (self.hold as u32) & (1u32.wrapping_shl(n).wrapping_sub(1))
     }
 
     /// `DROPBITS(n)`.
     #[inline]
     fn drop(&mut self, n: u32) {
-        self.hold >>= n;
-        self.bits -= n;
+        // `n <= self.bits` at every call site (that is what makes NEEDBITS
+        // meaningful); `self.bits`/`self.hold` are `unsigned`/`unsigned
+        // long` in the C, so wrapping_* is faithful regardless, 2026-09-06.
+        self.hold = self.hold.wrapping_shr(n);
+        self.bits = self.bits.wrapping_sub(n);
     }
 
     /// `BYTEBITS()` — drop zero to seven bits to reach a byte boundary.
@@ -557,7 +582,10 @@ pub unsafe extern "C" fn rust_zlib_inflateReset(strm: *mut ZStream) -> c_int {
     state.distcode = state.next;
 
     /* Initialise Window */
-    state.wsize = 1u32 << state.wbits;
+    // `wbits` is validated to `8..=MAX_WBITS(15)` in `rust_zlib_inflateInit2`
+    // before this is ever reached, so the shift amount is always in range;
+    // wrapping_shl masks it regardless, 2026-09-06.
+    state.wsize = 1u32.wrapping_shl(state.wbits);
     state.write = 0;
     state.whave = 0;
 
@@ -599,6 +627,12 @@ pub unsafe extern "C" fn rust_zlib_inflateInit2(
     let mut wb = window_bits;
     if wb < 0 {
         st.wrap = 0;
+        // `wb` is `int` (signed) in the C, so negating `INT_MIN` is
+        // undefined behaviour there too -- nothing for wrapping_* to be
+        // faithful to. Left checked deliberately: `window_bits` is a
+        // trusted caller's own configuration value, not attacker-
+        // controlled stream data, and no in-tree caller ever passes
+        // `i32::MIN`, 2026-09-06.
         wb = -wb;
     } else {
         st.wrap = (wb >> 4) + 1;
@@ -652,7 +686,11 @@ unsafe fn updatewindow(strm: &mut ZStream, state: &mut InflateState, out: u32) {
     let window = unsafe {
         core::slice::from_raw_parts_mut(state.window, state.wsize as usize)
     };
-    let mut copy = (out - strm.avail_out as u32) as usize;
+    // `out` is the `avail_out` snapshot this call started with and only
+    // decreases as output is produced, so `out >= avail_out` always; the
+    // C's arithmetic is unsigned throughout, so wrapping_* is faithful
+    // regardless, 2026-09-06.
+    let mut copy = (out.wrapping_sub(strm.avail_out as u32)) as usize;
     let wsize = state.wsize as usize;
     // SAFETY: as above -- `copy` bytes sit immediately before `next_out`.
     let src = unsafe { core::slice::from_raw_parts(strm.next_out.sub(copy), copy) };
@@ -663,7 +701,9 @@ unsafe fn updatewindow(strm: &mut ZStream, state: &mut InflateState, out: u32) {
         state.whave = state.wsize;
     } else {
         let write = state.write as usize;
-        let mut dist = wsize - write;
+        // `write < wsize` always (this function resets it to 0 on wrap);
+        // wrapping_sub is faithful regardless, 2026-09-06.
+        let mut dist = wsize.wrapping_sub(write);
         if dist > copy {
             dist = copy;
         }
@@ -674,12 +714,14 @@ unsafe fn updatewindow(strm: &mut ZStream, state: &mut InflateState, out: u32) {
             state.write = copy as c_uint;
             state.whave = state.wsize;
         } else {
-            state.write += dist as c_uint;
+            // Unsigned in the C; wrapping_* is faithful regardless,
+            // 2026-09-06.
+            state.write = state.write.wrapping_add(dist as c_uint);
             if state.write == state.wsize {
                 state.write = 0;
             }
             if state.whave < state.wsize {
-                state.whave += dist as c_uint;
+                state.whave = state.whave.wrapping_add(dist as c_uint);
             }
         }
     }
@@ -946,12 +988,17 @@ pub unsafe extern "C" fn rust_zlib_inflate(strm: *mut ZStream, flush: c_int) -> 
                         break 'inf_leave;
                     }
                     let n = copy as usize;
-                    r.outp[r.opos..r.opos + n].copy_from_slice(&r.inp[r.ipos..r.ipos + n]);
+                    // `copy <= r.have` and `copy <= r.left` by the two
+                    // checks above, so both ranges are in bounds; the C's
+                    // arithmetic is unsigned throughout, so wrapping_* is
+                    // faithful regardless, 2026-09-06.
+                    r.outp[r.opos..r.opos.wrapping_add(n)]
+                        .copy_from_slice(&r.inp[r.ipos..r.ipos.wrapping_add(n)]);
                     r.have -= copy;
                     r.ipos += n;
                     r.left -= copy;
                     r.opos += n;
-                    state.length -= copy;
+                    state.length = state.length.wrapping_sub(copy);
                     continue;
                 }
                 state.mode = TYPE;
@@ -1009,7 +1056,10 @@ pub unsafe extern "C" fn rust_zlib_inflate(strm: *mut ZStream, flush: c_int) -> 
                 state.mode = CODELENS;
             }
             CODELENS => {
-                'codelens: while state.have < state.nlen + state.ndist {
+                // `nlen <= 286`, `ndist <= 30` (checked in TABLE), well
+                // within c_uint; wrapping_* is faithful to the C's unsigned
+                // arithmetic regardless, 2026-09-06.
+                'codelens: while state.have < state.nlen.wrapping_add(state.ndist) {
                     let mut this;
                     loop {
                         // SAFETY: `lencode` addresses at least
@@ -1061,7 +1111,7 @@ pub unsafe extern "C" fn rust_zlib_inflate(strm: *mut ZStream, flush: c_int) -> 
                             copy = 11 + r.peek(7);
                             r.drop(7);
                         }
-                        if state.have + copy > state.nlen + state.ndist {
+                        if state.have.wrapping_add(copy) > state.nlen.wrapping_add(state.ndist) {
                             bad(s, state, MSG_BIT_LENGTH_REPEAT);
                             break 'codelens;
                         }
@@ -1142,12 +1192,20 @@ pub unsafe extern "C" fn rust_zlib_inflate(strm: *mut ZStream, flush: c_int) -> 
                 if this.op != 0 && (this.op & 0xf0) == 0 {
                     let last = this;
                     loop {
+                        // `last.bits <= MAXBITS == 15`, so the shift amount
+                        // is always in range; wrapping_shr masks it
+                        // regardless, 2026-09-06.
                         let idx = last.val as usize
-                            + (r.peek(last.bits as u32 + last.op as u32) >> last.bits) as usize;
+                            + (r.peek(last.bits as u32 + last.op as u32)
+                                .wrapping_shr(last.bits as u32)) as usize;
                         // SAFETY: `last.val` plus the sub-table index is
                         // inside the table inftrees built.
                         this = unsafe { *state.lencode.add(idx) };
-                        if (last.bits + this.bits) as u32 <= r.bits {
+                        // `bits` fields are always <= MAXBITS == 15 (inftrees
+                        // never stores anything larger), well within a u8;
+                        // wrapping_add is faithful to the C's int-promoted
+                        // addition regardless, 2026-09-06.
+                        if (last.bits.wrapping_add(this.bits)) as u32 <= r.bits {
                             break;
                         }
                         if !r.pullbyte() {
@@ -1178,7 +1236,9 @@ pub unsafe extern "C" fn rust_zlib_inflate(strm: *mut ZStream, flush: c_int) -> 
                     if !r.needbits(state.extra) {
                         break 'inf_leave;
                     }
-                    state.length += r.peek(state.extra);
+                    // Unsigned in the C; wrapping_* is faithful regardless,
+                    // 2026-09-06.
+                    state.length = state.length.wrapping_add(r.peek(state.extra));
                     r.drop(state.extra);
                 }
                 state.mode = DIST;
@@ -1198,11 +1258,19 @@ pub unsafe extern "C" fn rust_zlib_inflate(strm: *mut ZStream, flush: c_int) -> 
                 if (this.op & 0xf0) == 0 {
                     let last = this;
                     loop {
+                        // `last.bits <= MAXBITS == 15`, so the shift amount
+                        // is always in range; wrapping_shr masks it
+                        // regardless, 2026-09-06.
                         let idx = last.val as usize
-                            + (r.peek(last.bits as u32 + last.op as u32) >> last.bits) as usize;
+                            + (r.peek(last.bits as u32 + last.op as u32)
+                                .wrapping_shr(last.bits as u32)) as usize;
                         // SAFETY: as above.
                         this = unsafe { *state.distcode.add(idx) };
-                        if (last.bits + this.bits) as u32 <= r.bits {
+                        // `bits` fields are always <= MAXBITS == 15 (inftrees
+                        // never stores anything larger), well within a u8;
+                        // wrapping_add is faithful to the C's int-promoted
+                        // addition regardless, 2026-09-06.
+                        if (last.bits.wrapping_add(this.bits)) as u32 <= r.bits {
                             break;
                         }
                         if !r.pullbyte() {
@@ -1225,7 +1293,9 @@ pub unsafe extern "C" fn rust_zlib_inflate(strm: *mut ZStream, flush: c_int) -> 
                     if !r.needbits(state.extra) {
                         break 'inf_leave;
                     }
-                    state.offset += r.peek(state.extra);
+                    // Unsigned in the C; wrapping_* is faithful regardless,
+                    // 2026-09-06.
+                    state.offset = state.offset.wrapping_add(r.peek(state.extra));
                     r.drop(state.extra);
                 }
                 /* INFLATE_STRICT's state->offset > state->dmax test is not
@@ -1243,7 +1313,10 @@ pub unsafe extern "C" fn rust_zlib_inflate(strm: *mut ZStream, flush: c_int) -> 
                 if r.left == 0 {
                     break 'inf_leave;
                 }
-                let mut copy = out - r.left;
+                // `out >= r.left` always (see `updatewindow`'s note above);
+                // wrapping_* is faithful to the C's unsigned arithmetic
+                // regardless, 2026-09-06.
+                let mut copy = out.wrapping_sub(r.left);
                 let from_window;
                 let from_idx;
                 if state.offset > copy {
@@ -1258,7 +1331,14 @@ pub unsafe extern "C" fn rust_zlib_inflate(strm: *mut ZStream, flush: c_int) -> 
                     }
                     if copy > state.write {
                         copy -= state.write;
-                        from_idx = (state.wsize - copy) as usize;
+                        // `copy <= state.whave <= state.wsize` is exactly
+                        // what the guard above establishes; wrapping_sub is
+                        // faithful to the C's unsigned arithmetic regardless
+                        // -- this is the site the divergence guard exists to
+                        // protect, and the slice index below still panics on
+                        // `panic_bounds_check` if that guard is ever wrong,
+                        // 2026-09-06.
+                        from_idx = (state.wsize.wrapping_sub(copy)) as usize;
                     } else {
                         from_idx = (state.write - copy) as usize;
                     }
@@ -1268,7 +1348,11 @@ pub unsafe extern "C" fn rust_zlib_inflate(strm: *mut ZStream, flush: c_int) -> 
                     from_window = true;
                 } else {
                     /* copy from output */
-                    from_idx = r.opos - state.offset as usize;
+                    // `state.offset <= copy` is this branch's own condition,
+                    // and `copy == r.opos` by construction (both count bytes
+                    // produced so far this call); wrapping_sub is faithful
+                    // regardless, 2026-09-06.
+                    from_idx = r.opos.wrapping_sub(state.offset as usize);
                     copy = state.length;
                     from_window = false;
                 }
@@ -1285,7 +1369,11 @@ pub unsafe extern "C" fn rust_zlib_inflate(strm: *mut ZStream, flush: c_int) -> 
                     let window = unsafe {
                         core::slice::from_raw_parts(state.window, state.wsize as usize)
                     };
-                    r.outp[r.opos..r.opos + n].copy_from_slice(&window[from_idx..from_idx + n]);
+                    // `n <= r.left` (checked above), so `r.opos + n` is in
+                    // bounds; unsigned in the C, so wrapping_* is faithful
+                    // regardless, 2026-09-06.
+                    r.outp[r.opos..r.opos.wrapping_add(n)]
+                        .copy_from_slice(&window[from_idx..from_idx.wrapping_add(n)]);
                 } else {
                     // A forward byte copy, NOT a memmove: an LZ77 match may
                     // overlap its own destination and the repetition is the
@@ -1294,7 +1382,9 @@ pub unsafe extern "C" fn rust_zlib_inflate(strm: *mut ZStream, flush: c_int) -> 
                         r.outp[r.opos + k] = r.outp[from_idx + k];
                     }
                 }
-                r.opos += n;
+                // Buffer position bookkeeping, unsigned in the C; faithful
+                // regardless, 2026-09-06.
+                r.opos = r.opos.wrapping_add(n);
 
                 if state.length == 0 {
                     state.mode = LEN;
@@ -1314,12 +1404,17 @@ pub unsafe extern "C" fn rust_zlib_inflate(strm: *mut ZStream, flush: c_int) -> 
                     if !r.needbits(32) {
                         break 'inf_leave;
                     }
-                    out -= r.left;
-                    s.total_out += out as c_ulong;
-                    state.total += out as c_ulong;
+                    // `out >= r.left` as elsewhere; all unsigned in the C,
+                    // so wrapping_* is faithful regardless, 2026-09-06.
+                    out = out.wrapping_sub(r.left);
+                    s.total_out = s.total_out.wrapping_add(out as c_ulong);
+                    state.total = state.total.wrapping_add(out as c_ulong);
                     // SAFETY: `strm` is live; this is INFLATE_NEED_CHECKSUM.
                     if unsafe { inflate_need_software(strm) } && out != 0 {
-                        let start = r.opos - out as usize;
+                        // `out == r.opos` at this point (both count bytes
+                        // produced since the last CHECK visit); wrapping_sub
+                        // is faithful regardless, 2026-09-06.
+                        let start = r.opos.wrapping_sub(out as usize);
                         state.check = adler32(state.check, &r.outp[start..r.opos]);
                         s.adler = state.check;
                     }
@@ -1362,11 +1457,14 @@ pub unsafe extern "C" fn rust_zlib_inflate(strm: *mut ZStream, flush: c_int) -> 
         unsafe { updatewindow(s, state, out) };
     }
 
-    let in_used = in_start - s.avail_in as u32;
-    out -= s.avail_out as u32;
-    s.total_in += in_used as c_ulong;
-    s.total_out += out as c_ulong;
-    state.total += out as c_ulong;
+    // `in_start`/`out` are entry-time snapshots that only decrease as the
+    // call consumes input/produces output; all unsigned in the C, so
+    // wrapping_* is faithful regardless, 2026-09-06.
+    let in_used = in_start.wrapping_sub(s.avail_in as u32);
+    out = out.wrapping_sub(s.avail_out as u32);
+    s.total_in = s.total_in.wrapping_add(in_used as c_ulong);
+    s.total_out = s.total_out.wrapping_add(out as c_ulong);
+    state.total = state.total.wrapping_add(out as c_ulong);
     // SAFETY: `strm` is live.
     if unsafe { inflate_need_software(strm) } && state.wrap != 0 && out != 0 {
         // SAFETY: `out` bytes sit immediately before `next_out`.
@@ -1377,6 +1475,13 @@ pub unsafe extern "C" fn rust_zlib_inflate(strm: *mut ZStream, flush: c_int) -> 
         s.adler = state.check;
     }
 
+    // `state.bits` is `int` on the C side of this expression once added to
+    // the two flag constants, and signed overflow is UB in C too -- but
+    // `state.bits` never exceeds the bit-accumulator's own small range
+    // (well under 64), so `bits + 64 + 128` cannot come remotely close to
+    // overflowing an i32 regardless. Left as plain, checked arithmetic:
+    // nothing for wrapping_* to be faithful to, and the guard is provably
+    // dead code, 2026-09-06.
     s.data_type = state.bits as c_int
         + if state.last != 0 { 64 } else { 0 }
         + if state.mode == TYPE { 128 } else { 0 };
@@ -1436,11 +1541,13 @@ pub unsafe extern "C" fn rust_zlib_inflateIncomp(strm: *mut ZStream) -> c_int {
     state.check = adler32(state.check, consumed);
     z.adler = state.check;
 
-    z.total_out += avail_in;
-    z.total_in += avail_in;
+    // c_ulong, unsigned in the C; wrapping_* is faithful regardless,
+    // 2026-09-06.
+    z.total_out = z.total_out.wrapping_add(avail_in);
+    z.total_in = z.total_in.wrapping_add(avail_in);
     // SAFETY: one past the end of the input buffer is a valid pointer value.
     z.next_in = unsafe { z.next_in.add(avail_in as usize) };
-    state.total += avail_in;
+    state.total = state.total.wrapping_add(avail_in);
     z.avail_in = 0;
 
     Z_OK

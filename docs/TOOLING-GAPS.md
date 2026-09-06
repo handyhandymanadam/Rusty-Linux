@@ -215,3 +215,35 @@ self-test's `module_init()` function: print a one-line summary (total
 cases, cases passed) unconditionally, the same shape `KUnit` output already
 provides. Low-risk, and it would benefit anyone running these tests in an
 automated pipeline, not just this project.
+
+## `core`'s new float `ClampBounds` impls broke linking on soft-float freestanding targets — RESOLVED upstream, not by us
+
+**The limitation.** Moving from rustc 1.98.0 stable to a 1.100.0 nightly, the
+kernel's link step started failing:
+
+    ld.lld: undefined symbol: fmaximum_numf, fminimum_numf, __gtsf2,
+                              fmaximum_num,  fminimum_num,  __gtdf2
+
+Traced to new concrete `ClampBounds` impls for `f32`/`f64` added to `core`
+(`core/src/cmp/clamp.rs`). Being concrete rather than generic, they were
+unconditionally codegen'd into every `core.o`, and they pulled in soft-float
+runtime calls the kernel's `-mmx,+soft-float` build of `core` never provides.
+1.98.0 predates the file entirely and links cleanly; the break was
+nightly-only, and this project stayed on 1.98.0 specifically because of it.
+
+**The workaround.** None needed beyond staying off the affected nightlies —
+1.98.0 stable was already the pinned toolchain for unrelated reasons.
+
+**The upstream fix.** Raised as a question, not a bug report, since we
+weren't sure whether a `no_std`/no-builtins freestanding target routing
+around new `core` float functionality was expected friction or a real gap.
+The answer came back within the day: [rust-lang/rust#162191](https://github.com/rust-lang/rust/pull/162191),
+marking the affected methods `#[inline]` so they're only codegen'd where
+actually reachable — merged 2026-09-04. Verified directly rather than taken
+on trust: pulled the first nightly containing the fix and ran a full kernel
+build against it in a scratch directory, `rust/core.o` through a clean
+`bzImage` link with zero undefined-symbol errors, where the same build
+failed one nightly earlier. This project remains on 1.98.0 regardless —
+nothing forces a move off a working stable toolchain — but nightly is no
+longer a hazard if a reason to move ever comes up. Left here as a data point
+on turnaround, not as an open gap.

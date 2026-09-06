@@ -46,7 +46,11 @@ const LIMB_BITS: u32 = usize::BITS;
 ///
 /// # Safety
 /// `res_ptr` must be writable and `s1_ptr` readable for `s1_size` limbs,
-/// with `s1_size` positive. Same contract as the C.
+/// with `s1_size` positive. Same contract as the C. `res_ptr` and
+/// `s1_ptr` may alias (no upstream caller does today, but nothing in the
+/// signature forbids it) -- reads and writes go through raw pointers
+/// only, one dereference at a time, so aliasing is never a soundness
+/// question here regardless.
 #[no_mangle]
 pub unsafe extern "C" fn mpihelp_mul_1(
     res_ptr: *mut Limb,
@@ -55,21 +59,17 @@ pub unsafe extern "C" fn mpihelp_mul_1(
     s2_limb: Limb,
 ) -> Limb {
     let n = s1_size as usize;
-    // SAFETY: the caller guarantees `s1_size` limbs on both sides.
-    let (res, s1) = unsafe {
-        (
-            core::slice::from_raw_parts_mut(res_ptr, n),
-            core::slice::from_raw_parts(s1_ptr, n),
-        )
-    };
     let mut cy: Limb = 0;
 
     for i in 0..n {
-        let prod = (s1[i] as u128) * (s2_limb as u128);
+        // SAFETY: caller guarantees `s1_ptr` readable for `n` limbs.
+        let s1_i = unsafe { *s1_ptr.add(i) };
+        let prod = (s1_i as u128) * (s2_limb as u128);
         let (low, carry) = (prod as Limb).overflowing_add(cy);
 
         cy = (carry as Limb) + (prod >> LIMB_BITS) as Limb;
-        res[i] = low;
+        // SAFETY: caller guarantees `res_ptr` writable for `n` limbs.
+        unsafe { *res_ptr.add(i) = low };
     }
     cy
 }
@@ -86,26 +86,23 @@ pub unsafe extern "C" fn mpihelp_addmul_1(
     s2_limb: Limb,
 ) -> Limb {
     let n = s1_size as usize;
-    // SAFETY: as above.
-    let (res, s1) = unsafe {
-        (
-            core::slice::from_raw_parts_mut(res_ptr, n),
-            core::slice::from_raw_parts(s1_ptr, n),
-        )
-    };
     let mut cy: Limb = 0;
 
     for i in 0..n {
-        let prod = (s1[i] as u128) * (s2_limb as u128);
+        // SAFETY: caller guarantees `s1_ptr` readable for `n` limbs.
+        let s1_i = unsafe { *s1_ptr.add(i) };
+        let prod = (s1_i as u128) * (s2_limb as u128);
         let (low, carry) = (prod as Limb).overflowing_add(cy);
 
         cy = (carry as Limb) + (prod >> LIMB_BITS) as Limb;
 
-        let x = res[i];
+        // SAFETY: caller guarantees `res_ptr` readable and writable for
+        // `n` limbs; read happens before this iteration's write.
+        let x = unsafe { *res_ptr.add(i) };
         let (sum, carry2) = x.overflowing_add(low);
 
         cy += carry2 as Limb;
-        res[i] = sum;
+        unsafe { *res_ptr.add(i) = sum };
     }
     cy
 }
@@ -122,26 +119,22 @@ pub unsafe extern "C" fn mpihelp_submul_1(
     s2_limb: Limb,
 ) -> Limb {
     let n = s1_size as usize;
-    // SAFETY: as above.
-    let (res, s1) = unsafe {
-        (
-            core::slice::from_raw_parts_mut(res_ptr, n),
-            core::slice::from_raw_parts(s1_ptr, n),
-        )
-    };
     let mut cy: Limb = 0;
 
     for i in 0..n {
-        let prod = (s1[i] as u128) * (s2_limb as u128);
+        // SAFETY: caller guarantees `s1_ptr` readable for `n` limbs.
+        let s1_i = unsafe { *s1_ptr.add(i) };
+        let prod = (s1_i as u128) * (s2_limb as u128);
         let (low, carry) = (prod as Limb).overflowing_add(cy);
 
         cy = (carry as Limb) + (prod >> LIMB_BITS) as Limb;
 
-        let x = res[i];
+        // SAFETY: as in mpihelp_addmul_1.
+        let x = unsafe { *res_ptr.add(i) };
         let (diff, borrow) = x.overflowing_sub(low);
 
         cy += borrow as Limb;
-        res[i] = diff;
+        unsafe { *res_ptr.add(i) = diff };
     }
     cy
 }
@@ -149,7 +142,11 @@ pub unsafe extern "C" fn mpihelp_submul_1(
 /// `res = s1 + s2`, returning the carry out.
 ///
 /// # Safety
-/// All three must be valid for `size` limbs, `size` positive.
+/// All three must be valid for `size` limbs, `size` positive. `res_ptr`
+/// may alias `s1_ptr` and/or `s2_ptr` (real upstream callers do this,
+/// e.g. `mpih-mul.c`'s `mpihelp_add_n(prodp, prodp, tspace, size)`) --
+/// reads and writes go through raw pointers only, one dereference at a
+/// time, so this is sound for any aliasing.
 #[no_mangle]
 pub unsafe extern "C" fn mpihelp_add_n(
     res_ptr: *mut Limb,
@@ -158,24 +155,20 @@ pub unsafe extern "C" fn mpihelp_add_n(
     size: Size,
 ) -> Limb {
     let n = size as usize;
-    // SAFETY: the caller guarantees `size` limbs in all three.
-    let (res, s1, s2) = unsafe {
-        (
-            core::slice::from_raw_parts_mut(res_ptr, n),
-            core::slice::from_raw_parts(s1_ptr, n),
-            core::slice::from_raw_parts(s2_ptr, n),
-        )
-    };
     let mut cy: Limb = 0;
 
     for i in 0..n {
+        // SAFETY: caller guarantees `s1_ptr`/`s2_ptr` readable for `n`
+        // limbs; both reads for this iteration happen before its write.
+        let (s1_i, s2_i) = unsafe { (*s1_ptr.add(i), *s2_ptr.add(i)) };
         // The C's two-step carry, written as two checked adds. `y + cy`
         // can carry, and `y + x` can carry, and at most one of them does.
-        let (y, c1) = s2[i].overflowing_add(cy);
-        let (sum, c2) = y.overflowing_add(s1[i]);
+        let (y, c1) = s2_i.overflowing_add(cy);
+        let (sum, c2) = y.overflowing_add(s1_i);
 
         cy = c1 as Limb + c2 as Limb;
-        res[i] = sum;
+        // SAFETY: caller guarantees `res_ptr` writable for `n` limbs.
+        unsafe { *res_ptr.add(i) = sum };
     }
     cy
 }
@@ -192,22 +185,17 @@ pub unsafe extern "C" fn mpihelp_sub_n(
     size: Size,
 ) -> Limb {
     let n = size as usize;
-    // SAFETY: as above.
-    let (res, s1, s2) = unsafe {
-        (
-            core::slice::from_raw_parts_mut(res_ptr, n),
-            core::slice::from_raw_parts(s1_ptr, n),
-            core::slice::from_raw_parts(s2_ptr, n),
-        )
-    };
     let mut cy: Limb = 0;
 
     for i in 0..n {
-        let (y, c1) = s2[i].overflowing_add(cy);
-        let (diff, c2) = s1[i].overflowing_sub(y);
+        // SAFETY: as in mpihelp_add_n.
+        let (s1_i, s2_i) = unsafe { (*s1_ptr.add(i), *s2_ptr.add(i)) };
+        let (y, c1) = s2_i.overflowing_add(cy);
+        let (diff, c2) = s1_i.overflowing_sub(y);
 
         cy = c1 as Limb + c2 as Limb;
-        res[i] = diff;
+        // SAFETY: caller guarantees `res_ptr` writable for `n` limbs.
+        unsafe { *res_ptr.add(i) = diff };
     }
     cy
 }
@@ -228,24 +216,35 @@ pub unsafe extern "C" fn mpihelp_lshift(
     cnt: core::ffi::c_uint,
 ) -> Limb {
     let n = usize_ as usize;
-    // SAFETY: the caller guarantees `usize_` limbs on both sides.
-    let (w, u) = unsafe {
-        (
-            core::slice::from_raw_parts_mut(wp, n),
-            core::slice::from_raw_parts(up, n),
-        )
-    };
     let sh_1 = cnt;
     let sh_2 = LIMB_BITS - sh_1;
 
+    // `wp` and `up` may be the SAME buffer (mpi-bit.c and mpi-div.c both
+    // call this in place). A `&mut [Limb]`/`&[Limb]` pair built with
+    // from_raw_parts(_mut) over identical memory would be simultaneously
+    // live mutable and shared references to the same bytes -- undefined
+    // behaviour regardless of whether current codegen happens to exploit
+    // it. Read and write through raw pointers only, one dereference at a
+    // time, never holding a slice reference open across the loop.
+    //
     // The C offsets wp by +1 and indexes down from usize-1 to -1, so it
-    // writes w[0..n]. Forward and explicit here.
-    let retval = u[n - 1] >> sh_2;
+    // writes w[0..n]. Forward and explicit here. Top-down (n-1 .. 0) so
+    // an in-place call reads u[i]/u[i-1] before either has been
+    // overwritten -- each iteration only ever writes index i, and the
+    // next iteration's reads are i-1 and i-2.
+    // SAFETY: caller guarantees `up` readable for `usize_` limbs.
+    let retval = unsafe { *up.add(n - 1) } >> sh_2;
 
-    for i in (1..n).rev() {
-        w[i] = (u[i] << sh_1) | (u[i - 1] >> sh_2);
+    let mut i = n - 1;
+    while i >= 1 {
+        // SAFETY: caller guarantees `up` readable and `wp` writable for
+        // `usize_` limbs; `i` and `i - 1` are both in range.
+        let (hi, lo) = unsafe { (*up.add(i), *up.add(i - 1)) };
+        unsafe { *wp.add(i) = (hi << sh_1) | (lo >> sh_2) };
+        i -= 1;
     }
-    w[0] = u[0] << sh_1;
+    // SAFETY: as above, index 0.
+    unsafe { *wp = (*up) << sh_1 };
 
     retval
 }
@@ -263,22 +262,23 @@ pub unsafe extern "C" fn mpihelp_rshift(
     cnt: core::ffi::c_uint,
 ) -> Limb {
     let n = usize_ as usize;
-    // SAFETY: as above.
-    let (w, u) = unsafe {
-        (
-            core::slice::from_raw_parts_mut(wp, n),
-            core::slice::from_raw_parts(up, n),
-        )
-    };
     let sh_1 = cnt;
     let sh_2 = LIMB_BITS - sh_1;
 
-    let retval = u[0] << sh_2;
+    // As mpihelp_lshift: raw-pointer reads/writes only, no live slice
+    // references, since `wp` may equal `up`. Bottom-up (0 .. n-1) so an
+    // in-place call reads u[i]/u[i+1] before either has been overwritten.
+    // SAFETY: caller guarantees `up` readable for `usize_` limbs.
+    let retval = unsafe { *up } << sh_2;
 
     for i in 0..n - 1 {
-        w[i] = (u[i] >> sh_1) | (u[i + 1] << sh_2);
+        // SAFETY: caller guarantees `up` readable and `wp` writable for
+        // `usize_` limbs; `i` and `i + 1` are both in range.
+        let (lo, hi) = unsafe { (*up.add(i), *up.add(i + 1)) };
+        unsafe { *wp.add(i) = (lo >> sh_1) | (hi << sh_2) };
     }
-    w[n - 1] = u[n - 1] >> sh_1;
+    // SAFETY: as above, index n - 1.
+    unsafe { *wp.add(n - 1) = *up.add(n - 1) >> sh_1 };
 
     retval
 }

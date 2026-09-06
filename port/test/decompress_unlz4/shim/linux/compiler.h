@@ -1,0 +1,3 @@
+#ifndef _SHIM_UNLZ4_LINUX_COMPILER_H
+#define _SHIM_UNLZ4_LINUX_COMPILER_H
+#endif

@@ -62,17 +62,41 @@ zstd_compress-y := \
 # symbol's DWARF for GENDWARFKSYMS; a later change can point the call at the
 # Rust body directly and erase the crossing without touching the thunk.
 #
-# decompress/zstd_ddict.c, zstd_decompress.c and zstd_decompress_block.c are
-# still C and unported.
-# CONFIG_RUST=n falls back to the pristine decompress/huf_decompress.c, which
-# is byte-identical to the tarball -- see the note on RAISE 2 below.
+# decompress/zstd_decompress_block.o IS GONE, not renamed -- same lib/union_find
+# shape as huf_decompress.o just above: nm on the pristine .c says zero
+# EXPORT_SYMBOL, so none of its globals carries a MODVERSIONS CRC and none needs
+# a thunk. decompress/zstd_decompress_block_rs.rs defines all five under their
+# own names (ZSTD_decompressBlock_internal, ZSTD_checkContinuity,
+# ZSTD_buildFSETable, ZSTD_getcBlockSize, ZSTD_decodeSeqHeaders <- all called
+# from zstd_decompress.o), and calls back into huf_decompress_rs.rs's own
+# HUF_decompress1X1_DCtx_wksp/HUF_decompress1X_usingDTable/
+# HUF_decompress4X_hufOnly_wksp/HUF_decompress4X_usingDTable directly -- one
+# more internal FFI wall erased, per the zstd Makefile's own convention above.
+#
+# decompress/zstd_ddict.o IS GONE, not renamed -- same lib/union_find shape as
+# every other file in this directory: nm on the pristine .c says zero
+# EXPORT_SYMBOL. decompress/zstd_ddict_rs.rs defines all nine of its C-callable
+# functions under their own names (ZSTD_DDict_dictContent, ZSTD_DDict_dictSize,
+# ZSTD_copyDDictParameters, ZSTD_createDDict[_advanced/_byReference],
+# ZSTD_initStaticDDict, ZSTD_freeDDict, ZSTD_estimateDDictSize,
+# ZSTD_sizeof_DDict, ZSTD_getDictID_fromDDict), all called from
+# zstd_decompress.o (ZSTD_createDDict_advanced/ZSTD_freeDDict also directly
+# from zstd_decompress_module.o), and calls back the other way into
+# ZSTD_loadDEntropy -- currently zstd_decompress.c's, C either way for now,
+# resolving to its Rust body with no thunk whenever that file's own port
+# lands, same as every other cross-file call in this subsystem.
+#
+# zstd_decompress.c is still C and unported (in progress elsewhere).
+# CONFIG_RUST=n falls back to the pristine decompress/huf_decompress.c,
+# decompress/zstd_decompress_block.c and decompress/zstd_ddict.c, all
+# byte-identical to the tarball -- see the note on RAISE 2 below.
 ifdef CONFIG_RUST
 zstd_decompress-y := \
 		zstd_decompress_module.o \
 		decompress/huf_decompress_rs.o \
-		decompress/zstd_ddict.o \
+		decompress/zstd_ddict_rs.o \
 		decompress/zstd_decompress.o \
-		decompress/zstd_decompress_block.o \
+		decompress/zstd_decompress_block_rs.o \
 
 else
 zstd_decompress-y := \

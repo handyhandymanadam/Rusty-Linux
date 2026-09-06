@@ -108,6 +108,9 @@ while IFS= read -r src; do
     # directory the file would normally occupy makes them resolve exactly as
     # they do in a real build -- and to the SAME headers, since the port
     # replaces .c bodies, not headers.
+    # $root, not a hardcoded path: a worktree at a different path has its
+    # own src/linux, and a hardcoded main-checkout path would silently
+    # substitute the WRONG tree's headers -- found by md5-porter, 2026-09-05.
     srcdir="$root/src/linux/$(dirname "$rel")"
     newcmd=$(printf '%s' "$cmd" \
       | sed -E "s#-Wp,-MMD,[^ ]+ # -I$srcdir #" \

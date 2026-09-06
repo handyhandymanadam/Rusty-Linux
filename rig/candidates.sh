@@ -12,8 +12,7 @@
 #
 # Usage: candidates.sh [--list | --excluded]
 set -u
-root=$(cd "$(dirname "$0")/.." && pwd)
-LIB="$root/src/linux/lib"
+LIB=/home/adam/Rusty-Linux/src/linux/lib
 cd "$LIB" || exit 1
 
 # Coupling markers. A file mentioning any of these is reaching outside a buffer.

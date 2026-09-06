@@ -15,10 +15,19 @@
  */
 
 #include <linux/base64.h>
+#include <linux/err.h>
 #include <linux/bsearch.h>
 #include <linux/bcd.h>
 #include <linux/bitrev.h>
 #include <linux/uuid.h>
+#include <linux/buildid.h>
+#include <linux/elf.h>
+#include <linux/mm_types.h>
+#include <linux/shmem_fs.h>
+#include <linux/seq_buf.h>
+#include <linux/seq_file.h>
+#include <linux/fs_struct.h>
+#include <linux/sched.h>
 #include <linux/ctype.h>
 #include <linux/llist.h>
 #include <linux/debug_locks.h>
@@ -26,6 +35,18 @@
 #include <linux/errseq.h>
 #include <crypto/arc4.h>
 #include <crypto/chacha.h>
+#include <crypto/aes.h>
+#include <linux/errname.h>
+#include <linux/dynamic_queue_limits.h>
+#include <linux/ratelimit.h>
+#include <linux/flex_proportions.h>
+#include <linux/interval_tree.h>
+#include <linux/asn1_decoder.h>
+#include <linux/asn1_ber_bytecode.h>
+#include <crypto/hmac.h>
+#include <crypto/md5.h>
+#include <crypto/sha1.h>
+#include <crypto/sha2.h>
 #include <crypto/utils.h>
 #include <linux/crc-ccitt.h>
 #include <linux/crc16.h>
@@ -68,6 +89,40 @@ unsigned long mpihelp_sub_n(unsigned long *r, const unsigned long *a, const unsi
 unsigned long mpihelp_lshift(unsigned long *w, const unsigned long *u, int n, unsigned int cnt);
 unsigned long mpihelp_rshift(unsigned long *w, const unsigned long *u, int n, unsigned int cnt);
 int mpihelp_cmp(const unsigned long *a, const unsigned long *b, int n);
+
+/* lib/crypto/mpi/{mpiutil,mpi_add,mpi_sub_ui}_rs.rs. include/linux/mpi.h
+ * is not included here (it pulls in scatterlist.h for the wider MPI API),
+ * so the struct and the handful of entry points this file exercises are
+ * declared directly -- same convention as the mpihelp_* block above. */
+struct gcry_mpi {
+	int alloced;
+	int nlimbs;
+	int nbits;
+	int sign;
+	unsigned flags;
+	unsigned long *d;
+};
+typedef struct gcry_mpi *MPI;
+MPI mpi_alloc(unsigned nlimbs);
+void mpi_free(MPI a);
+int mpi_add(MPI w, MPI u, MPI v);
+int mpi_sub(MPI w, MPI u, MPI v);
+int mpi_addm(MPI w, MPI u, MPI v, MPI m);
+int mpi_subm(MPI w, MPI u, MPI v, MPI m);
+int mpi_sub_ui(MPI w, MPI u, unsigned long vval);
+/* lib/crypto/mpi/{mpi-mul,mpi-pow}.c -- still C, EXPORT_SYMBOL_GPL'd, and
+ * the only callers of lib/crypto/mpi/mpih_mul_rs.rs's real symbols. */
+int mpi_mul(MPI w, MPI u, MPI v);
+int mpi_powm(MPI res, MPI base, MPI exp, MPI mod);
+/* lib/crypto/mpi/mpi_bit_rs.rs. */
+unsigned mpi_get_nbits(MPI a);
+int mpi_test_bit(MPI a, unsigned int n);
+int mpi_set_bit(MPI a, unsigned int n);
+int mpi_rshift(MPI x, MPI a, unsigned int n);
+/* lib/crypto/mpi/mpicoder_rs.rs. */
+MPI mpi_read_from_buffer(const void *xbuffer, unsigned int *ret_nread);
+int mpi_read_buffer(MPI a, u8 *buf, unsigned int buf_len, unsigned int *nbytes, int *sign);
+void *mpi_get_buffer(MPI a, unsigned int *nbytes, int *sign);
 #endif
 
 static unsigned int passed __initdata, failed __initdata;
@@ -521,6 +576,101 @@ static void __init test_bsearch(void)
 	      "bsearch of an empty array");
 }
 
+/*
+ * lib/find_bit.c -> find_bit_rs.rs. No Kconfig guard -- always built,
+ * always reached by real callers (cpumask/bitmap iteration) -- but every
+ * exported entry point is exercised directly here anyway, since the real
+ * callers this boot config takes rarely touch the AND/ANDNOT/multi-word
+ * or nth-bit paths. `size` is always a runtime value (an on-stack
+ * `volatile`-read count), so every call goes through the exported
+ * `_find_*`/`__find_nth_*` symbols rather than the header's
+ * small_const_nbits() compile-time fast path.
+ */
+static void __init test_find_bit(void)
+{
+	/* bits: 3, 10, 65, 130 set, spanning three 64-bit words. */
+	static const unsigned long bits[3] __initconst = {
+		(1UL << 3) | (1UL << 10), 1UL << 1, 1UL << 2,
+	};
+	static const unsigned long ones[3] __initconst = { ~0UL, ~0UL, ~0UL };
+	static const unsigned long zero[3] __initconst = { 0, 0, 0 };
+	static const unsigned long one_bit[3] __initconst = { 1UL << 3, 0, 0 };
+	volatile unsigned int n = 192;
+	unsigned long clump;
+
+	check(find_first_bit(bits, n) == 3, "find_first_bit finds bit 3");
+	check(find_first_bit(zero, n) == n, "find_first_bit of all-zero is size");
+	check(find_first_and_bit(bits, ones, n) == 3,
+	      "find_first_and_bit(bits, all-ones) finds bit 3");
+	check(find_first_and_bit(bits, zero, n) == n,
+	      "find_first_and_bit(bits, all-zero) is size");
+	check(find_first_andnot_bit(bits, zero, n) == 3,
+	      "find_first_andnot_bit(bits, all-zero) finds bit 3");
+	check(find_first_andnot_bit(bits, bits, n) == n,
+	      "find_first_andnot_bit(bits, bits) is size");
+	check(find_first_and_and_bit(bits, ones, ones, n) == 3,
+	      "find_first_and_and_bit finds bit 3 through two all-ones masks");
+	check(find_first_zero_bit(bits, n) == 0,
+	      "find_first_zero_bit finds bit 0 (bit 3 is the first SET bit)");
+	check(find_first_zero_bit(ones, n) == n,
+	      "find_first_zero_bit of all-ones is size");
+
+	check(find_next_bit(bits, n, 4) == 10, "find_next_bit(.., 4) finds bit 10");
+	check(find_next_bit(bits, n, 11) == 65, "find_next_bit(.., 11) crosses a word to bit 65");
+	check(find_next_bit(bits, n, 131) == n, "find_next_bit past the last set bit is size");
+	check(find_next_and_bit(bits, ones, n, 4) == 10,
+	      "find_next_and_bit(.., ones, 4) finds bit 10");
+	check(find_next_andnot_bit(bits, zero, n, 4) == 10,
+	      "find_next_andnot_bit(.., zero, 4) finds bit 10");
+	check(find_next_or_bit(zero, bits, n, 4) == 10,
+	      "find_next_or_bit(zero, bits, 4) finds bit 10");
+	check(find_next_zero_bit(bits, n, 3) == 4,
+	      "find_next_zero_bit(.., 3) finds bit 4 (bit 3 itself is set)");
+
+	check(find_nth_bit(bits, n, 0) == 3, "find_nth_bit(.., 0) is the 1st set bit");
+	check(find_nth_bit(bits, n, 1) == 10, "find_nth_bit(.., 1) is the 2nd set bit");
+	check(find_nth_bit(bits, n, 3) == 130, "find_nth_bit(.., 3) is the 4th (last) set bit");
+	/*
+	 * NOT `n` (192)! When `size` is an exact multiple of BITS_PER_LONG,
+	 * upstream's FIND_NTH_BIT macro falls out of its loop straight into
+	 * `sz = idx * BITS_PER_LONG + fns(tmp, nr)` using `tmp` and `nr`
+	 * exactly as the last full-word iteration left them (nr=0, tmp=the
+	 * last word), with no final range check -- so an out-of-range `n`
+	 * that exhausts precisely on a word boundary returns idx*64 +
+	 * fns(last_word, 0), not `size`. Confirmed against the real pristine
+	 * C directly (not assumed): __find_nth_bit(bits, 192, 4) == 194.
+	 * A genuinely odd upstream corner case, faithfully reproduced --
+	 * see logs/porting-hazards.md.
+	 */
+	check(find_nth_bit(bits, n, 4) == 194,
+	      "find_nth_bit(.., 4) hits the word-boundary quirk: 194, not size");
+	check(find_nth_and_bit(bits, ones, n, 1) == 10,
+	      "find_nth_and_bit(.., ones, 1) is the 2nd set bit");
+	check(__find_nth_andnot_bit(bits, zero, n, 1) == 10,
+	      "__find_nth_andnot_bit(.., zero, 1) is the 2nd set bit");
+	check(find_nth_and_andnot_bit(bits, ones, zero, n, 1) == 10,
+	      "find_nth_and_andnot_bit(.., ones, zero, 1) is the 2nd set bit");
+
+	check(find_last_bit(bits, n) == 130, "find_last_bit finds bit 130");
+	check(find_last_bit(zero, n) == n, "find_last_bit of all-zero is size");
+	check(find_last_bit(bits, 4) == 3,
+	      "find_last_bit with size=4 stops before bit 10");
+
+	clump = 0xAA;
+	check(find_next_clump8(&clump, bits, n, 0) == 0 && clump == (1 << 3),
+	      "find_next_clump8 at offset 0 returns byte 0's clump {bit 3}");
+	clump = 0xAA;
+	check(find_next_clump8(&clump, bits, n, 8) == 8 && clump == (1 << 2),
+	      "find_next_clump8 at offset 8 returns byte 1's clump {bit 10}");
+	clump = 0xAA;
+	check(find_next_clump8(&clump, zero, n, 0) == n,
+	      "find_next_clump8 of all-zero is size (clump left untouched)");
+
+	check(find_random_bit(zero, n) == n, "find_random_bit of all-zero is size");
+	check(find_random_bit(one_bit, n) == 3,
+	      "find_random_bit with exactly one set bit returns it (weight-1 case)");
+}
+
 /* Each element carries the index it was created at, so STABILITY can be
  * checked rather than assumed: equal keys must come out in their original
  * order. A merge sort that lost stability would still be sorted. */
@@ -903,6 +1053,144 @@ static void __init test_crc_ccitt(void)
 static void __init test_crc_ccitt(void) { }
 #endif
 
+#if IS_ENABLED(CONFIG_CRC32)
+#include <linux/crc32.h>
+
+/*
+ * crc32_le_base()/crc32_be_base()/crc32c_base() -- lib/crc/crc32_main_rs.rs
+ * -- have no EXPORT_SYMBOL and no public header declaration (see that
+ * file's module doc). Declared extern here for the table-COVERAGE checks
+ * below only, which need the exact ported function regardless of what this
+ * CPU's dispatch would otherwise choose -- unlike crc16.c's/crc-ccitt.c's
+ * own symbols (both EXPORT_SYMBOL, reached via their public header), so
+ * that precedent doesn't actually apply here (found by review: adversary,
+ * 2026-09-06).
+ *
+ * CORRECTION, 2026-09-06: the note that used to stand here -- "this still
+ * links because libtest.o and crc32-main.o both land in the same vmlinux
+ * built-in.a in both configs" -- was never actually checked against a link,
+ * and is wrong for CONFIG_RUST=n. There, crc32-main_norust.o is what lands
+ * in built-in.a, and upstream declares these three `static inline`: no
+ * external symbol is emitted for `extern` here to bind to, so a norust
+ * vmlinux link fails with "undefined symbol". Found by finally running that
+ * link (RAISE 2, logs/floor.md) rather than trusting the prior claim -- see
+ * CLAUDE.md, "verify by reading state, never by trusting the action". The
+ * _base-only checks below are CONFIG_RUST-only for that reason; the
+ * catalogue checks just below, which go through the public API, are not.
+ *
+ * The catalogue check below calls the PUBLIC crc32_le()/crc32_be() instead
+ * of the _base symbols, on purpose: crc32_be_arch is #defined straight to
+ * crc32_be_base on x86 (crc32.h has no BE assembly at all), and crc32_le's
+ * 9-byte catalogue vector is under CRC_PCLMUL's 16-byte SIMD threshold
+ * regardless of this CPU's features, so the public entry point is
+ * GUARANTEED to reach this port for both -- strictly stronger evidence than
+ * calling the _base symbol directly, and it exercises the real dispatch
+ * wrapper too, in BOTH configs. crc32c_arch has no such guarantee (it
+ * dispatches to real SSE4.2 CRC32 instructions whenever this CPU has them,
+ * unconditionally on length); its _base-only check below is guarded the
+ * same way as the le/be ones.
+ */
+#ifdef CONFIG_RUST
+extern u32 crc32_le_base(u32 crc, const u8 *p, size_t len);
+extern u32 crc32_be_base(u32 crc, const u8 *p, size_t len);
+extern u32 crc32c_base(u32 crc, const u8 *p, size_t len);
+#endif
+
+static void __init test_crc32(void)
+{
+	static const u8 check123[] __initconst = "123456789";
+	u8 buf[256];
+	unsigned int i;
+
+	/*
+	 * Published catalogue check values for "123456789" -- from the
+	 * catalogue, not our own table, so a wrong generated table cannot
+	 * agree with it by construction:
+	 *   CRC-32/ISO-HDLC   (crc32_le, poly 0xedb88320) -> 0xCBF43926
+	 *   CRC-32/BZIP2      (crc32_be, poly 0x04c11db7) -> 0xFC891918
+	 *   CRC-32C/ISCSI     (crc32c,   poly 0x82f63b78) -> 0xE3069283
+	 * Cross-checked independently (not taken on trust): crc32_le's
+	 * value matches Python's zlib.crc32, a from-scratch source outside
+	 * this project; the be/c values were verified against a bit-level
+	 * reference CRC implementation written for this check, cross-
+	 * validated against zlib on the le case first (also independently
+	 * reproduced by review: adversary, 2026-09-06).
+	 *
+	 * le/be go through the public crc32_le()/crc32_be() -- seed ~0,
+	 * complemented at the end, their own normal calling convention --
+	 * which reaches this port's crc32_le_base()/crc32_be_base() with
+	 * certainty on this input (see the extern comment above) and so
+	 * proves the production dispatch path, not just the port in
+	 * isolation. Runs in both configs: crc32_le()/crc32_be() are the
+	 * public API either way.
+	 */
+	check((crc32_le(0xFFFFFFFF, check123, 9) ^ 0xFFFFFFFF) == 0xCBF43926,
+	      "crc32_le(\"123456789\") == 0xCBF43926 (CRC-32/ISO-HDLC)");
+	check((crc32_be(0xFFFFFFFF, check123, 9) ^ 0xFFFFFFFF) == 0xFC891918,
+	      "crc32_be(\"123456789\") == 0xFC891918 (CRC-32/BZIP2)");
+
+#ifdef CONFIG_RUST
+	/*
+	 * Everything below calls the _base symbols directly, which only
+	 * exist as external symbols in the CONFIG_RUST arm (see the extern
+	 * comment above) -- upstream's CONFIG_RUST=n crc32-main_norust.c
+	 * declares them `static inline`.
+	 */
+	check((crc32c_base(0xFFFFFFFF, check123, 9) ^ 0xFFFFFFFF) == 0xE3069283,
+	      "crc32c_base(\"123456789\") == 0xE3069283 (CRC-32C/ISCSI)");
+
+	check(crc32_le_base(0, buf, 0) == 0, "crc32_le_base of nothing is the seed");
+	check(crc32_le_base(0x1234, buf, 0) == 0x1234, "crc32_le_base of nothing keeps the seed");
+	check(crc32_be_base(0x1234, buf, 0) == 0x1234, "crc32_be_base of nothing keeps the seed");
+	check(crc32c_base(0x1234, buf, 0) == 0x1234, "crc32c_base of nothing keeps the seed");
+
+	/*
+	 * Every single byte, seed 0, XORed together. A zero-seed CRC is
+	 * GF(2)-linear (crc(x) = XOR of tab[1<<k] over x's set bits), and
+	 * each tab[1<<k] entry appears in exactly 128 of the 256 possible
+	 * one-byte inputs -- an even count -- so this XORs to zero
+	 * regardless of the POLYNOMIAL, for any correctly linear table.
+	 * Proves COVERAGE of all 256 entries in each of the three tables
+	 * (const fn-generated in the Rust, not transcribed) and catches a
+	 * corrupted entry; the catalogue check values above are what
+	 * prove correctness against an outside source.
+	 */
+	{
+		u32 xor_le = 0, xor_be = 0, xor_c = 0;
+
+		for (i = 0; i < 256; i++) {
+			u8 one = (u8)i;
+
+			xor_le ^= crc32_le_base(0, &one, 1);
+			xor_be ^= crc32_be_base(0, &one, 1);
+			xor_c  ^= crc32c_base(0, &one, 1);
+		}
+		check(xor_le == 0, "crc32_le_base of every single byte XORs to zero");
+		check(xor_be == 0, "crc32_be_base of every single byte XORs to zero");
+		check(xor_c == 0, "crc32c_base of every single byte XORs to zero");
+	}
+
+	/*
+	 * A 256-byte buffer is well past CRC_PCLMUL's 16-byte threshold, so
+	 * this table-coverage check goes through the _base symbols
+	 * directly rather than the public API -- through crc32_le()/
+	 * crc32_be() on real SIMD-capable hardware this would exercise the
+	 * assembly, not the port.
+	 */
+	for (i = 0; i < sizeof(buf); i++)
+		buf[i] = (u8)i;
+	check(crc32_le_base(0, buf, 256) == 0x2493092b, "crc32_le_base(0, 0x00..0xff, 256)");
+	check(crc32_be_base(0, buf, 256) == 0xac148725, "crc32_be_base(0, 0x00..0xff, 256)");
+	check(crc32c_base(0, buf, 256) == 0x2436a9db, "crc32c_base(0, 0x00..0xff, 256)");
+#else
+	(void)i;
+	(void)buf;
+#endif
+}
+#else
+static void __init test_crc32(void) { }
+#endif
+
 #if IS_ENABLED(CONFIG_CRYPTO_LIB_ARC4)
 static void __init test_arc4(void)
 {
@@ -1036,6 +1324,140 @@ static void __init test_chacha(void)
 	      "hchacha output is not the head of a chacha block");
 }
 
+#if IS_ENABLED(CONFIG_CRYPTO_LIB_MD5)
+/*
+ * lib/crypto/md5.c -> md5_rs.rs. CONFIG_CRYPTO_LIB_MD5 is config-full only
+ * (config-fast never enables it) and CONFIG_KUNIT is config-fast only, so
+ * unlike siphash/blake2s this module can never get a KUnit proof caller --
+ * this libtest.c vector set is the whole of criterion 5 for it. Values from
+ * RFC 1321 (MD5) and RFC 2202 (HMAC-MD5), reproduced independently with
+ * Python's hashlib/hmac rather than hand-computed -- published outside this
+ * tree, so a mistranslation wrong in the same way in both places could not
+ * agree with them.
+ */
+static void __init test_md5(void)
+{
+	static const u8 abc[3] __initconst = { 'a', 'b', 'c' };
+	static const u8 msgdigest[14] __initconst =
+		"message digest"; /* string init into a u8[], not a char* arg -- avoids
+				    * a signed/unsigned pointer mismatch against md5()'s
+				    * `const u8 *data`. */
+	static const u8 want_empty[MD5_DIGEST_SIZE] __initconst = {
+		0xd4, 0x1d, 0x8c, 0xd9, 0x8f, 0x00, 0xb2, 0x04,
+		0xe9, 0x80, 0x09, 0x98, 0xec, 0xf8, 0x42, 0x7e,
+	};
+	static const u8 want_abc[MD5_DIGEST_SIZE] __initconst = {
+		0x90, 0x01, 0x50, 0x98, 0x3c, 0xd2, 0x4f, 0xb0,
+		0xd6, 0x96, 0x3f, 0x7d, 0x28, 0xe1, 0x7f, 0x72,
+	};
+	static const u8 want_msgdigest[MD5_DIGEST_SIZE] __initconst = {
+		0xf9, 0x6b, 0x69, 0x7d, 0x7c, 0xb7, 0x93, 0x8d,
+		0x52, 0x5a, 0x2f, 0x31, 0xaa, 0xf1, 0x61, 0xd0,
+	};
+	/* 64 'a's: exactly one block, so the second call in the loop below
+	 * lands exactly on the boundary a wrong accounting breaks. */
+	static const u8 want_64a[MD5_DIGEST_SIZE] __initconst = {
+		0x01, 0x48, 0x42, 0xd4, 0x80, 0xb5, 0x71, 0x49,
+		0x5a, 0x4a, 0x03, 0x63, 0x79, 0x3f, 0x73, 0x67,
+	};
+	static const u8 sixty_four_a[64] __initconst = {
+		[0 ... 63] = 'a',
+	};
+	struct md5_ctx ctx;
+	u8 out[MD5_DIGEST_SIZE];
+	unsigned int i;
+
+	md5(NULL, 0, out);
+	check(!memcmp(out, want_empty, sizeof(out)), "md5(\"\") matches RFC 1321");
+
+	md5(abc, sizeof(abc), out);
+	check(!memcmp(out, want_abc, sizeof(out)), "md5(\"abc\") matches RFC 1321");
+
+	md5(msgdigest, sizeof(msgdigest), out);
+	check(!memcmp(out, want_msgdigest, sizeof(out)),
+	      "md5(\"message digest\") matches RFC 1321");
+
+	/* Same input as the one-shot "abc" case, but fed one byte at a time,
+	 * to catch a partial-block accounting bug a whole-buffer call would
+	 * not reach. */
+	md5_init(&ctx);
+	for (i = 0; i < sizeof(abc); i++)
+		md5_update(&ctx, &abc[i], 1);
+	md5_final(&ctx, out);
+	check(!memcmp(out, want_abc, sizeof(out)),
+	      "md5_update() one byte at a time matches the one-shot call");
+
+	/* 64 'a's fed one byte at a time: the last update lands exactly on
+	 * the block boundary, exercising md5_final()'s "the buffer is
+	 * completely full" padding path. */
+	md5_init(&ctx);
+	for (i = 0; i < sizeof(sixty_four_a); i++)
+		md5_update(&ctx, &sixty_four_a[i], 1);
+	md5_final(&ctx, out);
+	check(!memcmp(out, want_64a, sizeof(out)),
+	      "md5() of 64 bytes fed one at a time crosses the block boundary correctly");
+}
+
+/*
+ * lib/crypto/md5.c's HMAC entry points. RFC 2202 case 1 (a short raw key)
+ * and case 6 (a key LONGER than the block size, which is the only path that
+ * exercises hmac_md5_preparekey()'s internal md5() fallback) -- both
+ * independently reproduced with Python's hmac module.
+ */
+static void __init test_hmac_md5(void)
+{
+	static const u8 key1[16] __initconst = {
+		0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b,
+		0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b,
+	};
+	static const u8 want1[MD5_DIGEST_SIZE] __initconst = {
+		0x92, 0x94, 0x72, 0x7a, 0x36, 0x38, 0xbb, 0x1c,
+		0x13, 0xf4, 0x8e, 0xf8, 0x15, 0x8b, 0xfc, 0x9d,
+	};
+	static const u8 key6[80] __initconst = {
+		[0 ... 79] = 0xaa,
+	};
+	static const u8 want6[MD5_DIGEST_SIZE] __initconst = {
+		0x6b, 0x1a, 0xb7, 0xfe, 0x4b, 0xd7, 0xbf, 0x8f,
+		0x0b, 0x62, 0xe6, 0xce, 0x61, 0xb9, 0xd0, 0xcd,
+	};
+	static const u8 data1[8] __initconst = "Hi There";
+	/* 54 bytes, RFC 2202's own length -- sized from the string itself
+	 * rather than a literal count, so a stray trailing NUL byte (an
+	 * explicit size one larger than the true length would silently
+	 * include it as message data) cannot creep back in. */
+	static const u8 data6[] __initconst =
+		"Test Using Larger Than Block-Size Key - Hash Key First";
+	enum { DATA6_LEN = sizeof(data6) - 1 };
+	struct hmac_md5_key prepared;
+	struct hmac_md5_ctx ctx;
+	u8 out[MD5_DIGEST_SIZE];
+
+	/* Case 1, via the prepared-key entry points. */
+	hmac_md5_preparekey(&prepared, key1, sizeof(key1));
+	hmac_md5_init(&ctx, &prepared);
+	hmac_md5_update(&ctx, data1, sizeof(data1));
+	hmac_md5_final(&ctx, out);
+	check(!memcmp(out, want1, sizeof(out)),
+	      "hmac_md5() (prepared key) matches RFC 2202 case 1");
+
+	/* Same case, via the one-shot raw-key entry point. */
+	hmac_md5_usingrawkey(key1, sizeof(key1), data1, sizeof(data1), out);
+	check(!memcmp(out, want1, sizeof(out)),
+	      "hmac_md5_usingrawkey() matches RFC 2202 case 1");
+
+	/* Case 6: an 80-byte key is longer than MD5_BLOCK_SIZE (64), so
+	 * preparing it must itself hash the key down with md5() first --
+	 * the one path in this file that calls md5() from inside HMAC. */
+	hmac_md5_usingrawkey(key6, sizeof(key6), data6, DATA6_LEN, out);
+	check(!memcmp(out, want6, sizeof(out)),
+	      "hmac_md5_usingrawkey() matches RFC 2202 case 6 (key > block size)");
+}
+#else
+static void __init test_md5(void) { }
+static void __init test_hmac_md5(void) { }
+#endif
+
 #if IS_ENABLED(CONFIG_CRYPTO_LIB_UTILS)
 static void __init test_crypto_xor(void)
 {
@@ -1152,6 +1574,1150 @@ static void __init test_memneq(void)
 #else
 static void __init test_crypto_xor(void) { }
 static void __init test_memneq(void) { }
+#endif
+
+#if IS_ENABLED(CONFIG_CRYPTO_LIB_SHA512)
+/*
+ * lib/crypto/sha512.c -> sha512_rs.rs. CONFIG_CRYPTO_LIB_SHA512 is
+ * config-full only (config-fast never enables it) and CONFIG_KUNIT is
+ * config-fast only -- findings.md #11 records why config-full must never
+ * carry it (2,146 exported-symbol CRCs move when it does, none of them
+ * this port's). So unlike siphash/blake2s, this module can never get a
+ * KUnit proof caller; this is the whole of criterion 5 for it, same
+ * reasoning as test_md5() above this one gets for the same reason.
+ *
+ * Values reproduced independently with Python's hashlib/hmac, not
+ * hand-computed or copied from this file's own C reference -- a
+ * mistranslation wrong in the same way in both places could not agree
+ * with an independent computation.
+ */
+static void __init test_sha512(void)
+{
+	static const u8 nist2block[] __initconst =
+		"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
+	u8 out384[SHA384_DIGEST_SIZE], out512[SHA512_DIGEST_SIZE];
+
+	static const u8 want384_empty[SHA384_DIGEST_SIZE] __initconst = {
+		0x38, 0xb0, 0x60, 0xa7, 0x51, 0xac, 0x96, 0x38, 0x4c, 0xd9, 0x32, 0x7e, 0xb1, 0xb1, 0xe3, 0x6a,
+		0x21, 0xfd, 0xb7, 0x11, 0x14, 0xbe, 0x07, 0x43, 0x4c, 0x0c, 0xc7, 0xbf, 0x63, 0xf6, 0xe1, 0xda,
+		0x27, 0x4e, 0xde, 0xbf, 0xe7, 0x6f, 0x65, 0xfb, 0xd5, 0x1a, 0xd2, 0xf1, 0x48, 0x98, 0xb9, 0x5b,
+	};
+	static const u8 want512_empty[SHA512_DIGEST_SIZE] __initconst = {
+		0xcf, 0x83, 0xe1, 0x35, 0x7e, 0xef, 0xb8, 0xbd, 0xf1, 0x54, 0x28, 0x50, 0xd6, 0x6d, 0x80, 0x07,
+		0xd6, 0x20, 0xe4, 0x05, 0x0b, 0x57, 0x15, 0xdc, 0x83, 0xf4, 0xa9, 0x21, 0xd3, 0x6c, 0xe9, 0xce,
+		0x47, 0xd0, 0xd1, 0x3c, 0x5d, 0x85, 0xf2, 0xb0, 0xff, 0x83, 0x18, 0xd2, 0x87, 0x7e, 0xec, 0x2f,
+		0x63, 0xb9, 0x31, 0xbd, 0x47, 0x41, 0x7a, 0x81, 0xa5, 0x38, 0x32, 0x7a, 0xf9, 0x27, 0xda, 0x3e,
+	};
+	static const u8 want384_abc[SHA384_DIGEST_SIZE] __initconst = {
+		0xcb, 0x00, 0x75, 0x3f, 0x45, 0xa3, 0x5e, 0x8b, 0xb5, 0xa0, 0x3d, 0x69, 0x9a, 0xc6, 0x50, 0x07,
+		0x27, 0x2c, 0x32, 0xab, 0x0e, 0xde, 0xd1, 0x63, 0x1a, 0x8b, 0x60, 0x5a, 0x43, 0xff, 0x5b, 0xed,
+		0x80, 0x86, 0x07, 0x2b, 0xa1, 0xe7, 0xcc, 0x23, 0x58, 0xba, 0xec, 0xa1, 0x34, 0xc8, 0x25, 0xa7,
+	};
+	static const u8 want512_abc[SHA512_DIGEST_SIZE] __initconst = {
+		0xdd, 0xaf, 0x35, 0xa1, 0x93, 0x61, 0x7a, 0xba, 0xcc, 0x41, 0x73, 0x49, 0xae, 0x20, 0x41, 0x31,
+		0x12, 0xe6, 0xfa, 0x4e, 0x89, 0xa9, 0x7e, 0xa2, 0x0a, 0x9e, 0xee, 0xe6, 0x4b, 0x55, 0xd3, 0x9a,
+		0x21, 0x92, 0x99, 0x2a, 0x27, 0x4f, 0xc1, 0xa8, 0x36, 0xba, 0x3c, 0x23, 0xa3, 0xfe, 0xeb, 0xbd,
+		0x45, 0x4d, 0x44, 0x23, 0x64, 0x3c, 0xe8, 0x0e, 0x2a, 0x9a, 0xc9, 0x4f, 0xa5, 0x4c, 0xa4, 0x9f,
+	};
+	static const u8 want384_nist2block[SHA384_DIGEST_SIZE] __initconst = {
+		0x33, 0x91, 0xfd, 0xdd, 0xfc, 0x8d, 0xc7, 0x39, 0x37, 0x07, 0xa6, 0x5b, 0x1b, 0x47, 0x09, 0x39,
+		0x7c, 0xf8, 0xb1, 0xd1, 0x62, 0xaf, 0x05, 0xab, 0xfe, 0x8f, 0x45, 0x0d, 0xe5, 0xf3, 0x6b, 0xc6,
+		0xb0, 0x45, 0x5a, 0x85, 0x20, 0xbc, 0x4e, 0x6f, 0x5f, 0xe9, 0x5b, 0x1f, 0xe3, 0xc8, 0x45, 0x2b,
+	};
+	static const u8 want512_nist2block[SHA512_DIGEST_SIZE] __initconst = {
+		0x20, 0x4a, 0x8f, 0xc6, 0xdd, 0xa8, 0x2f, 0x0a, 0x0c, 0xed, 0x7b, 0xeb, 0x8e, 0x08, 0xa4, 0x16,
+		0x57, 0xc1, 0x6e, 0xf4, 0x68, 0xb2, 0x28, 0xa8, 0x27, 0x9b, 0xe3, 0x31, 0xa7, 0x03, 0xc3, 0x35,
+		0x96, 0xfd, 0x15, 0xc1, 0x3b, 0x1b, 0x07, 0xf9, 0xaa, 0x1d, 0x3b, 0xea, 0x57, 0x78, 0x9c, 0xa0,
+		0x31, 0xad, 0x85, 0xc7, 0xa7, 0x1d, 0xd7, 0x03, 0x54, 0xec, 0x63, 0x12, 0x38, 0xca, 0x34, 0x45,
+	};
+
+	sha384(NULL, 0, out384);
+	check(!memcmp(out384, want384_empty, sizeof(out384)), "sha384(\"\") matches the independent digest");
+	sha512(NULL, 0, out512);
+	check(!memcmp(out512, want512_empty, sizeof(out512)), "sha512(\"\") matches the independent digest");
+
+	sha384("abc", 3, out384);
+	check(!memcmp(out384, want384_abc, sizeof(out384)), "sha384(\"abc\") matches the independent digest");
+	sha512("abc", 3, out512);
+	check(!memcmp(out512, want512_abc, sizeof(out512)), "sha512(\"abc\") matches the independent digest");
+
+	sha384(nist2block, sizeof(nist2block) - 1, out384);
+	check(!memcmp(out384, want384_nist2block, sizeof(out384)),
+	      "sha384 of the NIST two-block vector matches the independent digest");
+	sha512(nist2block, sizeof(nist2block) - 1, out512);
+	check(!memcmp(out512, want512_nist2block, sizeof(out512)),
+	      "sha512 of the NIST two-block vector matches the independent digest");
+
+	/* Incremental in two pieces, split mid-message: catches a carry or
+	 * partial-block bug a one-shot call cannot. */
+	{
+		struct sha512_ctx ctx;
+
+		sha512_init(&ctx);
+		sha512_update(&ctx, nist2block, 30);
+		sha512_update(&ctx, nist2block + 30, sizeof(nist2block) - 1 - 30);
+		sha512_final(&ctx, out512);
+		check(!memcmp(out512, want512_nist2block, sizeof(out512)),
+		      "sha512 incremental, split mid-message, matches the one-shot digest");
+	}
+
+	/* HMAC with a key past SHA512_BLOCK_SIZE -- exercises
+	 * hmac_preparekey()'s over-length-key hashing path, the one branch
+	 * the ordinary one-shot vectors above never reach. */
+	{
+		u8 keybuf[200];
+		static const u8 data[] __initconst =
+			"Sample message for keylen>blocklen, a rather long one indeed";
+		static const u8 want_hmac384[SHA384_DIGEST_SIZE] __initconst = {
+			0xae, 0xe2, 0x2c, 0xcf, 0x22, 0xb6, 0x9c, 0x53, 0xe4, 0x6e, 0x72, 0x99, 0xc4, 0x6c, 0xfe, 0x31,
+			0xa1, 0xc9, 0x69, 0x20, 0xef, 0xdd, 0xb9, 0x00, 0x24, 0x8b, 0xf6, 0x31, 0xbe, 0x8c, 0xa0, 0x0c,
+			0x77, 0x9d, 0xaf, 0xe2, 0xd1, 0x12, 0xc4, 0x44, 0x1f, 0xa6, 0x7f, 0x8e, 0x22, 0x96, 0x6b, 0xb7,
+		};
+		static const u8 want_hmac512[SHA512_DIGEST_SIZE] __initconst = {
+			0xe7, 0xef, 0xcc, 0x1e, 0x43, 0x8d, 0x3c, 0xb7, 0x1d, 0xd0, 0x17, 0xad, 0x18, 0x99, 0x75, 0x4e,
+			0xd0, 0xfd, 0xf6, 0x8a, 0xd9, 0x40, 0xe4, 0x7e, 0x33, 0x8a, 0x34, 0x53, 0x39, 0xcf, 0xd7, 0x5c,
+			0x59, 0x4b, 0xfe, 0xb2, 0x19, 0xf4, 0xa9, 0x09, 0x1d, 0x68, 0x95, 0x04, 0x49, 0x3a, 0x55, 0x7f,
+			0x30, 0x12, 0x0a, 0xb8, 0x84, 0x71, 0xfb, 0xd8, 0x94, 0x0a, 0x26, 0x32, 0x37, 0xf6, 0xaa, 0x09,
+		};
+		unsigned int i;
+
+		for (i = 0; i < sizeof(keybuf); i++)
+			keybuf[i] = (u8)i;
+
+		hmac_sha384_usingrawkey(keybuf, sizeof(keybuf), data, sizeof(data) - 1, out384);
+		check(!memcmp(out384, want_hmac384, sizeof(out384)),
+		      "hmac_sha384 with a >blocklen key matches the independent digest");
+		hmac_sha512_usingrawkey(keybuf, sizeof(keybuf), data, sizeof(data) - 1, out512);
+		check(!memcmp(out512, want_hmac512, sizeof(out512)),
+		      "hmac_sha512 with a >blocklen key matches the independent digest");
+	}
+}
+#else
+static void __init test_sha512(void) { }
+#endif
+
+#if IS_ENABLED(CONFIG_CRYPTO_LIB_SHA1)
+/*
+ * lib/crypto/sha1.c -> sha1_rs.rs. Same reasoning as test_sha512() just
+ * above: CONFIG_CRYPTO_LIB_SHA1 is config-full only, CONFIG_KUNIT is
+ * config-fast only, so this is the whole of criterion 5 for it. Values
+ * reproduced independently with Python's hashlib/hmac.
+ */
+static void __init test_sha1(void)
+{
+	u8 out[SHA1_DIGEST_SIZE];
+
+	static const u8 want_empty[SHA1_DIGEST_SIZE] __initconst = {
+		0xda, 0x39, 0xa3, 0xee, 0x5e, 0x6b, 0x4b, 0x0d, 0x32, 0x55,
+		0xbf, 0xef, 0x95, 0x60, 0x18, 0x90, 0xaf, 0xd8, 0x07, 0x09,
+	};
+	static const u8 want_abc[SHA1_DIGEST_SIZE] __initconst = {
+		0xa9, 0x99, 0x3e, 0x36, 0x47, 0x06, 0x81, 0x6a, 0xba, 0x3e,
+		0x25, 0x71, 0x78, 0x50, 0xc2, 0x6c, 0x9c, 0xd0, 0xd8, 0x9d,
+	};
+
+	sha1(NULL, 0, out);
+	check(!memcmp(out, want_empty, sizeof(out)), "sha1(\"\") matches the independent digest");
+	sha1("abc", 3, out);
+	check(!memcmp(out, want_abc, sizeof(out)), "sha1(\"abc\") matches the independent digest");
+
+	/* Incremental in two pieces. */
+	{
+		struct sha1_ctx ctx;
+
+		sha1_init(&ctx);
+		sha1_update(&ctx, "a", 1);
+		sha1_update(&ctx, "bc", 2);
+		sha1_final(&ctx, out);
+		check(!memcmp(out, want_abc, sizeof(out)),
+		      "sha1 incremental, split mid-message, matches the one-shot digest");
+	}
+
+	/* HMAC with a key past SHA1_BLOCK_SIZE -- exercises the over-length-
+	 * key hashing path. */
+	{
+		u8 keybuf[200];
+		static const u8 data[] __initconst =
+			"Sample message for keylen>blocklen, a rather long one indeed";
+		static const u8 want_hmac[SHA1_DIGEST_SIZE] __initconst = {
+			0xab, 0xd3, 0xea, 0x01, 0xa8, 0x88, 0xda, 0xe7, 0xfc, 0x46,
+			0xa9, 0xeb, 0x28, 0x12, 0x44, 0x5b, 0x9e, 0xd2, 0x61, 0xdb,
+		};
+		unsigned int i;
+
+		for (i = 0; i < sizeof(keybuf); i++)
+			keybuf[i] = (u8)i;
+
+		hmac_sha1_usingrawkey(keybuf, sizeof(keybuf), data, sizeof(data) - 1, out);
+		check(!memcmp(out, want_hmac, sizeof(out)),
+		      "hmac_sha1 with a >blocklen key matches the independent digest");
+	}
+}
+#else
+static void __init test_sha1(void) { }
+#endif
+
+#if IS_ENABLED(CONFIG_CRYPTO_LIB_AES)
+/*
+ * lib/crypto/aes.c -> aes_rs.rs. No arch dispatch exists for this file at
+ * all (CONFIG_CRYPTO_LIB_AES_ARCH isn't a Kconfig symbol; AES-NI lives in
+ * arch/x86/crypto), and it's config-full only with no upstream KUnit suite
+ * either, so this is its whole boot-time proof. Values reproduced
+ * independently via Python's `cryptography` library -- a wholly separate
+ * AES implementation, not this file's own C read back as its own oracle.
+ */
+static void __init test_aes(void)
+{
+	struct crypto_aes_ctx ctx;
+	u8 out[AES_BLOCK_SIZE];
+
+	static const u8 key128[AES_KEYSIZE_128] __initconst = {
+		0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+		0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+	};
+	static const u8 pt128[AES_BLOCK_SIZE] __initconst = {
+		0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+		0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+	};
+	static const u8 want128[AES_BLOCK_SIZE] __initconst = {
+		0x07, 0xfe, 0xef, 0x74, 0xe1, 0xd5, 0x03, 0x6e,
+		0x90, 0x0e, 0xee, 0x11, 0x8e, 0x94, 0x92, 0x93,
+	};
+
+	static const u8 key256[AES_KEYSIZE_256] __initconst = {
+		0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+		0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+		0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+		0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+	};
+	static const u8 pt256[AES_BLOCK_SIZE] __initconst = {
+		0xc8, 0xc9, 0xca, 0xcb, 0xcc, 0xcd, 0xce, 0xcf,
+		0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7,
+	};
+	static const u8 want256[AES_BLOCK_SIZE] __initconst = {
+		0xa9, 0x73, 0x87, 0x9d, 0xa7, 0x3d, 0x9a, 0x70,
+		0x58, 0xd6, 0x0f, 0xf2, 0x18, 0x92, 0xf7, 0xfe,
+	};
+
+	check(aes_expandkey(&ctx, key128, sizeof(key128)) == 0,
+	      "aes_expandkey accepts a 128-bit key");
+	aes_encrypt(&ctx, out, pt128);
+	check(!memcmp(out, want128, sizeof(out)),
+	      "aes_encrypt (128-bit key) matches the independent ciphertext");
+	aes_decrypt(&ctx, out, want128);
+	check(!memcmp(out, pt128, sizeof(out)),
+	      "aes_decrypt (128-bit key) round-trips to the original plaintext");
+
+	check(aes_expandkey(&ctx, key256, sizeof(key256)) == 0,
+	      "aes_expandkey accepts a 256-bit key");
+	aes_encrypt(&ctx, out, pt256);
+	check(!memcmp(out, want256, sizeof(out)),
+	      "aes_encrypt (256-bit key) matches the independent ciphertext");
+	aes_decrypt(&ctx, out, want256);
+	check(!memcmp(out, pt256, sizeof(out)),
+	      "aes_decrypt (256-bit key) round-trips to the original plaintext");
+
+	check(aes_expandkey(&ctx, key128, 20) == -EINVAL,
+	      "aes_expandkey rejects an invalid key length");
+}
+#else
+static void __init test_aes(void) { }
+#endif
+
+#if IS_ENABLED(CONFIG_SYMBOLIC_ERRNAME)
+/*
+ * lib/errname.c -> errname_rs.rs. CONFIG_SYMBOLIC_ERRNAME is config-full
+ * only; no upstream KUnit suite exists for it. Values are the well-known
+ * POSIX/Linux errno names, checked directly rather than assumed.
+ */
+static void __init test_errname(void)
+{
+	check(!strcmp(errname(EIO), "EIO"), "errname(EIO) is \"EIO\"");
+	check(!strcmp(errname(-EIO), "-EIO"), "errname(-EIO) is \"-EIO\"");
+	check(!strcmp(errname(ENOMEM), "ENOMEM"), "errname(ENOMEM) is \"ENOMEM\"");
+	check(!strcmp(errname(-ENOMEM), "-ENOMEM"), "errname(-ENOMEM) is \"-ENOMEM\"");
+	check(errname(0) == NULL, "errname(0) is NULL");
+	check(errname(99999) == NULL, "errname of an out-of-range value is NULL");
+	/* A gap inside the low table: no errno is 41. */
+	check(errname(41) == NULL, "errname(41) is NULL (a real gap in the table)");
+	/* The 512+ series, and its own internal gap at 520. */
+	check(!strcmp(errname(ERESTARTSYS), "ERESTARTSYS"),
+	      "errname(ERESTARTSYS) is \"ERESTARTSYS\"");
+	check(errname(520) == NULL, "errname(520) is NULL (a gap in the 512+ series)");
+}
+#else
+static void __init test_errname(void) { }
+#endif
+
+#if IS_ENABLED(CONFIG_DQL)
+/*
+ * lib/dynamic_queue_limits.c -> dynamic_queue_limits_rs.rs. CONFIG_DQL is
+ * config-full only. dql_completed()/dql_reset() have no caller anywhere
+ * in this config's net/ or drivers/ at all (only PowerPC's ibmvnic.c
+ * does, not built here) -- genuinely unreached. dql_init() IS called
+ * (net/core/dev.c's netdev_init_one_queue(), for every net_device's TX
+ * queue under CONFIG_BQL=y, so at least loopback triggers it every boot)
+ * but sabotaging it produced no observable failure in this minimal boot
+ * -- nothing here reads BQL state (no sysfs queue stats, no real
+ * traffic) -- so it is call-graph-reached but not empirically confirmed
+ * by this project's own sabotage-and-reboot method. All three get a
+ * proof caller here regardless, per GOALS.md's bar: present in vmlinux
+ * AND reached.
+ *
+ * Values traced by hand against the real algorithm (POSDIFF/AFTER_EQ,
+ * include/linux/dynamic_queue_limits.h's own comments), not copied from
+ * the port -- exercises the "starved" branch (case 1) and the "neither
+ * starved nor decreasing" steady-state branch (case 2). stall_thrs stays
+ * 0 throughout, so dql_check_stall()'s ring-buffer/retry logic is a
+ * deliberately untested branch here -- that path already has 38,263
+ * userspace differential cases (port/test/dynamic_queue_limits/,
+ * including forced jiffies wraparound) verifying it against the real C;
+ * this proof caller's only job is confirming the Rust runs in the
+ * kernel, not re-proving correctness.
+ */
+static void __init test_dql(void)
+{
+	struct dql dql;
+
+	dql_init(&dql, 1000);
+	check(dql.max_limit == (UINT_MAX / 2) - (UINT_MAX / 16),
+	      "dql_init sets max_limit to DQL_MAX_LIMIT");
+	check(dql.min_limit == 0, "dql_init sets min_limit to 0");
+	check(dql.stall_thrs == 0, "dql_init sets stall_thrs to 0");
+	check(dql.limit == 0, "dql_init/dql_reset sets limit to min_limit (0)");
+	check(dql.lowest_slack == UINT_MAX,
+	      "dql_init/dql_reset sets lowest_slack to UINT_MAX");
+
+	/* Case 1: queue 100, complete all 100 -- starved (ovlimit != 0,
+	 * inprogress == 0), limit grows from 0 to 100. */
+	dql.last_obj_cnt = 100;
+	dql.num_queued = 100;
+	dql_completed(&dql, 100);
+	check(dql.limit == 100, "dql_completed (starved): limit grows to 100");
+	check(dql.num_completed == 100, "dql_completed (starved): num_completed is 100");
+	check(dql.adj_limit == 200, "dql_completed (starved): adj_limit is limit+completed (200)");
+	check(dql.prev_num_queued == 100, "dql_completed (starved): prev_num_queued is 100");
+	check(dql.prev_last_obj_cnt == 100, "dql_completed (starved): prev_last_obj_cnt is 100");
+	check(dql.prev_ovlimit == 0, "dql_completed (starved): prev_ovlimit resets to 0 (limit changed)");
+
+	/* Case 2: queue 50 more (num_queued 150), complete only 30 --
+	 * inprogress (20) but prev_inprogress is 0 (the previous round's
+	 * prev_num_queued(100) - num_completed-before-that-round(100) == 0),
+	 * so neither the starved nor the decrease branch fires: limit holds
+	 * at 100. */
+	dql.last_obj_cnt = 50;
+	dql.num_queued = 150;
+	dql_completed(&dql, 30);
+	check(dql.limit == 100, "dql_completed (steady): limit holds at 100");
+	check(dql.num_completed == 130, "dql_completed (steady): num_completed is 130");
+	check(dql.adj_limit == 230, "dql_completed (steady): adj_limit is limit+completed (230)");
+	check(dql.prev_num_queued == 150, "dql_completed (steady): prev_num_queued is 150");
+	check(dql.prev_last_obj_cnt == 50, "dql_completed (steady): prev_last_obj_cnt is 50");
+	check(dql.prev_ovlimit == 0, "dql_completed (steady): prev_ovlimit is 0 (not over limit)");
+
+	dql_reset(&dql);
+	check(dql.limit == 0, "dql_reset sets limit back to min_limit (0)");
+	check(dql.num_queued == 0, "dql_reset zeroes num_queued");
+	check(dql.num_completed == 0, "dql_reset zeroes num_completed");
+	check(dql.history[0] == 0 && dql.history[1] == 0 &&
+	      dql.history[2] == 0 && dql.history[3] == 0,
+	      "dql_reset zeroes the history ring");
+}
+#else
+static void __init test_dql(void) { }
+#endif
+
+/*
+ * lib/ratelimit.c -> ratelimit_rs.rs. ___ratelimit() is class A: sabotage
+ * (made it panic unconditionally) and reboot showed no fault and an
+ * unchanged self-test count on config-fast's minimal busybox boot -- no
+ * driver/subsystem in this boot path hits a rate-limited log or
+ * net_ratelimit()-style call. `interval` is set far larger than the whole
+ * test can possibly take (real jiffies, ticking for real) so the window
+ * never expires mid-test regardless of scheduling jitter -- the only
+ * thing under test is burst accounting, not timing.
+ */
+static void __init test_ratelimit(void)
+{
+	struct ratelimit_state rs =
+		RATELIMIT_STATE_INIT(rs, 60 * HZ, 3);
+
+	check(__ratelimit(&rs) == 1, "ratelimit: 1st call within burst allowed");
+	check(__ratelimit(&rs) == 1, "ratelimit: 2nd call within burst allowed");
+	check(__ratelimit(&rs) == 1, "ratelimit: 3rd call within burst allowed");
+	check(__ratelimit(&rs) == 0, "ratelimit: 4th call exceeds burst, suppressed");
+	check(__ratelimit(&rs) == 0, "ratelimit: 5th call still suppressed");
+	check(ratelimit_state_get_miss(&rs) == 2, "ratelimit: two misses counted");
+
+	/* interval <= 0: never limit -- always allowed, regardless of burst. */
+	ratelimit_state_init(&rs, 0, 0);
+	check(__ratelimit(&rs) == 1, "ratelimit: interval=0 never limits (1)");
+	check(__ratelimit(&rs) == 1, "ratelimit: interval=0 never limits (2)");
+	check(__ratelimit(&rs) == 1, "ratelimit: interval=0 never limits (3)");
+}
+
+/*
+ * lib/flex_proportions.c -> flex_proportions_rs.rs. fprop_global_init() is
+ * class B (mm/filemap.c's page_writeback_init() panics on its failure,
+ * unconditional core MM init -- sabotage-and-reboot confirmed: made it
+ * always return -ENOMEM, and boot panicked immediately with "Attempted to
+ * kill the idle task!"). The other seven functions are class A on
+ * config-fast's minimal boot (no real block device, so no backing_dev_info
+ * ever gets created and no dirty-page threshold calculation ever runs):
+ * fprop_local_init_percpu(), __fprop_add_percpu(), fprop_new_period() and
+ * fprop_fraction_percpu() each individually sabotage-confirmed (made to
+ * panic/fail unconditionally -- clean boot, unchanged self-test count,
+ * each reverted before the next); __fprop_add_percpu_max()/
+ * fprop_global_destroy()/fprop_local_destroy_percpu() inferred from the
+ * same evidence (they call, or are only reachable through, functions
+ * already shown unreached here).
+ */
+static void __init test_flex_proportions(void)
+{
+	struct fprop_global p;
+	struct fprop_local_percpu pl, pl2;
+	unsigned long num, den;
+	int i;
+
+	check(fprop_global_init(&p, GFP_KERNEL) == 0, "flex_proportions: fprop_global_init succeeds");
+	check(fprop_local_init_percpu(&pl, GFP_KERNEL) == 0,
+	      "flex_proportions: fprop_local_init_percpu succeeds");
+
+	/* Single contributor: its fraction is the whole. Deltas here are
+	 * deliberately large (>> any realistic percpu_counter_batch on this
+	 * boot's CPU count): percpu_counter_add_batch() only flushes to the
+	 * global, cross-CPU-visible count once the per-CPU stashed amount
+	 * reaches `batch` in magnitude (lib/percpu_counter.c), and
+	 * fprop_fraction_percpu() reads via percpu_counter_read_positive()
+	 * (a plain, possibly-stale-until-flushed read), not
+	 * percpu_counter_sum() (always exact). A small delta here would make
+	 * this proof caller's outcome depend on real per-CPU batching state
+	 * -- CPU count, which CPU runs this, the exact batch threshold --
+	 * none of which the userspace differential's simplified,
+	 * always-exact percpu_counter simulation reproduces or needs to
+	 * (that simulation's own header comment says as much). Caught
+	 * exactly this way: the differential passed ~7M cases before this
+	 * proof caller, run for real in the kernel, disagreed with itself
+	 * until the numbers were large enough. */
+	__fprop_add_percpu(&p, &pl, 1000000);
+	fprop_fraction_percpu(&p, &pl, &num, &den);
+	/* Not exactly num == den: fprop_global_init() seeds p->events at 1,
+	 * not 0 ("Use 1 to avoid dealing with periods with 0 events" --
+	 * that file's own comment), so a sole contributor's fraction is
+	 * 1000000/1000001, not exactly whole. Checked as a robust invariant
+	 * (num > 0, den >= num, den within the known +1 seed of num)
+	 * instead of exact equality for the same reason as the batching
+	 * note above -- caught the same way, an assumption of this proof
+	 * caller's, not the port. */
+	check(num > 0 && den >= num && den - num <= 1,
+	      "flex_proportions: sole contributor gets ~the whole fraction");
+
+	/* A second, independent contributor with an equal share, added in
+	 * the SAME period (no fprop_new_period() between them, so neither
+	 * has been aged/halved relative to the other yet): the split should
+	 * be ~even (tolerating either arm's identical integer rounding, not
+	 * exact equality). Ordering matters here -- an earlier draft of this
+	 * check called fprop_new_period() between adding pl and pl2, which
+	 * halves pl's weight (via fprop_reflect_period_percpu's lazy aging)
+	 * before pl2 ever contributes; that is CORRECT "flexible aging"
+	 * behaviour, not a bug, and it means a 50/50 split was never the
+	 * right expectation once aging comes between the two contributions
+	 * -- caught by this proof caller disagreeing with the (already
+	 * differential-verified) port, not the other way around. */
+	check(fprop_local_init_percpu(&pl2, GFP_KERNEL) == 0,
+	      "flex_proportions: fprop_local_init_percpu (2nd) succeeds");
+	__fprop_add_percpu(&p, &pl2, 1000000);
+	fprop_fraction_percpu(&p, &pl, &num, &den);
+	check(num * 2 >= den - 1 && num * 2 <= den + 1,
+	      "flex_proportions: two equal contributors split ~evenly");
+
+	/* __fprop_add_percpu_max() with max_frac == FPROP_FRAC_BASE takes
+	 * its unconditional tail-call shape (the `max_frac < FPROP_FRAC_BASE`
+	 * guard is false) -- same observable effect as __fprop_add_percpu(). */
+	__fprop_add_percpu_max(&p, &pl2, FPROP_FRAC_BASE, 500000);
+
+	/* NOW advance one ordinary period: both contributors' weights halve
+	 * together (pl explicitly reflected by this same call reaching
+	 * fprop_fraction_percpu below; pl2 lazily, next time IT is read) --
+	 * pl is still a real, nonzero contributor, just not "the whole"
+	 * anymore since pl2 exists too. */
+	check(fprop_new_period(&p, 1) == true,
+	      "flex_proportions: fprop_new_period reports events survived one halving");
+	fprop_fraction_percpu(&p, &pl, &num, &den);
+	check(num > 0 && num < den,
+	      "flex_proportions: pl remains a real, partial contributor after one period");
+
+	/* A single period jump of >= BITS_PER_LONG skips the halving
+	 * (`periods < 64` false) and re-zeroes the global counter outright,
+	 * while leaving `pl` -- untouched since -- fully stale:
+	 * fprop_reflect_period_percpu()'s "aging zeroed our fraction?" ELSE
+	 * branch (period - pl->period >= BITS_PER_LONG) zeroes pl's own
+	 * contribution absolutely, not by halving. */
+	check(fprop_new_period(&p, BITS_PER_LONG + 1) == true,
+	      "flex_proportions: fprop_new_period reports events survived a large period jump");
+	fprop_fraction_percpu(&p, &pl, &num, &den);
+	check(num == 0, "flex_proportions: a fully-aged-out local counter reports zero");
+
+	/* Prove-can-fail sentinel: with a genuinely zero global counter (no
+	 * events at all), fprop_new_period() must report false. */
+	i = fprop_new_period(&p, 1);
+	check(i == false, "flex_proportions: fprop_new_period reports false with no events");
+
+	fprop_local_destroy_percpu(&pl);
+	fprop_local_destroy_percpu(&pl2);
+	fprop_global_destroy(&p);
+}
+
+/*
+ * lib/buildid.c -> lib/buildid.c (retained: file/folio I/O only) +
+ * lib/buildid_rs.rs (the ELF-note-parsing algorithm). Two independently
+ * reachable pieces, split by config:
+ *
+ * - init/main.c's start_kernel() calls init_vmlinux_build_id()
+ *   unconditionally. On config-full (CONFIG_VMCORE_INFO=y) that resolves to
+ *   the REAL function, not linux/buildid.h's no-op inline stub, so
+ *   build_id_parse_buf(), parse_build_id(), freader_init_from_mem(),
+ *   freader_fetch() and freader_cleanup() are class B there --
+ *   sabotage-confirmed: made parse_build_id() panic unconditionally,
+ *   config-full's boot never got past start_kernel(); reverted before
+ *   rebuilding. config-fast sets neither CONFIG_STACKTRACE_BUILD_ID nor
+ *   CONFIG_VMCORE_INFO, so init_vmlinux_build_id() is the stub there and
+ *   the mem-backed path is class A on that config.
+ *
+ * - build_id_parse()/build_id_parse_nofault()/build_id_parse_file() are
+ *   class A on BOTH configs: their only real callers -- kernel/bpf/
+ *   stackmap.c, kernel/events/core.c, fs/proc/task_mmu.c -- all sit behind
+ *   BPF stack-id collection, active perf-event mmap tracking, or a
+ *   /proc/<pid>/maps read in the build-id format, none of which this boot
+ *   exercises. kernel/module/kallsyms.c's build_id_parse_buf() call is
+ *   itself gated on CONFIG_STACKTRACE_BUILD_ID (unset on both configs), so
+ *   that path is dead here independent of the config-full coincidence
+ *   above.
+ *
+ * So this proof caller drives the mem-backed path unconditionally (belt
+ * and braces on config-full, the only proof on config-fast), and builds a
+ * REAL page-cache-backed struct file -- via shmem_kernel_file_setup(), the
+ * same primitive tmpfs itself is built on -- so freader_get_folio()'s
+ * filemap_get_folio() call runs for real, not stubbed, to drive all three
+ * file-backed entry points.
+ */
+static void __init build_id_note(void *buf, size_t *len,
+				  const unsigned char *id, unsigned int id_len)
+{
+	Elf32_Nhdr *nhdr = buf;
+	char *p = buf;
+
+	nhdr->n_namesz = 4;
+	nhdr->n_descsz = id_len;
+	nhdr->n_type = 3; /* NT_GNU_BUILD_ID -- matches buildid.c's private BUILD_ID */
+	p += sizeof(*nhdr);
+	memcpy(p, "GNU\0", 4);
+	p += 4;
+	memcpy(p, id, id_len);
+	p += id_len;
+	while ((p - (char *)buf) & 3)
+		*p++ = 0;
+	*len = p - (char *)buf;
+}
+
+static void __init test_buildid(void)
+{
+	static const unsigned char planted_id[20] = {
+		0xde, 0xad, 0xbe, 0xef, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06,
+		0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
+	};
+	char note[64];
+	size_t note_len;
+	unsigned char got[BUILD_ID_SIZE_MAX];
+	__u32 got_sz;
+	struct file *file;
+	struct vm_area_struct vma = { };
+	Elf32_Ehdr ehdr = { };
+	Elf32_Phdr phdr = { };
+	loff_t pos;
+
+	build_id_note(note, &note_len, planted_id, sizeof(planted_id));
+
+	/* Mem-backed path: build_id_parse_buf() on the crafted note alone. */
+	got_sz = 0;
+	memset(got, 0, sizeof(got));
+	check(build_id_parse_buf(note, got, note_len) == 0,
+	      "buildid: build_id_parse_buf finds the planted note");
+	check(memcmp(got, planted_id, sizeof(planted_id)) == 0,
+	      "buildid: build_id_parse_buf reproduces the planted build id");
+
+	/* File-backed path: a real ELF32 EXEC image with one PT_NOTE phdr,
+	 * written into a real shmem-backed struct file. */
+	memcpy(ehdr.e_ident, ELFMAG, SELFMAG);
+	ehdr.e_ident[EI_CLASS] = ELFCLASS32;
+	ehdr.e_type = ET_EXEC;
+	ehdr.e_phoff = sizeof(ehdr);
+	ehdr.e_phentsize = sizeof(phdr);
+	ehdr.e_phnum = 1;
+
+	phdr.p_type = PT_NOTE;
+	phdr.p_offset = sizeof(ehdr) + sizeof(phdr);
+	phdr.p_filesz = note_len;
+
+	file = shmem_kernel_file_setup("libtest-buildid", phdr.p_offset + note_len, 0);
+	if (IS_ERR(file)) {
+		check(false, "buildid: shmem_kernel_file_setup succeeds");
+		return;
+	}
+
+	pos = 0;
+	kernel_write(file, &ehdr, sizeof(ehdr), &pos);
+	kernel_write(file, &phdr, sizeof(phdr), &pos);
+	kernel_write(file, note, note_len, &pos);
+
+	got_sz = 0;
+	memset(got, 0, sizeof(got));
+	check(build_id_parse_file(file, got, &got_sz) == 0,
+	      "buildid: build_id_parse_file finds the planted note in a real file");
+	check(memcmp(got, planted_id, sizeof(planted_id)) == 0,
+	      "buildid: build_id_parse_file reproduces the planted build id");
+
+	vma.vm_file = file;
+
+	got_sz = 0;
+	memset(got, 0, sizeof(got));
+	check(build_id_parse(&vma, got, &got_sz) == 0,
+	      "buildid: build_id_parse finds the planted note via a vma");
+	check(memcmp(got, planted_id, sizeof(planted_id)) == 0,
+	      "buildid: build_id_parse reproduces the planted build id");
+
+	/* The pages just written are already in the page cache, so the
+	 * no-fault path succeeds here too -- it only differs from
+	 * build_id_parse() in refusing to bring in pages that AREN'T
+	 * already resident. */
+	got_sz = 0;
+	memset(got, 0, sizeof(got));
+	check(build_id_parse_nofault(&vma, got, &got_sz) == 0,
+	      "buildid: build_id_parse_nofault finds the already-cached note");
+	check(memcmp(got, planted_id, sizeof(planted_id)) == 0,
+	      "buildid: build_id_parse_nofault reproduces the planted build id");
+
+	/* Prove-can-fail sentinel: not a valid note (garbage name/desc size). */
+	{
+		unsigned char garbage[BUILD_ID_SIZE_MAX];
+
+		memset(garbage, 0xff, sizeof(garbage));
+		check(build_id_parse_buf(garbage, got, sizeof(garbage)) != 0,
+		      "buildid: build_id_parse_buf rejects a buffer that isn't a note");
+	}
+
+	fput(file);
+}
+
+#if IS_ENABLED(CONFIG_BINARY_PRINTF)
+/* vbin_printf() is `__printf(3, 0)` (takes a va_list), so this file needs
+ * its own variadic wrapper to produce a binary arg buffer to feed
+ * seq_buf_bprintf() -- same shape as seq_buf.c's own seq_buf_printf()
+ * wrapping seq_buf_vprintf().
+ */
+static int __init make_bin_u32(u32 *buf, size_t size, const char *fmt, ...)
+{
+	va_list ap;
+	int ret;
+
+	va_start(ap, fmt);
+	ret = vbin_printf(buf, size, fmt, ap);
+	va_end(ap);
+	return ret;
+}
+#endif
+
+/*
+ * lib/seq_buf.c -> lib/seq_buf.c (retained: seq_buf_printf()/
+ * seq_buf_vprintf(), a variadic C definition and its va_list consumer --
+ * see that file's own header comment) + lib/seq_buf_rs.rs (everything
+ * else). Genuinely class A on BOTH configs, sabotage-confirmed: made all
+ * ten Rust-defined entry points panic unconditionally in one build (a
+ * combined sweep, not ten separate rebuild-boot cycles -- each call site
+ * is independent, so one clean boot with all ten sabotaged at once is as
+ * conclusive as ten separate ones would have been) -- clean boot, 0
+ * faults, unchanged self-test count, on both configs. Reverted before
+ * rebuilding. `rig/fanin.sh`'s 45 call sites are real (kernel/sched/core.c,
+ * kernel/panic.c, tracing's trace_seq, etc.) but none of them fire during
+ * this minimal boot to a shell prompt -- e.g. sched/core.c's
+ * preempt_model_str() (which DOES call seq_buf_puts()) is only invoked
+ * when something reads it, not unconditionally at boot; the "PREEMPT_DYNAMIC"
+ * text in this project's own boot banner comes from scripts/mkcompile_h at
+ * BUILD time, a coincidence that looked like evidence before the sabotage
+ * disproved it.
+ */
+static void __init test_seq_buf(void)
+{
+	char buf[128];
+	struct seq_buf s;
+
+	seq_buf_init(&s, buf, sizeof(buf));
+	check(seq_buf_puts(&s, "hello") == 0, "seq_buf: puts succeeds");
+	check(seq_buf_used(&s) == 5, "seq_buf: puts advances len by strlen");
+	check(memcmp(buf, "hello", 5) == 0, "seq_buf: puts writes the bytes");
+
+	check(seq_buf_putc(&s, '!') == 0, "seq_buf: putc succeeds");
+	check(buf[5] == '!', "seq_buf: putc writes the byte");
+
+	/* Prove-can-fail: a buffer too small for what is written to it. */
+	{
+		char tiny[2];
+		struct seq_buf t;
+
+		seq_buf_init(&t, tiny, sizeof(tiny));
+		check(seq_buf_puts(&t, "abcdef") == -1, "seq_buf: puts overflow is reported");
+		check(seq_buf_has_overflowed(&t), "seq_buf: overflow flag is set");
+	}
+
+	seq_buf_init(&s, buf, sizeof(buf));
+	{
+		static const unsigned char mem[4] = { 0xde, 0xad, 0xbe, 0xef };
+
+		check(seq_buf_putmem(&s, mem, sizeof(mem)) == 0, "seq_buf: putmem succeeds");
+		check(memcmp(buf, mem, sizeof(mem)) == 0, "seq_buf: putmem writes the bytes");
+	}
+
+	seq_buf_init(&s, buf, sizeof(buf));
+	{
+		static const unsigned char mem[3] = { 0x01, 0x02, 0x03 };
+
+		check(seq_buf_putmem_hex(&s, mem, sizeof(mem)) == 0, "seq_buf: putmem_hex succeeds");
+		/* x86_64: little-endian, so bytes print highest-address-first --
+		 * see seq_buf_rs.rs's own header comment on this. */
+		check(strncmp(buf, "030201 ", 7) == 0,
+		      "seq_buf: putmem_hex reverses byte order (this arch is little-endian)");
+	}
+
+	/* Real printk() call -- reachability only; dmesg content isn't
+	 * asserted (correctness is the differential harness's job). */
+	seq_buf_init(&s, buf, sizeof(buf));
+	seq_buf_puts(&s, "libtest seq_buf_do_printk reachability line\n");
+	seq_buf_do_printk(&s, KERN_INFO);
+	check(true, "seq_buf: do_printk ran without fault");
+
+	/* A real (if minimally constructed) struct seq_file. */
+	{
+		struct seq_file *m = kzalloc(sizeof(*m), GFP_KERNEL);
+		char *mbuf = kmalloc(64, GFP_KERNEL);
+
+		check(m && mbuf, "seq_buf: seq_file alloc succeeds");
+		if (m && mbuf) {
+			m->buf = mbuf;
+			m->size = 64;
+			seq_buf_init(&s, buf, sizeof(buf));
+			seq_buf_puts(&s, "print_seq");
+			check(seq_buf_print_seq(m, &s) == 0, "seq_buf: print_seq succeeds");
+			check(m->count == 9 && memcmp(m->buf, "print_seq", 9) == 0,
+			      "seq_buf: print_seq copies into the seq_file");
+		}
+		kfree(mbuf);
+		kfree(m);
+	}
+
+	/* A real struct path -- this process's own fs root. */
+	{
+		struct path root;
+
+		get_fs_root(current->fs, &root);
+		seq_buf_init(&s, buf, sizeof(buf));
+		check(seq_buf_path(&s, &root, "") >= 1, "seq_buf: path writes at least \"/\"");
+		path_put(&root);
+	}
+
+	/* A real copy_to_user() call. Reachability only, deliberately on the
+	 * failure path: this runs too early in boot for a real userspace
+	 * mapping to copy INTO successfully (no process has execve()'d yet),
+	 * so the address below hits copy_to_user()'s real access_ok()/
+	 * page-fault machinery and fails, same as it would in the real
+	 * kernel with no page mapped there -- correctness of the bounds and
+	 * clamping logic is the differential harness's job. */
+	seq_buf_init(&s, buf, sizeof(buf));
+	seq_buf_puts(&s, "to_user reachability");
+	check(seq_buf_to_user(&s, (void __user *)0x1000, 0, 4) == -EFAULT,
+	      "seq_buf: to_user hits the real copy_to_user() path");
+
+#if IS_ENABLED(CONFIG_BINARY_PRINTF)
+	{
+		u32 bin[8];
+		int bin_len = make_bin_u32(bin, sizeof(bin), "%d-%s", 42, "x");
+
+		check(bin_len > 0, "seq_buf: vbin_printf produces binary args");
+		seq_buf_init(&s, buf, sizeof(buf));
+		check(seq_buf_bprintf(&s, "%d-%s", bin) == 0, "seq_buf: bprintf succeeds");
+		check(strncmp(buf, "42-x", 4) == 0, "seq_buf: bprintf reproduces the formatted text");
+	}
+#endif
+
+	/* Real hex_dump_to_buffer() + the retained C seq_buf_printf(). */
+	seq_buf_init(&s, buf, sizeof(buf));
+	{
+		static const unsigned char mem[4] = { 0xaa, 0xbb, 0xcc, 0xdd };
+
+		check(seq_buf_hex_dump(&s, "", DUMP_PREFIX_NONE, 16, 1, mem, sizeof(mem), false) == 0,
+		      "seq_buf: hex_dump succeeds");
+		check(strstr(buf, "aa bb cc dd") != NULL, "seq_buf: hex_dump formats the bytes");
+	}
+}
+
+/*
+ * lib/iomap.c -> lib/iomap.c (retained: the ~15 real hardware-access
+ * primitives this file forwards to, plus pci_iounmap() -- see that
+ * file's own header comment) + lib/iomap_rs.rs (the IO_COND dispatch,
+ * byte-swap/64-bit arithmetic, repeat-loop bookkeeping). Sabotage-
+ * confirmed reachability, all 26 Rust entry points sabotaged at once
+ * then peeled off one at a time as each one's panic showed up in dmesg
+ * (a combined sweep only proves "at least one of these", since boot
+ * halts at the first hit -- unlike lib/seq_buf.c's all-class-A result,
+ * here each panic had to be removed and the kernel rebuilt to find the
+ * next one): ioport_map(), ioread8(), iowrite8(), ioread32(),
+ * ioread32_rep(), iowrite32_rep(), ioread16_rep() and iowrite32() are
+ * class B on config-full -- real PCI/platform device probing during
+ * this boot genuinely calls them. The other 18 are class A on both
+ * configs (config-fast's clean boot with the same 18 still sabotaged
+ * confirmed it there too, though the 8 class-B ones were not
+ * independently re-sabotaged on config-fast -- bounded effort, and
+ * config-full's confirmation already demonstrates the dispatch
+ * mechanism itself is sound and reached).
+ *
+ * This proof caller uses a real kzalloc'd buffer as the "MMIO" cookie --
+ * a plain mov instruction against ordinary RAM behaves identically to
+ * one against a real ioremap()'d device for everything this file's own
+ * logic does (it never touches the *contents* meaningfully, only
+ * dispatches and byte-swaps). The 64-bit lo_hi vs hi_lo PIO ordering
+ * variants are NOT distinguished by this test -- on the MMIO path all
+ * four call the same readq()/writeq() thunk regardless of variant, so
+ * this proves each is linked and reached, not that its ordering is
+ * correct on the PIO path; that half is the differential harness's job,
+ * deliberately, rather than writing to a real, possibly-live legacy I/O
+ * port (0x80's page-register neighbors) from a boot-time self-test.
+ */
+static void __init test_iomap(void)
+{
+	void *mmio = kzalloc(64, GFP_KERNEL);
+	unsigned char rep_dst[8], rep_src[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
+	u64 v64;
+
+	check(mmio != NULL, "iomap: mmio buffer alloc succeeds");
+	if (!mmio)
+		return;
+
+	iowrite16(0x1234, mmio);
+	check(ioread16(mmio) == 0x1234, "iomap: ioread16/iowrite16 round-trip");
+	check(ioread16be(mmio) == 0x3412, "iomap: ioread16be byte-swaps");
+
+	iowrite32(0xdeadbeef, mmio);
+	check(ioread32be(mmio) == 0xefbeadde, "iomap: ioread32be byte-swaps");
+
+	__iowrite64_lo_hi(0x0123456789abcdefULL, mmio);
+	v64 = __ioread64_lo_hi(mmio);
+	check(v64 == 0x0123456789abcdefULL, "iomap: __ioread64_lo_hi/__iowrite64_lo_hi round-trip");
+
+	__iowrite64_hi_lo(0xfedcba9876543210ULL, mmio);
+	v64 = __ioread64_hi_lo(mmio);
+	check(v64 == 0xfedcba9876543210ULL, "iomap: __ioread64_hi_lo/__iowrite64_hi_lo round-trip");
+
+	/* be write swaps to memory, be read swaps back out -- the round
+	 * trip through the SAME "be" function returns the value unchanged,
+	 * same as mmio_write64be()/mmio_read64be() in the pristine C. */
+	__iowrite64be_lo_hi(0x1122334455667788ULL, mmio);
+	v64 = __ioread64be_lo_hi(mmio);
+	check(v64 == 0x1122334455667788ULL, "iomap: __ioread64be_lo_hi/__iowrite64be_lo_hi round-trip");
+
+	__iowrite64be_hi_lo(0x1122334455667788ULL, mmio);
+	v64 = __ioread64be_hi_lo(mmio);
+	check(v64 == 0x1122334455667788ULL, "iomap: __ioread64be_hi_lo/__iowrite64be_hi_lo round-trip");
+
+	/*
+	 * "Note the __raw accesses" (the pristine C's own comment): these
+	 * are string-I/O primitives for a FIXED device register, like a
+	 * FIFO port -- every element goes to/from the SAME address, not a
+	 * growing range of them. So iowrite8_rep() leaves only the LAST
+	 * byte written at *mmio, not a copy of rep_src; and ioread8_rep()
+	 * into a real, unchanging source reads that same repeated byte
+	 * `count` times, not a run of memory. (Caught here first as an
+	 * "*** ERROR ***" from a test that assumed a growing-buffer copy --
+	 * the port's actual behavior matches the pristine C's
+	 * mmio_outsb()/mmio_insb(), confirmed by re-reading them.)
+	 */
+	memset(mmio, 0, 64);
+	iowrite8_rep(mmio, rep_src, sizeof(rep_src));
+	check(*(unsigned char *)mmio == rep_src[sizeof(rep_src) - 1],
+	      "iomap: iowrite8_rep leaves the last byte at the fixed register");
+	memset(rep_dst, 0, sizeof(rep_dst));
+	ioread8_rep(mmio, rep_dst, sizeof(rep_dst));
+	check(rep_dst[0] == rep_src[sizeof(rep_src) - 1] &&
+	      memcmp(rep_dst, rep_dst + 1, sizeof(rep_dst) - 1) == 0,
+	      "iomap: ioread8_rep reads the same fixed register repeatedly");
+
+	memset(mmio, 0, 64);
+	iowrite16_rep(mmio, rep_src, sizeof(rep_src) / 2);
+	check(ioread16(mmio) == ((u16 *)rep_src)[sizeof(rep_src) / 2 - 1],
+	      "iomap: iowrite16_rep leaves the last word at the fixed register");
+
+	/* No-op by design (pristine C's own comment: "Nothing to do") --
+	 * reachability only. */
+	ioport_unmap(mmio);
+	check(true, "iomap: ioport_unmap ran without fault");
+
+	kfree(mmio);
+}
+
+/*
+ * lib/bug.c -> lib/bug.c (retained: report_bug()'s warn_rcu_enter()/
+ * warn_rcu_exit() bracket, the CONFIG_MODULES-entangled struct module
+ * list walk, generic_bug_clear_once()'s own RCU-guarded loop) +
+ * lib/bug_rs.rs (report_bug_body() -- bug_addr()/bug_get_file_line()'s
+ * relative-pointer arithmetic, find_bug()'s built-in-table search, the
+ * warning/once/done flag bits, clear_once_table()). See lib/bug_rs.rs's
+ * own module doc for why this file got more scrutiny than any other port
+ * this session: report_bug() is called directly from the trap handler
+ * (arch/x86/kernel/traps.c, arch/x86/mm/extable.c) for every ud2
+ * bug/warning trap in the kernel, so this is the one port where "does it
+ * compile and boot quietly" is not enough evidence -- a WARN has to actually
+ * fire, through the ported code, and boot has to continue past it.
+ *
+ * Not previously reachable during this minimal boot at all: dmesg shows
+ * no "WARNING:"/"cut here" line anywhere before this test runs (checked
+ * directly), so report_bug()/find_bug() are class A here -- nothing in
+ * this boot's own path happens to hit a WARN_ON(). Confirmed live below,
+ * not just presumed: this IS the proof caller, not a supplement to one.
+ */
+/* noinline: a plain 2-iteration loop calling WARN_ON_ONCE(1) directly
+ * gets fully unrolled at -O2 into two independent `ud2` instructions
+ * (confirmed in build-full/lib/libtest.o's disassembly) -- two distinct
+ * bug_entry structs, not the same one hit twice. Routing through a
+ * real, non-inlined function call gives the compiler no way to
+ * duplicate the `ud2` -- one call site, hit twice from two call sites
+ * below, is what actually exercises BUGFLAG_DONE suppression. */
+static noinline void __init warn_once_helper(void)
+{
+	WARN_ON_ONCE(1);
+}
+
+static void __init test_bug(void)
+{
+	/* A real WARN_ON(), through the real ud2 trap, through
+	 * report_bug()'s Rust body, through the real __warn(). If any of
+	 * bug_addr()'s relative-pointer arithmetic, find_bug()'s table
+	 * search, or the flag-bit dispatch were wrong, this either would
+	 * not print (find_bug returned NULL / wrong bug_trap_type) or would
+	 * not return here at all (misclassified as BUG_TRAP_TYPE_BUG, which
+	 * arch/x86/kernel/traps.c die()s on instead of continuing).
+	 */
+	WARN_ON(1);
+
+	/* If we get here, report_bug_body() returned BUG_TRAP_TYPE_WARN and
+	 * traps.c resumed execution exactly where it should. */
+	check(true, "bug: WARN_ON(1) returned control to its caller");
+
+	/* WARN_ON_ONCE()'s BUGFLAG_DONE suppression: one call site, hit
+	 * twice, must print only once. A plain 2-iteration loop calling
+	 * WARN_ON_ONCE(1) directly does NOT test this -- confirmed in
+	 * build-full/lib/libtest.o's disassembly that -O2 fully unrolls a
+	 * trivial 2-iteration loop into two separate `ud2` instructions
+	 * (two independent bug_entry structs, both attributed to the same
+	 * source line) -- so warn_once_helper() is routed through a real,
+	 * non-inlined function instead, giving the compiler exactly one
+	 * `ud2` to duplicate or not. Can't read dmesg from in-kernel to
+	 * assert "printed once" directly, but the boot log for this exact
+	 * run already shows it: one "WARNING: ... at lib/libtest.c" line at
+	 * warn_once_helper()'s WARN_ON_ONCE, not two. */
+	warn_once_helper();
+	warn_once_helper();
+	check(true, "bug: WARN_ON_ONCE(1) via warn_once_helper() x2 both returned control to their caller");
+}
+
+#if IS_ENABLED(CONFIG_ASN1)
+/*
+ * lib/asn1_decoder.c -> asn1_decoder_rs.rs. CONFIG_ASN1 is config-full
+ * only. asn1_ber_decoder() is EXPORT_SYMBOL_GPL and has real callers
+ * (X.509/PKCS7 cert parsing, RSA key parsing) but none of them run in
+ * this boot: dmesg shows only "Asymmetric key parser 'x509' registered"
+ * -- the parser TYPE is registered, nothing ever calls it, since
+ * CONFIG_SYSTEM_TRUSTED_KEYS is empty and no module signature or
+ * loaded certificate exists to parse. Confirmed empirically
+ * (sabotage-and-reboot: made every successful parse report failure
+ * instead -- clean boot, unchanged self-test count, no dmesg fault).
+ * Genuinely class A.
+ *
+ * The bytecode here is copied verbatim from
+ * build-full/crypto/rsapubkey.asn1.c (the real, compiled
+ * RsaPubKey ::= SEQUENCE { n INTEGER, e INTEGER } grammar) -- not
+ * invented -- with test-local action stubs standing in for the real
+ * rsa_get_n()/rsa_get_e() (which pull in struct rsa_key and have
+ * nothing to do with the decoder itself).
+ */
+struct test_asn1_rsakey {
+	unsigned char n_seen, e_seen;
+	unsigned long n, e;
+};
+
+static int test_asn1_get_n(void *context, size_t hdrlen, unsigned char tag,
+			    const void *value, size_t vlen)
+{
+	struct test_asn1_rsakey *key = context;
+	const unsigned char *v = value;
+	unsigned long n = 0;
+
+	key->n_seen = 1;
+	for (size_t i = 0; i < vlen; i++)
+		n = (n << 8) | v[i];
+	key->n = n;
+	return 0;
+}
+
+static int test_asn1_get_e(void *context, size_t hdrlen, unsigned char tag,
+			    const void *value, size_t vlen)
+{
+	struct test_asn1_rsakey *key = context;
+	const unsigned char *v = value;
+	unsigned long e = 0;
+
+	key->e_seen = 1;
+	for (size_t i = 0; i < vlen; i++)
+		e = (e << 8) | v[i];
+	key->e = e;
+	return 0;
+}
+
+static const asn1_action_t test_asn1_rsapubkey_actions[2] = {
+	test_asn1_get_n,
+	test_asn1_get_e,
+};
+
+/* Verbatim from build-full/crypto/rsapubkey.asn1.c. */
+static const unsigned char test_asn1_rsapubkey_machine[] = {
+	ASN1_OP_MATCH,
+	_tag(UNIV, CONS, SEQ),
+	ASN1_OP_MATCH_ACT,
+	_tag(UNIV, PRIM, INT),
+	_action(0),
+	ASN1_OP_MATCH_ACT,
+	_tag(UNIV, PRIM, INT),
+	_action(1),
+	ASN1_OP_END_SEQ,
+	ASN1_OP_COMPLETE,
+};
+
+static const struct asn1_decoder test_asn1_rsapubkey_decoder = {
+	.machine = test_asn1_rsapubkey_machine,
+	.machlen = sizeof(test_asn1_rsapubkey_machine),
+	.actions = test_asn1_rsapubkey_actions,
+};
+
+static void __init test_asn1_decoder(void)
+{
+	struct test_asn1_rsakey key;
+	int ret;
+
+	/* SEQUENCE { INTEGER 0x010001 (65537), INTEGER 3 } */
+	static const unsigned char valid[] = {
+		0x30, 0x08,
+		0x02, 0x03, 0x01, 0x00, 0x01,
+		0x02, 0x01, 0x03,
+	};
+	memset(&key, 0, sizeof(key));
+	ret = asn1_ber_decoder(&test_asn1_rsapubkey_decoder, &key, valid, sizeof(valid));
+	check(ret == 0, "asn1_ber_decoder parses a valid RsaPubKey");
+	check(key.n_seen && key.n == 65537, "asn1_ber_decoder extracts n = 65537");
+	check(key.e_seen && key.e == 3, "asn1_ber_decoder extracts e = 3");
+
+	/* Same, but truncated mid-integer -- must fail, not read past the end. */
+	memset(&key, 0, sizeof(key));
+	ret = asn1_ber_decoder(&test_asn1_rsapubkey_decoder, &key, valid, sizeof(valid) - 3);
+	check(ret == -EBADMSG, "asn1_ber_decoder rejects a truncated RsaPubKey");
+
+	/* Wrong outer tag (SET 0x31 instead of SEQUENCE 0x30). */
+	static const unsigned char wrong_tag[] = {
+		0x31, 0x08,
+		0x02, 0x03, 0x01, 0x00, 0x01,
+		0x02, 0x01, 0x03,
+	};
+	memset(&key, 0, sizeof(key));
+	ret = asn1_ber_decoder(&test_asn1_rsapubkey_decoder, &key, wrong_tag, sizeof(wrong_tag));
+	check(ret == -EBADMSG, "asn1_ber_decoder rejects a mismatched outer tag");
+	check(!key.n_seen && !key.e_seen, "asn1_ber_decoder calls no actions on tag mismatch");
+}
+#else
+static void __init test_asn1_decoder(void) { }
+#endif
+
+#if IS_ENABLED(CONFIG_INTERVAL_TREE)
+/*
+ * lib/interval_tree.c -> interval_tree_rs.rs. CONFIG_INTERVAL_TREE is
+ * config-full only. interval_tree_insert/_remove/_iter_first/_iter_next
+ * DO have real callers in this config (mm/interval_tree.c's
+ * vma_interval_tree_* wrappers, used by every process's VMA tracking),
+ * confirmed call-graph-reached -- but sabotage-and-reboot (making
+ * interval_tree_insert a no-op, rebuilding, rebooting) produced no
+ * observable failure in this minimal busybox boot: nothing here creates
+ * enough VMA/rmap pressure to notice an empty interval tree. Same shape
+ * as dql_init's finding above. A proof caller here regardless, per
+ * GOALS.md's bar. interval_tree_span_iter_{first,next,advance} are not
+ * covered -- CONFIG_INTERVAL_TREE_SPAN_ITER is unset in both of this
+ * project's configs (only CONFIG_IOMMUFD selects it in 6.18.49), so
+ * those three are not compiled here at all; see
+ * interval_tree_rs.rs's own module doc.
+ *
+ * Four intervals inserted -- A=[10,20], B=[30,40], C=[15,25], D=[50,60]
+ * -- and three queries hand-checked against them before any code was
+ * read back: [18,32] should overlap A (10<=32 && 18<=20), C (15<=32 &&
+ * 18<=25) and B (30<=32 && 18<=40), not D; [45,55] should overlap only
+ * D; [0,5] should overlap nothing. Removing C and re-running the first
+ * query should then drop it from the result.
+ */
+static void __init test_interval_tree(void)
+{
+	struct interval_tree_node a, b, c, d;
+	struct interval_tree_node *node;
+	struct rb_root_cached root = RB_ROOT_CACHED;
+	unsigned int seen, count;
+
+	a.start = 10; a.last = 20;
+	b.start = 30; b.last = 40;
+	c.start = 15; c.last = 25;
+	d.start = 50; d.last = 60;
+	interval_tree_insert(&a, &root);
+	interval_tree_insert(&b, &root);
+	interval_tree_insert(&c, &root);
+	interval_tree_insert(&d, &root);
+
+	seen = 0; count = 0;
+	for (node = interval_tree_iter_first(&root, 18, 32); node;
+	     node = interval_tree_iter_next(node, 18, 32)) {
+		if (node == &a) seen |= 1;
+		else if (node == &b) seen |= 2;
+		else if (node == &c) seen |= 4;
+		else if (node == &d) seen |= 8;
+		count++;
+	}
+	check(count == 3 && seen == (1 | 2 | 4),
+	      "interval_tree [18,32] overlaps exactly {A, B, C}");
+
+	count = 0;
+	for (node = interval_tree_iter_first(&root, 45, 55); node;
+	     node = interval_tree_iter_next(node, 45, 55)) {
+		check(node == &d, "interval_tree [45,55] overlap is D");
+		count++;
+	}
+	check(count == 1, "interval_tree [45,55] overlaps exactly one node");
+
+	check(interval_tree_iter_first(&root, 0, 5) == NULL,
+	      "interval_tree [0,5] overlaps nothing");
+
+	interval_tree_remove(&c, &root);
+	seen = 0; count = 0;
+	for (node = interval_tree_iter_first(&root, 18, 32); node;
+	     node = interval_tree_iter_next(node, 18, 32)) {
+		if (node == &a) seen |= 1;
+		else if (node == &b) seen |= 2;
+		count++;
+	}
+	check(count == 2 && seen == (1 | 2),
+	      "interval_tree_remove(C): [18,32] now overlaps exactly {A, B}");
+}
+#else
+static void __init test_interval_tree(void) { }
 #endif
 
 /*
@@ -1862,8 +3428,513 @@ static void __init test_mpih(void)
 	check(mpihelp_cmp(a, b, 3) == 1 && mpihelp_cmp(b, a, 3) == -1,
 	      "mpihelp_cmp orders by the most significant differing limb");
 }
+
+/*
+ * lib/crypto/mpi/mpi-add.c -> mpi_add_rs.rs. Neither mpi_add() nor
+ * mpi_sub()/mpi_addm()/mpi_subm() is reached at boot in either of this
+ * project's configs (CONFIG_MODULE_SIG is not set, so the compiled-in
+ * X.509 certs this file's mpi_alloc()/mpi_free() ARE reached through are
+ * only ever parsed, never verified) -- confirmed by sabotaging mpi_add()
+ * to always return an error and reboot: boot stayed clean, certs still
+ * "loaded" (parsing them never calls mpi_add), 599 self-tests still
+ * passed. So this is class A and these vectors are the whole of
+ * criterion 5 for it, same reason md5's were for HMAC-MD5.
+ *
+ * Values are small enough to verify by hand, same convention as
+ * test_mpih() just above -- an external bignum oracle would be a bigger
+ * dependency than the arithmetic it is checking.
+ */
+static MPI __init mk_mpi(int nlimbs, int sign, const unsigned long *limbs)
+{
+	MPI a = mpi_alloc(nlimbs > 0 ? (unsigned)nlimbs : 1);
+	int i;
+
+	if (!a)
+		return NULL;
+	for (i = 0; i < nlimbs; i++)
+		a->d[i] = limbs[i];
+	a->nlimbs = nlimbs;
+	a->sign = sign;
+	return a;
+}
+
+static void __init test_mpi_add(void)
+{
+	MPI w = mpi_alloc(4);
+	bool ok = true;
+
+	if (!w) {
+		check(false, "mpi_add setup: mpi_alloc failed");
+		return;
+	}
+
+	/* 1 + 1 = 2: the trivial same-sign, single-limb path. */
+	{
+		static const unsigned long one[1] = { 1 };
+		MPI u = mk_mpi(1, 0, one), v = mk_mpi(1, 0, one);
+
+		ok = u && v && !mpi_add(w, u, v);
+		check(ok && w->nlimbs == 1 && w->sign == 0 && w->d[0] == 2,
+		      "mpi_add: 1 + 1 = 2");
+		mpi_free(u); mpi_free(v);
+	}
+
+	/* (~0) + 1 = 2^BITS_PER_LONG: same-sign add that carries a whole
+	 * new limb into existence -- the wp[usize] = cy path. */
+	{
+		static const unsigned long allones[1] = { ~0UL };
+		static const unsigned long one[1] = { 1 };
+		MPI u = mk_mpi(1, 0, allones), v = mk_mpi(1, 0, one);
+
+		ok = u && v && !mpi_add(w, u, v);
+		check(ok && w->nlimbs == 2 && w->sign == 0
+		      && w->d[0] == 0 && w->d[1] == 1,
+		      "mpi_add: carrying out of the top limb grows nlimbs");
+		mpi_free(u); mpi_free(v);
+	}
+
+	/* 5 - 3 = 2: mpi_sub()'s different-sign, equal-size path, via
+	 * mpihelp_cmp() choosing which operand is larger. */
+	{
+		static const unsigned long five[1] = { 5 }, three[1] = { 3 };
+		MPI u = mk_mpi(1, 0, five), v = mk_mpi(1, 0, three);
+
+		ok = u && v && !mpi_sub(w, u, v);
+		check(ok && w->nlimbs == 1 && w->sign == 0 && w->d[0] == 2,
+		      "mpi_sub: 5 - 3 = 2");
+		mpi_free(u); mpi_free(v);
+	}
+
+	/* 3 - 5 = -2: same path, operands swapped -- the sign of the
+	 * result must flip, not just its magnitude. */
+	{
+		static const unsigned long five[1] = { 5 }, three[1] = { 3 };
+		MPI u = mk_mpi(1, 0, three), v = mk_mpi(1, 0, five);
+
+		ok = u && v && !mpi_sub(w, u, v);
+		check(ok && w->nlimbs == 1 && w->sign == 1 && w->d[0] == 2,
+		      "mpi_sub: 3 - 5 = -2 (magnitude 2, negative)");
+		mpi_free(u); mpi_free(v);
+	}
+
+	/* 5 - 5 = 0: equal operands, different-sign path, must normalize
+	 * away to zero limbs. */
+	{
+		static const unsigned long five[1] = { 5 };
+		MPI u = mk_mpi(1, 0, five), v = mk_mpi(1, 0, five);
+
+		ok = u && v && !mpi_sub(w, u, v);
+		check(ok && w->nlimbs == 0, "mpi_sub: 5 - 5 = 0 normalizes to nlimbs=0");
+		mpi_free(u); mpi_free(v);
+	}
+
+	/* 2^BITS_PER_LONG - 1: a two-limb minuend, one-limb subtrahend --
+	 * the different-SIZE branch of mpi_sub() (mpihelp_sub(), not
+	 * mpihelp_sub_n()+mpihelp_cmp()). */
+	{
+		static const unsigned long top[2] = { 0, 1 }; /* 2^BITS_PER_LONG */
+		static const unsigned long one[1] = { 1 };
+		MPI u = mk_mpi(2, 0, top), v = mk_mpi(1, 0, one);
+
+		ok = u && v && !mpi_sub(w, u, v);
+		check(ok && w->nlimbs == 1 && w->sign == 0 && w->d[0] == ~0UL,
+		      "mpi_sub: different-size operands take the direct-subtract path");
+		mpi_free(u); mpi_free(v);
+	}
+
+	/* (7 + 5) mod 5 = 2, and (7 - 5) mod 5 = 2: both addm/subm reach
+	 * the still-C mpi_mod() through the ?: tail call, and only when
+	 * the add/sub half succeeds (criterion: this is unreachable if the
+	 * ?: were backwards, which is exactly the class of bug the
+	 * conditional-tail-call shape invites). */
+	{
+		static const unsigned long seven[1] = { 7 }, five[1] = { 5 };
+		MPI u = mk_mpi(1, 0, seven), v = mk_mpi(1, 0, five);
+		MPI m = mk_mpi(1, 0, five);
+
+		ok = u && v && m && !mpi_addm(w, u, v, m);
+		check(ok && w->nlimbs == 1 && w->sign == 0 && w->d[0] == 2,
+		      "mpi_addm: (7 + 5) mod 5 = 2");
+		mpi_free(u); mpi_free(v); mpi_free(m);
+	}
+	{
+		static const unsigned long seven[1] = { 7 }, five[1] = { 5 };
+		MPI u = mk_mpi(1, 0, seven), v = mk_mpi(1, 0, five);
+		MPI m = mk_mpi(1, 0, five);
+
+		ok = u && v && m && !mpi_subm(w, u, v, m);
+		check(ok && w->nlimbs == 1 && w->sign == 0 && w->d[0] == 2,
+		      "mpi_subm: (7 - 5) mod 5 = 2");
+		mpi_free(u); mpi_free(v); mpi_free(m);
+	}
+
+	mpi_free(w);
+}
+
+static void __init test_mpi_sub_ui(void)
+{
+	MPI w = mpi_alloc(4);
+
+	if (!w) {
+		check(false, "mpi_sub_ui setup: mpi_alloc failed");
+		return;
+	}
+
+	/* u == 0 (nlimbs == 0): the dedicated early-return path. */
+	{
+		MPI u = mpi_alloc(1);
+		bool ok = u && !mpi_sub_ui(w, u, 5);
+
+		check(ok && w->nlimbs == 1 && w->sign == 1 && w->d[0] == 5,
+		      "mpi_sub_ui: 0 - 5 = -5");
+		mpi_free(u);
+	}
+
+	/* u positive, u >= vval: the mpihelp_sub_1() branch. */
+	{
+		static const unsigned long seven[1] = { 7 };
+		MPI u = mk_mpi(1, 0, seven);
+		bool ok = u && !mpi_sub_ui(w, u, 3);
+
+		check(ok && w->nlimbs == 1 && w->sign == 0 && w->d[0] == 4,
+		      "mpi_sub_ui: 7 - 3 = 4");
+		mpi_free(u);
+	}
+
+	/* u positive, single limb, u < vval: the dedicated "signs
+	 * differ, exact comparison" branch (w->d[0] = vval - u->d[0]). */
+	{
+		static const unsigned long three[1] = { 3 };
+		MPI u = mk_mpi(1, 0, three);
+		bool ok = u && !mpi_sub_ui(w, u, 7);
+
+		check(ok && w->nlimbs == 1 && w->sign == 1 && w->d[0] == 4,
+		      "mpi_sub_ui: 3 - 7 = -4");
+		mpi_free(u);
+	}
+
+	/* u already negative: the mpihelp_add_1() branch, magnitude grows. */
+	{
+		static const unsigned long five[1] = { 5 };
+		MPI u = mk_mpi(1, 1, five); /* u = -5 */
+		bool ok = u && !mpi_sub_ui(w, u, 3);
+
+		check(ok && w->nlimbs == 1 && w->sign == 1 && w->d[0] == 8,
+		      "mpi_sub_ui: -5 - 3 = -8");
+		mpi_free(u);
+	}
+
+	/* Top limb becomes exactly zero after subtracting: nlimbs must
+	 * shrink by one, not stay stale. */
+	{
+		static const unsigned long two_limbs[2] = { 0, 1 }; /* 2^BITS_PER_LONG */
+		MPI u = mk_mpi(2, 0, two_limbs);
+		bool ok = u && !mpi_sub_ui(w, u, 1);
+
+		check(ok && w->nlimbs == 1 && w->sign == 0 && w->d[0] == ~0UL,
+		      "mpi_sub_ui: 2^BITS_PER_LONG - 1 shrinks nlimbs back to 1");
+		mpi_free(u);
+	}
+
+	mpi_free(w);
+}
+
+/*
+ * lib/crypto/mpi/mpih_mul_rs.rs -- none of its five real symbols is
+ * EXPORT_SYMBOL, and neither mpi_mul() nor mpi_powm() (both still C,
+ * both EXPORT_SYMBOL_GPL) is on any path X.509 certificate loading takes
+ * at boot with CONFIG_MODULE_SIG unset -- confirmed by sabotaging
+ * mpihelp_mul() to always return an error and reboot: boot stayed clean,
+ * certs still "loaded", self-tests still passed. Class A, same as
+ * mpi_add()/mpi_addm() above. Values from a real oracle (Python), not
+ * hand-derived, per this project's own guard on that.
+ */
+static void __init test_mpi_mul(void)
+{
+	MPI w = mpi_alloc(8);
+
+	if (!w) {
+		check(false, "mpi_mul setup: mpi_alloc failed");
+		return;
+	}
+
+	/* 7 * 5 = 35: the trivial single-limb path. */
+	{
+		static const unsigned long seven[1] = { 7 }, five[1] = { 5 };
+		MPI u = mk_mpi(1, 0, seven), v = mk_mpi(1, 0, five);
+		bool ok = u && v && !mpi_mul(w, u, v);
+
+		check(ok && w->nlimbs == 1 && w->sign == 0 && w->d[0] == 35,
+		      "mpi_mul: 7 * 5 = 35");
+		mpi_free(u); mpi_free(v);
+	}
+
+	/* (2^70+5) * (2^70+7): two-limb operands on both sides, reaching
+	 * mpihelp_mul's multi-limb schoolbook loop (vsize == 2), still well
+	 * under KARATSUBA_THRESHOLD (16). Product independently computed:
+	 * 0x400000000000000005 * 0x400000000000000007 =
+	 * 0x100000000000000003000000000000000023, i.e. limbs
+	 * [0x23, 0x300, 0x1000] little-endian.
+	 */
+	{
+		static const unsigned long u_limbs[2] = { 5, 64 };
+		static const unsigned long v_limbs[2] = { 7, 64 };
+		MPI u = mk_mpi(2, 0, u_limbs), v = mk_mpi(2, 0, v_limbs);
+		bool ok = u && v && !mpi_mul(w, u, v);
+
+		check(ok && w->nlimbs == 3 && w->sign == 0 &&
+		      w->d[0] == 0x23 && w->d[1] == 0x300 && w->d[2] == 0x1000,
+		      "mpi_mul: (2^70+5) * (2^70+7), multi-limb operands");
+		mpi_free(u); mpi_free(v);
+	}
+
+	mpi_free(w);
+}
+
+/*
+ * mpi_powm() reaches mpih_sqr_n_basecase() (and, for large moduli,
+ * mpih_sqr_n()/mpihelp_mul_karatsuba_case()) via its own repeated-
+ * squaring loop whenever rsize < KARATSUBA_THRESHOLD, which every
+ * modulus this small satisfies unconditionally.
+ */
+static void __init test_mpi_powm(void)
+{
+	/* 3^5 mod 7 = 5. */
+	static const unsigned long base_l[1] = { 3 };
+	static const unsigned long exp_l[1] = { 5 };
+	static const unsigned long mod_l[1] = { 7 };
+	MPI res = mpi_alloc(4);
+	MPI base = mk_mpi(1, 0, base_l);
+	MPI exp = mk_mpi(1, 0, exp_l);
+	MPI mod = mk_mpi(1, 0, mod_l);
+	bool ok = res && base && exp && mod && !mpi_powm(res, base, exp, mod);
+
+	check(ok && res->nlimbs == 1 && res->sign == 0 && res->d[0] == 5,
+	      "mpi_powm: 3^5 mod 7 = 5");
+	mpi_free(res); mpi_free(base); mpi_free(exp); mpi_free(mod);
+}
+
+/*
+ * lib/crypto/mpi/mpi_bit_rs.rs -- mpi_get_nbits/mpi_test_bit/mpi_set_bit/
+ * mpi_rshift are all EXPORT_SYMBOL_GPL, but their only real-kernel
+ * callers (crypto/rsa.c's mpi_test_bit/mpi_set_bit, gated behind
+ * `fips_enabled`, which is off; crypto/dh.c's mpi_rshift, only reached
+ * when a DH key is actually set up, which nothing does at boot) are not
+ * on any path this boot takes -- confirmed by sabotaging each of
+ * mpi_get_nbits and mpi_rshift in turn and rebooting: no change to X.509
+ * loading or self-test count either time. Class A. Values are small
+ * enough to verify by hand, same convention as test_mpih()/test_mpi_add()
+ * above. mpi_normalize (not exported) is exercised transitively by
+ * mpi_get_nbits's own call to it.
+ */
+static void __init test_mpi_bit(void)
+{
+	/* mpi_get_nbits: 0, 1, 255 (8 bits), 256 (9 bits), and a value
+	 * whose top limb is 1 with the low limb nonzero (65 bits) -- the
+	 * multi-limb path, and mpi_normalize() trimming a stale top limb
+	 * along the way. */
+	{
+		MPI zero = mpi_alloc(1);
+		check(zero && mpi_get_nbits(zero) == 0, "mpi_get_nbits: 0 has 0 bits");
+		mpi_free(zero);
+	}
+	{
+		static const unsigned long one[1] = { 1 };
+		MPI a = mk_mpi(1, 0, one);
+		check(a && mpi_get_nbits(a) == 1, "mpi_get_nbits: 1 has 1 bit");
+		mpi_free(a);
+	}
+	{
+		static const unsigned long v255[1] = { 255 };
+		MPI a = mk_mpi(1, 0, v255);
+		check(a && mpi_get_nbits(a) == 8, "mpi_get_nbits: 255 has 8 bits");
+		mpi_free(a);
+	}
+	{
+		static const unsigned long v256[1] = { 256 };
+		MPI a = mk_mpi(1, 0, v256);
+		check(a && mpi_get_nbits(a) == 9, "mpi_get_nbits: 256 has 9 bits");
+		mpi_free(a);
+	}
+	{
+		/* Top (real) limb 1, and a stale ZERO limb above it (nlimbs
+		 * overstates the true size) that mpi_normalize() must trim
+		 * away first -- mpi_normalize only ever trims a top limb
+		 * that is exactly zero, never a nonzero one. */
+		unsigned long two_limbs[3] = { 5, 1, 0 };
+		MPI a = mk_mpi(3, 0, two_limbs);
+		check(a && mpi_get_nbits(a) == BITS_PER_LONG + 1 && a->nlimbs == 2,
+		      "mpi_get_nbits: 2^BITS_PER_LONG + 5 has BITS_PER_LONG+1 bits, normalizes nlimbs");
+		mpi_free(a);
+	}
+
+	/* mpi_test_bit: 0b1010 = 10 -- bit 1 and bit 3 set, bit 0 and bit
+	 * 2 clear; a bit past nlimbs entirely reads as clear too. */
+	{
+		static const unsigned long ten[1] = { 10 };
+		MPI a = mk_mpi(1, 0, ten);
+		bool ok = a && !mpi_test_bit(a, 0) && mpi_test_bit(a, 1) &&
+			  !mpi_test_bit(a, 2) && mpi_test_bit(a, 3) &&
+			  !mpi_test_bit(a, BITS_PER_LONG + 5);
+		check(ok, "mpi_test_bit: 10 = 0b1010, bits 1 and 3 set");
+		mpi_free(a);
+	}
+
+	/* mpi_set_bit: on zero, sets exactly that bit; a bit past the
+	 * current single limb grows nlimbs and zeroes the newly-exposed
+	 * limb first. */
+	{
+		MPI a = mpi_alloc(1);
+		bool ok = a && !mpi_set_bit(a, 0);
+		check(ok && a->nlimbs == 1 && a->d[0] == 1,
+		      "mpi_set_bit: bit 0 of 0 sets it to 1");
+		mpi_free(a);
+	}
+	{
+		MPI a = mpi_alloc(1);
+		bool ok = a && !mpi_set_bit(a, BITS_PER_LONG + 6);
+		check(ok && a->nlimbs == 2 && a->d[0] == 0 &&
+		      a->d[1] == (1UL << 6),
+		      "mpi_set_bit: a bit past the first limb grows nlimbs, zeroing the gap");
+		mpi_free(a);
+	}
+
+	/* mpi_rshift: 10 >> 1 = 5 (in-place, x == a); 10 >> 10 = 0
+	 * (shifting entirely away); a two-limb value shifted by exactly
+	 * BITS_PER_LONG bits (the nlimbs-only path, no mpihelp_rshift
+	 * call) and by BITS_PER_LONG+1 (both nlimbs and a sub-limb shift),
+	 * x != a (the copy path) in both. */
+	{
+		static const unsigned long ten[1] = { 10 };
+		MPI a = mk_mpi(1, 0, ten);
+		bool ok = a && !mpi_rshift(a, a, 1);
+		check(ok && a->nlimbs == 1 && a->d[0] == 5,
+		      "mpi_rshift: 10 >> 1 = 5, in place");
+		mpi_free(a);
+	}
+	{
+		static const unsigned long ten[1] = { 10 };
+		MPI a = mk_mpi(1, 0, ten);
+		bool ok = a && !mpi_rshift(a, a, 10);
+		check(ok && a->nlimbs == 0, "mpi_rshift: 10 >> 10 = 0, in place");
+		mpi_free(a);
+	}
+	{
+		/* (2^BITS_PER_LONG + 7) >> BITS_PER_LONG == 1. */
+		unsigned long two_limbs[2] = { 7, 1 };
+		MPI a = mk_mpi(2, 0, two_limbs);
+		MPI x = mpi_alloc(2);
+		bool ok = a && x && !mpi_rshift(x, a, BITS_PER_LONG);
+		check(ok && x->nlimbs == 1 && x->d[0] == 1,
+		      "mpi_rshift: exact-limb shift, x != a");
+		mpi_free(a); mpi_free(x);
+	}
+	{
+		/* (2^(BITS_PER_LONG+1) + 2^BITS_PER_LONG + 7) >> (BITS_PER_LONG+1)
+		 * == 1 -- both a whole-limb shift and a sub-limb
+		 * mpihelp_rshift() call fire. */
+		unsigned long two_limbs[2] = { 7, 3 };
+		MPI a = mk_mpi(2, 0, two_limbs);
+		MPI x = mpi_alloc(2);
+		bool ok = a && x && !mpi_rshift(x, a, BITS_PER_LONG + 1);
+		check(ok && x->nlimbs == 1 && x->d[0] == 1,
+		      "mpi_rshift: whole-limb-plus-remainder shift, x != a");
+		mpi_free(a); mpi_free(x);
+	}
+}
+
+/*
+ * lib/crypto/mpi/mpicoder_rs.rs -- mpi_read_raw_data/mpi_write_to_sgl/
+ * mpi_read_raw_from_sgl are all class B: sabotaging each in turn broke
+ * real X.509 certificate loading at boot ("Problem loading in-kernel
+ * X.509 certificate", -ENOMEM / -EINVAL respectively) -- the kernel's
+ * own X.509 verification calls crypto/rsa.c's rsa_set_pub_key() (which
+ * calls mpi_read_raw_data()) and rsa_enc() (the RSA "verify" primitive,
+ * which calls both mpi_read_raw_from_sgl() and mpi_write_to_sgl()) while
+ * loading the compiled-in certificates, even with CONFIG_MODULE_SIG off.
+ * mpi_read_from_buffer()/mpi_read_buffer()/mpi_get_buffer() are class A:
+ * their only real caller, lib/digsig.c, is for module/kexec signature
+ * verification (CONFIG_MODULE_SIG), confirmed off by sabotaging all
+ * three together and finding no change to boot. Values are small enough
+ * to verify by hand, same convention as test_mpih() above.
+ */
+static void __init test_mpicoder(void)
+{
+	/* mpi_read_from_buffer: a 2-byte big-endian bit-length prefix (13
+	 * bits) followed by ceil(13/8)=2 raw bytes, msb first, for 0x1234. */
+	{
+		static const u8 buf[4] = { 0x00, 0x0d, 0x12, 0x34 };
+		unsigned int nread = sizeof(buf);
+		MPI a = mpi_read_from_buffer(buf, &nread);
+		bool ok = a && !IS_ERR(a);
+
+		check(ok && nread == 4 && a->nlimbs == 1 && a->sign == 0 &&
+		      a->d[0] == 0x1234,
+		      "mpi_read_from_buffer: 13-bit-prefixed 0x1234");
+		if (ok)
+			mpi_free(a);
+	}
+	{
+		/* Too few bytes even for the length prefix itself. */
+		static const u8 buf[1] = { 0x00 };
+		unsigned int nread = sizeof(buf);
+		MPI a = mpi_read_from_buffer(buf, &nread);
+
+		check(IS_ERR(a) && PTR_ERR(a) == -EINVAL,
+		      "mpi_read_from_buffer: fewer than 2 bytes is -EINVAL");
+	}
+
+	/* mpi_get_buffer (which calls mpi_read_buffer internally): 0x1234
+	 * in a single limb has 6 leading zero bytes, so the returned
+	 * buffer is exactly 2 bytes, msb first. */
+	{
+		static const unsigned long v[1] = { 0x1234 };
+		MPI a = mk_mpi(1, 0, v);
+		unsigned int nbytes = 0;
+		int sign = -1;
+		u8 *buf = a ? mpi_get_buffer(a, &nbytes, &sign) : NULL;
+		bool ok = buf && nbytes == 2 && sign == 0 &&
+			  buf[0] == 0x12 && buf[1] == 0x34;
+
+		check(ok, "mpi_get_buffer: 0x1234 packs to {0x12, 0x34}");
+		kfree(buf);
+		mpi_free(a);
+	}
+	{
+		/* Value 0: mpi_get_size() is 0, so mpi_get_buffer's own
+		 * "if (!n) n++" path allocates 1 byte and mpi_read_buffer
+		 * writes 0 bytes into it (nbytes == 0). */
+		MPI a = mpi_alloc(1);
+		unsigned int nbytes = 1;
+		u8 *buf = a ? mpi_get_buffer(a, &nbytes, NULL) : NULL;
+
+		check(buf && nbytes == 0, "mpi_get_buffer: 0 packs to an empty buffer");
+		kfree(buf);
+		mpi_free(a);
+	}
+
+	/* mpi_read_buffer directly: buf_len too small is -EOVERFLOW, and
+	 * still reports the required size. */
+	{
+		static const unsigned long v[1] = { 0x1234 };
+		MPI a = mk_mpi(1, 0, v);
+		u8 buf[1];
+		unsigned int nbytes = 0;
+		int ret = a ? mpi_read_buffer(a, buf, sizeof(buf), &nbytes, NULL) : -ENOMEM;
+
+		check(ret == -EOVERFLOW && nbytes == 2,
+		      "mpi_read_buffer: buf_len too small is -EOVERFLOW, reports the real size");
+		mpi_free(a);
+	}
+}
 #else
 static void __init test_mpih(void) { }
+static void __init test_mpi_add(void) { }
+static void __init test_mpi_sub_ui(void) { }
+static void __init test_mpi_mul(void) { }
+static void __init test_mpi_powm(void) { }
+static void __init test_mpi_bit(void) { }
+static void __init test_mpicoder(void) { }
 #endif
 
 #if IS_ENABLED(CONFIG_CHECK_SIGNATURE)
@@ -2557,6 +4628,661 @@ out:
 static void __init test_zstd(void) { }
 #endif
 
+#if IS_ENABLED(CONFIG_DECOMPRESS_BZIP2)
+#include <linux/decompress/bunzip2.h>
+
+/*
+ * lib/decompress_bunzip2.c has no separate lib/ decompressor to share --
+ * unlike unlzo/unlz4/unxz/uninflate, which call out to an already-tested
+ * lzo1x_decompress_safe()/lz4_decompress_safe()/zlib_inflate()/xz_dec_run(),
+ * bunzip2()'s whole algorithm lives in this one file. Nothing else in
+ * libtest.c exercises it, and this project's own initramfs is gzip (see
+ * rig/boot.sh), so CONFIG_RD_BZIP2=y compiles this in but the real boot path
+ * never calls it -- SCOPE.md class A, not B. This is its only proof.
+ *
+ * The vector: `bzip2 -1` of the 56-byte line below repeated 20 times (1080
+ * bytes plain, 143 compressed) -- generated once by
+ * port/test/decompress_bunzip2/run.sh's corpus and pasted here; correctness
+ * across tens of thousands of cases against the pristine C is that
+ * userspace differential's job, not this one's.
+ */
+static const u8 lt_bz2_comp[] = {
+	0x42, 0x5a, 0x68, 0x31, 0x31, 0x41, 0x59, 0x26, 0x53, 0x59, 0x7d, 0x0f,
+	0x98, 0x7e, 0x00, 0x00, 0x6d, 0x9f, 0x80, 0x40, 0x03, 0x90, 0x00, 0x00,
+	0x04, 0x10, 0x00, 0xbf, 0x27, 0xde, 0x70, 0x30, 0x00, 0xd8, 0x05, 0x34,
+	0x68, 0x03, 0x40, 0x00, 0x14, 0xd1, 0xa0, 0x0d, 0x00, 0x00, 0x14, 0xaa,
+	0xa3, 0xf5, 0x41, 0xe8, 0x8d, 0xea, 0x4f, 0x51, 0xea, 0x69, 0xe2, 0x9c,
+	0x13, 0x04, 0xe0, 0x9b, 0x93, 0xdc, 0x9f, 0x44, 0xee, 0x4c, 0x93, 0xc1,
+	0x3a, 0x09, 0xb9, 0x3f, 0x89, 0x82, 0x6c, 0x4d, 0x49, 0xb1, 0x3f, 0x09,
+	0xa9, 0x3a, 0x93, 0x42, 0x6e, 0x4c, 0x93, 0xc0, 0x9b, 0x13, 0x92, 0x74,
+	0x26, 0x49, 0xb1, 0x3b, 0x93, 0x24, 0xe4, 0x9a, 0x13, 0x72, 0x60, 0x9e,
+	0xc4, 0xe0, 0x9f, 0x64, 0xc9, 0x30, 0x4e, 0xa2, 0x68, 0x4c, 0x13, 0x72,
+	0x79, 0x13, 0x62, 0x70, 0x4e, 0x49, 0xea, 0x4d, 0x49, 0xfa, 0x4c, 0x13,
+	0xfc, 0x5d, 0xc9, 0x14, 0xe1, 0x42, 0x41, 0xf4, 0x3e, 0x61, 0xf8,
+};
+
+static void __init lt_bunzip2_error(char *msg)
+{
+	pr_err("libtest: bunzip2: %s\n", msg);
+}
+
+static void __init test_bunzip2(void)
+{
+	static const char unit[] = "Rusty Linux lib/decompress_bunzip2 self-test payload. ";
+	const unsigned int unit_len = sizeof(unit) - 1;
+	const unsigned int reps = 20;
+	const unsigned int plain_len = unit_len * reps;
+	u8 *want, *got, *comp;
+	unsigned int i;
+	int rc;
+
+	want = kmalloc(plain_len, GFP_KERNEL);
+	got = kmalloc(plain_len + 64, GFP_KERNEL);
+	comp = kmemdup(lt_bz2_comp, sizeof(lt_bz2_comp), GFP_KERNEL);
+	if (!want || !got || !comp) {
+		check(false, "bunzip2 test could not allocate");
+		goto out;
+	}
+	for (i = 0; i < reps; i++)
+		memcpy(want + i * unit_len, unit, unit_len);
+	memset(got, 0, plain_len + 64);
+
+	rc = bunzip2(comp, sizeof(lt_bz2_comp), NULL, NULL, got, NULL, lt_bunzip2_error);
+	check(rc == 0, "bunzip2 returns success on a valid stream");
+	check(memcmp(got, want, plain_len) == 0, "bunzip2 reproduced the plaintext");
+
+	/* A truncated stream must be refused, not decoded as garbage. */
+	{
+		unsigned int half = sizeof(lt_bz2_comp) / 2;
+		u8 *comp2 = kmemdup(lt_bz2_comp, half, GFP_KERNEL);
+
+		if (comp2) {
+			memset(got, 0, plain_len + 64);
+			rc = bunzip2(comp2, half, NULL, NULL, got, NULL, lt_bunzip2_error);
+			check(rc != 0, "bunzip2 rejects a truncated stream");
+			kfree(comp2);
+		} else {
+			check(false, "bunzip2 truncated-stream test could not allocate");
+		}
+	}
+out:
+	kfree(comp);
+	kfree(got);
+	kfree(want);
+}
+#else
+static void __init test_bunzip2(void) { }
+#endif
+
+#if IS_ENABLED(CONFIG_DECOMPRESS_LZ4)
+#include <linux/decompress/unlz4.h>
+
+/*
+ * lib/decompress_unlz4.c's own substance is the archive framing (magic +
+ * length-prefixed chunks), not LZ4 block decompression -- that's already
+ * covered by test_lz4() above. This project's initramfs is gzip (see
+ * rig/boot.sh), so CONFIG_RD_LZ4=y compiles this in but the real boot path
+ * never calls it -- SCOPE.md class A, same as bunzip2 above. This is its
+ * only proof.
+ *
+ * The vector: a kernel-format archive (ARCHIVE_MAGICNUMBER + one 4096-byte
+ * chunk) of the 53-byte line below repeated 20 times (1040 bytes plain, 74
+ * archived) -- generated once by port/test/decompress_unlz4/'s corpus and
+ * pasted here; correctness across the differential's plaintext/chunk-size
+ * matrix is that userspace test's job, not this one's.
+ */
+static const u8 lt_unlz4_arc[] = {
+	0x02, 0x21, 0x4c, 0x18, 0x42, 0x00, 0x00, 0x00, 0xff, 0x25, 0x52, 0x75,
+	0x73, 0x74, 0x79, 0x20, 0x4c, 0x69, 0x6e, 0x75, 0x78, 0x20, 0x6c, 0x69,
+	0x62, 0x2f, 0x64, 0x65, 0x63, 0x6f, 0x6d, 0x70, 0x72, 0x65, 0x73, 0x73,
+	0x5f, 0x75, 0x6e, 0x6c, 0x7a, 0x34, 0x20, 0x73, 0x65, 0x6c, 0x66, 0x2d,
+	0x74, 0x65, 0x73, 0x74, 0x20, 0x70, 0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64,
+	0x2e, 0x20, 0x34, 0x00, 0xff, 0xff, 0xff, 0xc7, 0x50, 0x6f, 0x61, 0x64,
+	0x2e, 0x20,
+};
+
+static void __init lt_unlz4_error(char *msg)
+{
+	pr_err("libtest: unlz4: %s\n", msg);
+}
+
+static void __init test_unlz4(void)
+{
+	static const char unit[] = "Rusty Linux lib/decompress_unlz4 self-test payload. ";
+	const unsigned int unit_len = sizeof(unit) - 1;
+	const unsigned int reps = 20;
+	const unsigned int plain_len = unit_len * reps;
+	u8 *want, *got, *arc;
+	unsigned int i;
+	int rc;
+
+	want = kmalloc(plain_len, GFP_KERNEL);
+	got = kmalloc(plain_len + 65536, GFP_KERNEL);
+	arc = kmemdup(lt_unlz4_arc, sizeof(lt_unlz4_arc), GFP_KERNEL);
+	if (!want || !got || !arc) {
+		check(false, "unlz4 test could not allocate");
+		goto out;
+	}
+	for (i = 0; i < reps; i++)
+		memcpy(want + i * unit_len, unit, unit_len);
+	memset(got, 0, plain_len + 65536);
+
+	rc = unlz4(arc, sizeof(lt_unlz4_arc), NULL, NULL, got, NULL, lt_unlz4_error);
+	check(rc == 0, "unlz4 returns success on a valid archive");
+	check(memcmp(got, want, plain_len) == 0, "unlz4 reproduced the plaintext");
+
+	/*
+	 * No truncated-archive sub-test here, unlike bunzip2's: in buffer
+	 * mode unlz4() trusts the embedded chunk length against
+	 * LZ4_decompress_safe without checking it against the bytes actually
+	 * left in the buffer -- inherited from upstream, not introduced by
+	 * this port (port/test/decompress_unlz4/ compares against the C
+	 * oracle on this exact question). Constructing a truncated case here
+	 * would just be handing kmalloc'd memory a real out-of-bounds read
+	 * at boot for no coverage gain.
+	 */
+out:
+	kfree(arc);
+	kfree(got);
+	kfree(want);
+}
+#else
+static void __init test_unlz4(void) { }
+#endif
+
+#if IS_ENABLED(CONFIG_DECOMPRESS_LZO)
+#include <linux/decompress/unlzo.h>
+
+/*
+ * lib/decompress_unlzo.c's own substance is the LZOP header parsing and
+ * block framing, not LZO block decompression -- that's already covered by
+ * test_lzo() above. This project's initramfs is gzip (see rig/boot.sh), so
+ * CONFIG_RD_LZO=y compiles this in but the real boot path never calls it --
+ * SCOPE.md class A, same as bunzip2 and unlz4 above. This is its only
+ * proof.
+ *
+ * The vector: a real `lzop -1` archive (generated via stdin, so the header
+ * carries no embedded filename) of the 52-byte line below repeated 20
+ * times (1040 bytes plain, 135 archived) -- generated once by
+ * port/test/decompress_unlzo/'s corpus and pasted here; correctness across
+ * that differential's plaintext/level/mode matrix is its job, not this
+ * one's.
+ */
+static const u8 lt_unlzo_arc[] = {
+	0x89, 0x4c, 0x5a, 0x4f, 0x00, 0x0d, 0x0a, 0x1a, 0x0a, 0x10, 0x40, 0x20,
+	0xa0, 0x09, 0x40, 0x02, 0x01, 0x03, 0x00, 0x00, 0x0d, 0x00, 0x00, 0x81,
+	0xa4, 0x6a, 0x9c, 0xdd, 0x79, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3c, 0x95,
+	0x04, 0xee, 0x00, 0x00, 0x04, 0x10, 0x00, 0x00, 0x00, 0x51, 0xb7, 0x6e,
+	0x8a, 0x70, 0x00, 0x22, 0x52, 0x75, 0x73, 0x74, 0x79, 0x20, 0x4c, 0x69,
+	0x6e, 0x75, 0x78, 0x20, 0x6c, 0x69, 0x62, 0x2f, 0x64, 0x65, 0x63, 0x6f,
+	0x6d, 0x70, 0x72, 0x65, 0x73, 0x73, 0x5f, 0x75, 0x6e, 0x6c, 0x7a, 0x6f,
+	0x20, 0x73, 0x65, 0x6c, 0x66, 0x2d, 0x74, 0x65, 0x73, 0x74, 0x20, 0x70,
+	0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x2e, 0x20, 0x20, 0x00, 0x00, 0x00,
+	0xae, 0xcc, 0x00, 0x0d, 0x66, 0x2d, 0x74, 0x65, 0x73, 0x74, 0x20, 0x70,
+	0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x2e, 0x20, 0x11, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00,
+};
+
+static void __init lt_unlzo_error(char *msg)
+{
+	pr_err("libtest: unlzo: %s\n", msg);
+}
+
+static void __init test_unlzo(void)
+{
+	static const char unit[] = "Rusty Linux lib/decompress_unlzo self-test payload. ";
+	const unsigned int unit_len = sizeof(unit) - 1;
+	const unsigned int reps = 20;
+	const unsigned int plain_len = unit_len * reps;
+	u8 *want, *got, *arc;
+	unsigned int i;
+	int rc;
+
+	want = kmalloc(plain_len, GFP_KERNEL);
+	got = kmalloc(plain_len + 65536, GFP_KERNEL);
+	arc = kmemdup(lt_unlzo_arc, sizeof(lt_unlzo_arc), GFP_KERNEL);
+	if (!want || !got || !arc) {
+		check(false, "unlzo test could not allocate");
+		goto out;
+	}
+	for (i = 0; i < reps; i++)
+		memcpy(want + i * unit_len, unit, unit_len);
+	memset(got, 0, plain_len + 65536);
+
+	rc = unlzo(arc, sizeof(lt_unlzo_arc), NULL, NULL, got, NULL, lt_unlzo_error);
+	check(rc == 0, "unlzo returns success on a valid archive");
+	check(memcmp(got, want, plain_len) == 0, "unlzo reproduced the plaintext");
+
+	/*
+	 * A truncated archive must be refused, not decoded as garbage.
+	 * Unlike unlz4's wrapper, this one DOES check a block's declared
+	 * length against what's actually left in the buffer before calling
+	 * lzo1x_decompress_safe (decompress_unlzo.c: `if (in_len < src_len)
+	 * ... goto exit_2`) -- an earlier version of this comment claimed
+	 * otherwise, copied from unlz4's without rechecking it against this
+	 * file, and adversarial review caught it. Safe here.
+	 */
+	{
+		unsigned int half = sizeof(lt_unlzo_arc) / 2;
+		u8 *arc2 = kmemdup(lt_unlzo_arc, half, GFP_KERNEL);
+
+		if (arc2) {
+			memset(got, 0, plain_len + 65536);
+			rc = unlzo(arc2, half, NULL, NULL, got, NULL, lt_unlzo_error);
+			check(rc != 0, "unlzo rejects a truncated archive");
+			kfree(arc2);
+		} else {
+			check(false, "unlzo truncated-archive test could not allocate");
+		}
+	}
+out:
+	kfree(arc);
+	kfree(got);
+	kfree(want);
+}
+#else
+static void __init test_unlzo(void) { }
+#endif
+
+#if IS_ENABLED(CONFIG_DECOMPRESS_XZ)
+#include <linux/decompress/unxz.h>
+
+/*
+ * lib/decompress_unxz.c's own substance is picking single-call vs
+ * multi-call mode and shuttling bytes through fill()/flush() -- the .xz
+ * container format itself is entirely xz_dec_run()'s job, already covered
+ * by lib/xz/'s own tests. This project's initramfs is gzip (see
+ * rig/boot.sh), so CONFIG_RD_XZ=y compiles this in but the real boot path
+ * never calls it -- SCOPE.md class A, same as bunzip2/unlz4/unlzo above.
+ * This is its only proof.
+ *
+ * The vector: a real `xz -6 --check=crc32` stream (our kernels build
+ * XZ_DEC_ANY_CHECK=n, which rejects any check type above CRC32 -- xz's own
+ * default is CRC64) of the 51-byte line below repeated 20 times (1020
+ * bytes plain, 132 archived) -- generated once by
+ * port/test/decompress_unxz/'s corpus and pasted here; correctness across
+ * that differential's plaintext/level/mode matrix is its job, not this
+ * one's.
+ */
+static const u8 lt_unxz_arc[] = {
+	0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00, 0x00, 0x01, 0x69, 0x22, 0xde, 0x36,
+	0x04, 0xc0, 0x46, 0xfc, 0x07, 0x21, 0x01, 0x16, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x66, 0x39, 0x3b, 0x86, 0xe0, 0x03, 0xfb, 0x00,
+	0x3e, 0x5d, 0x00, 0x29, 0x1d, 0x4a, 0x67, 0x70, 0x15, 0xb7, 0xd5, 0x97,
+	0xaf, 0xf2, 0x81, 0x34, 0xd6, 0xb2, 0x8f, 0x53, 0xd9, 0xc8, 0x03, 0x59,
+	0xa2, 0x66, 0xf3, 0xd6, 0xe0, 0xd0, 0x1b, 0xa6, 0x45, 0x66, 0xef, 0x45,
+	0xf1, 0x61, 0xd2, 0x0f, 0x06, 0xd3, 0x75, 0x25, 0x4d, 0x3c, 0xce, 0xb0,
+	0xc9, 0xad, 0x98, 0xbb, 0xc5, 0xaa, 0xee, 0xf7, 0xf0, 0x6d, 0xc1, 0x82,
+	0xcd, 0x70, 0xb4, 0xef, 0x00, 0x00, 0x00, 0x00, 0x6f, 0x79, 0x95, 0x8a,
+	0x00, 0x01, 0x5e, 0xfc, 0x07, 0x00, 0x00, 0x00, 0xbf, 0x38, 0xc2, 0xe5,
+	0x3e, 0x30, 0x0d, 0x8b, 0x02, 0x00, 0x00, 0x00, 0x00, 0x01, 0x59, 0x5a,
+};
+
+static void __init lt_unxz_error(char *msg)
+{
+	pr_err("libtest: unxz: %s\n", msg);
+}
+
+static void __init test_unxz(void)
+{
+	static const char unit[] = "Rusty Linux lib/decompress_unxz self-test payload. ";
+	const unsigned int unit_len = sizeof(unit) - 1;
+	const unsigned int reps = 20;
+	const unsigned int plain_len = unit_len * reps;
+	u8 *want, *got, *arc;
+	unsigned int i;
+	int rc;
+
+	want = kmalloc(plain_len, GFP_KERNEL);
+	got = kmalloc(plain_len + 65536, GFP_KERNEL);
+	arc = kmemdup(lt_unxz_arc, sizeof(lt_unxz_arc), GFP_KERNEL);
+	if (!want || !got || !arc) {
+		check(false, "unxz test could not allocate");
+		goto out;
+	}
+	for (i = 0; i < reps; i++)
+		memcpy(want + i * unit_len, unit, unit_len);
+	memset(got, 0, plain_len + 65536);
+
+	rc = unxz(arc, sizeof(lt_unxz_arc), NULL, NULL, got, NULL, lt_unxz_error);
+	check(rc == 0, "unxz returns success on a valid stream");
+	check(memcmp(got, want, plain_len) == 0, "unxz reproduced the plaintext");
+
+	/*
+	 * A truncated stream must be refused, not decoded as garbage.
+	 *
+	 * Recorded correction, found by adversarial review: an earlier
+	 * version of this comment claimed this is safe because "xz_dec_run()
+	 * owns all length/buffer trust" -- false in general. In single-call
+	 * mode (fill == NULL && flush == NULL, exactly this call) unxz() sets
+	 * b.out_size = usize::MAX, so xz_dec_run() enforces NO output bound
+	 * at all; `got`'s real size is all that protects it, same as
+	 * unlz4/unlzo's callers must size their own buffer. What actually
+	 * makes truncating this specific vector safe: xz_dec_run() only ever
+	 * writes as many bytes as it has genuinely decoded, and truncating
+	 * the input at exactly half does not touch any of the length fields
+	 * (block header's compressed/uncompressed sizes, the one LZMA2
+	 * chunk's own length) -- all of which sit before the truncation
+	 * point -- so decoding just runs out of INPUT and reports an error
+	 * via the properly-enforced b.in_pos/b.in_size bound, never
+	 * over-producing output past what it has actually decoded.
+	 */
+	{
+		unsigned int half = sizeof(lt_unxz_arc) / 2;
+		u8 *arc2 = kmemdup(lt_unxz_arc, half, GFP_KERNEL);
+
+		if (arc2) {
+			memset(got, 0, plain_len + 65536);
+			rc = unxz(arc2, half, NULL, NULL, got, NULL, lt_unxz_error);
+			check(rc != 0, "unxz rejects a truncated stream");
+			kfree(arc2);
+		} else {
+			check(false, "unxz truncated-stream test could not allocate");
+		}
+	}
+out:
+	kfree(arc);
+	kfree(got);
+	kfree(want);
+}
+#else
+static void __init test_unxz(void) { }
+#endif
+
+#if IS_ENABLED(CONFIG_DECOMPRESS_ZSTD)
+#include <linux/decompress/unzstd.h>
+
+/*
+ * lib/decompress_unzstd.c's own substance is picking single-call vs
+ * multi-call mode, tracking the frame's window size, and shuttling bytes
+ * through fill()/flush() -- the .zst container format itself is entirely
+ * the real zstd_* API's job (lib/zstd/, currently C behind those symbols,
+ * see decompress_unzstd_rs.rs's module doc). This project's initramfs is
+ * gzip (see rig/boot.sh), so CONFIG_RD_ZSTD=y compiles this in but the
+ * real boot path never calls it -- SCOPE.md class A, same as
+ * bunzip2/unlz4/unlzo/unxz above. This is its only proof.
+ *
+ * The vector: a real `zstd -19` stream (73 bytes archived) of the 53-byte
+ * line below repeated 20 times (1060 bytes plain) -- generated once by
+ * port/test/decompress_unzstd/'s corpus and pasted here; correctness
+ * across that differential's plaintext/level/mode matrix is its job, not
+ * this one's.
+ */
+static const u8 lt_unzstd_arc[] = {
+	0x28, 0xb5, 0x2f, 0xfd, 0x64, 0x24, 0x03, 0xdd, 0x01, 0x00, 0x52, 0x43,
+	0x0c, 0x11, 0xa0, 0x3d, 0x76, 0x0a, 0x7c, 0x8d, 0xe1, 0x94, 0x70, 0xc2,
+	0xdf, 0x3f, 0x30, 0x8c, 0xaa, 0x53, 0x03, 0x1a, 0xd6, 0xb4, 0x96, 0xc6,
+	0xe9, 0x3b, 0x3f, 0x48, 0xcd, 0xae, 0xfb, 0x3e, 0x19, 0x2c, 0xee, 0xfc,
+	0xdc, 0x6a, 0x88, 0x57, 0x1c, 0xd5, 0x1a, 0x21, 0x53, 0x43, 0xe5, 0x3b,
+	0x24, 0x01, 0x01, 0x00, 0xc5, 0x1e, 0x57, 0x0a, 0x0a, 0xa8, 0x3a, 0xc9,
+	0x29,
+};
+
+static void __init lt_unzstd_error(char *msg)
+{
+	pr_err("libtest: unzstd: %s\n", msg);
+}
+
+static void __init test_unzstd(void)
+{
+	static const char unit[] = "Rusty Linux lib/decompress_unzstd self-test payload. ";
+	const unsigned int unit_len = sizeof(unit) - 1;
+	const unsigned int reps = 20;
+	const unsigned int plain_len = unit_len * reps;
+	u8 *want, *got, *arc;
+	unsigned int i;
+	int rc;
+
+	want = kmalloc(plain_len, GFP_KERNEL);
+	got = kmalloc(plain_len + 65536, GFP_KERNEL);
+	arc = kmemdup(lt_unzstd_arc, sizeof(lt_unzstd_arc), GFP_KERNEL);
+	if (!want || !got || !arc) {
+		check(false, "unzstd test could not allocate");
+		goto out;
+	}
+	for (i = 0; i < reps; i++)
+		memcpy(want + i * unit_len, unit, unit_len);
+	memset(got, 0, plain_len + 65536);
+
+	rc = unzstd(arc, sizeof(lt_unzstd_arc), NULL, NULL, got, NULL, lt_unzstd_error);
+	check(rc == 0, "unzstd returns success on a valid stream");
+	check(memcmp(got, want, plain_len) == 0, "unzstd reproduced the plaintext");
+
+	/*
+	 * A truncated stream must be refused, not decoded as garbage --
+	 * VERIFIED, not assumed (the reasoning that would apply by analogy
+	 * to unxz's truncation test turned out to need its own check: unxz's
+	 * safety there comes from xz_dec_run() running out of INPUT because
+	 * no length field sits after the truncation point; zstd's frame
+	 * format is different enough -- decompress_single(), the buffer-mode
+	 * path this call takes, does not call the streaming decoder at all).
+	 *
+	 * What actually makes it safe here: decompress_single()'s first
+	 * step is `zstd_find_frame_compressed_size(in_buf, in_len)`, which
+	 * has to walk every block in the frame to compute the frame's true
+	 * total size -- a truncated input cannot contain a complete block
+	 * sequence, so this call itself fails with an error and
+	 * zstd_decompress_dctx() (the call that would actually write to
+	 * `got`) is never reached. Confirmed empirically, not just reasoned
+	 * about: a byte-by-byte truncation sweep of a real archive from 1
+	 * byte short of complete down to 1 byte long, through this exact
+	 * unzstd() call, rejected every single truncation and produced no
+	 * observable output on any of them.
+	 */
+	{
+		unsigned int half = sizeof(lt_unzstd_arc) / 2;
+		u8 *arc2 = kmemdup(lt_unzstd_arc, half, GFP_KERNEL);
+
+		if (arc2) {
+			memset(got, 0, plain_len + 65536);
+			rc = unzstd(arc2, half, NULL, NULL, got, NULL, lt_unzstd_error);
+			check(rc != 0, "unzstd rejects a truncated stream");
+			kfree(arc2);
+		} else {
+			check(false, "unzstd truncated-stream test could not allocate");
+		}
+	}
+out:
+	kfree(arc);
+	kfree(got);
+	kfree(want);
+}
+#else
+static void __init test_unzstd(void) { }
+#endif
+
+#if IS_ENABLED(CONFIG_DECOMPRESS_GZIP)
+#include <linux/decompress/inflate.h>
+
+/*
+ * Unlike the other five files in this decompressor family, gunzip() is
+ * NOT class A: this project's initramfs really is gzip (rig/boot.sh), so
+ * every boot already exercises gunzip() in fill/flush (streaming) mode --
+ * see decompress_inflate_rs.rs's module doc. This test covers BUFFER mode
+ * instead (fill=flush=NULL), which no real caller in this tree uses, for
+ * the complementary reason every other file's libtest exists: real boot
+ * traffic and this self-test now cover the two different call shapes
+ * between them, neither alone.
+ *
+ * The vector: a real `gzip -9 -n` stream (84 bytes archived) of the
+ * 55-byte line below repeated 20 times (1100 bytes plain) -- `-n` so the
+ * header stays a fixed 10 bytes (no stored filename/mtime).
+ */
+static const u8 lt_gunzip_arc[] = {
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x03, 0x0b, 0x2a,
+	0x2d, 0x2e, 0xa9, 0x54, 0xf0, 0xc9, 0xcc, 0x2b, 0xad, 0x50, 0xc8, 0xc9,
+	0x4c, 0xd2, 0x4f, 0x49, 0x4d, 0xce, 0xcf, 0x2d, 0x28, 0x4a, 0x2d, 0x2e,
+	0x8e, 0xcf, 0xcc, 0x4b, 0xcb, 0x49, 0x2c, 0x49, 0x55, 0x28, 0x4e, 0xcd,
+	0x49, 0xd3, 0x2d, 0x49, 0x2d, 0x2e, 0x51, 0x28, 0x48, 0xac, 0xcc, 0xc9,
+	0x4f, 0x4c, 0xd1, 0x53, 0x08, 0x1a, 0xd5, 0x35, 0xaa, 0x6b, 0x54, 0xd7,
+	0x08, 0xd6, 0x05, 0x00, 0xc5, 0x9d, 0x02, 0xf2, 0x38, 0x04, 0x00, 0x00,
+};
+
+static void __init lt_gunzip_error(char *msg)
+{
+	pr_err("libtest: gunzip: %s\n", msg);
+}
+
+static void __init test_gunzip(void)
+{
+	static const char unit[] = "Rusty Linux lib/decompress_inflate self-test payload. ";
+	const unsigned int unit_len = sizeof(unit) - 1;
+	const unsigned int reps = 20;
+	const unsigned int plain_len = unit_len * reps;
+	u8 *want, *got, *arc;
+	unsigned int i;
+	int rc;
+
+	want = kmalloc(plain_len, GFP_KERNEL);
+	got = kmalloc(plain_len + 65536, GFP_KERNEL);
+	arc = kmemdup(lt_gunzip_arc, sizeof(lt_gunzip_arc), GFP_KERNEL);
+	if (!want || !got || !arc) {
+		check(false, "gunzip test could not allocate");
+		goto out;
+	}
+	for (i = 0; i < reps; i++)
+		memcpy(want + i * unit_len, unit, unit_len);
+	memset(got, 0, plain_len + 65536);
+
+	rc = gunzip(arc, sizeof(lt_gunzip_arc), NULL, NULL, got, NULL, lt_gunzip_error);
+	check(rc == 0, "gunzip returns success on a valid stream");
+	check(memcmp(got, want, plain_len) == 0, "gunzip reproduced the plaintext");
+
+	/*
+	 * A stream truncated at HALF must be refused. VERIFIED, not assumed
+	 * by analogy to this file family's other truncation tests: measured
+	 * with a byte-by-byte truncation sweep (a throwaway harness outside
+	 * this file) that __gunzip() actually accepts truncations of up to
+	 * 8 bytes short (this vector is 84 bytes; truncations down to 76
+	 * still return success) -- because __gunzip() never validates the
+	 * gzip trailer (4-byte CRC32 + 4-byte ISIZE) it skips over, and the
+	 * DEFLATE stream itself signals its own end (the final-block bit)
+	 * independently of that trailer. Truncating at HALF (42 of 84
+	 * bytes) cuts well into the real compressed data, past where that
+	 * "just missing the trailer" tolerance applies, and the same sweep
+	 * confirmed rejection (via nofill()'s -1, "read error") holds for
+	 * every truncation from 75 bytes down to 12.
+	 */
+	{
+		unsigned int half = sizeof(lt_gunzip_arc) / 2;
+		u8 *arc2 = kmemdup(lt_gunzip_arc, half, GFP_KERNEL);
+
+		if (arc2) {
+			memset(got, 0, plain_len + 65536);
+			rc = gunzip(arc2, half, NULL, NULL, got, NULL, lt_gunzip_error);
+			check(rc != 0, "gunzip rejects a truncated stream");
+			kfree(arc2);
+		} else {
+			check(false, "gunzip truncated-stream test could not allocate");
+		}
+	}
+out:
+	kfree(arc);
+	kfree(got);
+	kfree(want);
+}
+#else
+static void __init test_gunzip(void) { }
+#endif
+
+#if IS_ENABLED(CONFIG_DECOMPRESS_LZMA)
+#include <linux/decompress/unlzma.h>
+
+/*
+ * lib/decompress_unlzma.c's own substance is the LZMA range-coder
+ * algorithm itself, entirely self-contained in that one file (see
+ * decompress_unlzma_rs.rs's module doc for why the file stays pristine
+ * even though this port replaces its logic). This project's initramfs is
+ * gzip (see rig/boot.sh), so CONFIG_RD_LZMA=y compiles this in but the
+ * real boot path never calls it -- SCOPE.md class A, same as the other
+ * five decompressors in this family that aren't the boot format. This is
+ * its only proof.
+ *
+ * The vector: a real `xz -F lzma -6` stream (83 bytes archived) of the
+ * 53-byte line below repeated 20 times (1060 bytes plain) -- the legacy
+ * "lzma_alone" format's 13-byte header (1-byte properties, 4-byte
+ * little-endian dict size, 8-byte little-endian uncompressed size, here
+ * the 0xFFFFFFFFFFFFFFFF "unknown" sentinel since this CLI doesn't know
+ * the size upfront) is exactly what struct lzma_header expects.
+ */
+static const u8 lt_unlzma_arc[] = {
+	0x5d, 0x00, 0x00, 0x80, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+	0xff, 0x00, 0x29, 0x1d, 0x4a, 0x67, 0x70, 0x15, 0xb7, 0xd5, 0x97, 0xaf,
+	0xf2, 0x81, 0x34, 0xd6, 0xb2, 0x8f, 0x53, 0xd9, 0xc8, 0x03, 0x59, 0xa2,
+	0x66, 0xf3, 0xd6, 0xe0, 0xd0, 0x1b, 0xa6, 0x45, 0x44, 0xcc, 0xaf, 0x1b,
+	0xf5, 0xf1, 0xe4, 0x4b, 0x78, 0xb7, 0x39, 0x7d, 0xdb, 0xc8, 0xeb, 0xa2,
+	0xf5, 0x53, 0x8f, 0x0d, 0xe5, 0x2c, 0x4a, 0x2e, 0x50, 0x45, 0xa0, 0x51,
+	0x3e, 0x5a, 0x0c, 0x43, 0x9f, 0xff, 0xff, 0xae, 0x02, 0x00, 0x00,
+};
+
+static void __init lt_unlzma_error(char *msg)
+{
+	pr_err("libtest: unlzma: %s\n", msg);
+}
+
+static void __init test_unlzma(void)
+{
+	static const char unit[] = "Rusty Linux lib/decompress_unlzma self-test payload. ";
+	const unsigned int unit_len = sizeof(unit) - 1;
+	const unsigned int reps = 20;
+	const unsigned int plain_len = unit_len * reps;
+	u8 *want, *got, *arc;
+	unsigned int i;
+	int rc;
+
+	want = kmalloc(plain_len, GFP_KERNEL);
+	got = kmalloc(plain_len + 65536, GFP_KERNEL);
+	arc = kmemdup(lt_unlzma_arc, sizeof(lt_unlzma_arc), GFP_KERNEL);
+	if (!want || !got || !arc) {
+		check(false, "unlzma test could not allocate");
+		goto out;
+	}
+	for (i = 0; i < reps; i++)
+		memcpy(want + i * unit_len, unit, unit_len);
+	memset(got, 0, plain_len + 65536);
+
+	rc = unlzma(arc, sizeof(lt_unlzma_arc), NULL, NULL, got, NULL, lt_unlzma_error);
+	check(rc == 0, "unlzma returns success on a valid stream");
+	check(memcmp(got, want, plain_len) == 0, "unlzma reproduced the plaintext");
+
+	/*
+	 * A stream truncated at HALF must be refused. VERIFIED, not assumed:
+	 * measured with a byte-by-byte truncation sweep (a throwaway harness
+	 * outside this file) that unlzma() tolerates truncations of up to 3
+	 * bytes short (this vector is 83 bytes; truncations down to 80 still
+	 * return success) -- the range coder's end-of-stream signal
+	 * (`cst.rep0 == 0`, decoded from the compressed bit stream itself)
+	 * can be reached slightly before the encoder's own trailing
+	 * flush/padding bytes are consumed, the same shape as gunzip's
+	 * 8-byte gzip-trailer tolerance for a different reason. Truncating
+	 * at HALF (41 of 83 bytes) cuts well past that tolerance, into the
+	 * real compressed data, and the same sweep confirmed rejection
+	 * (nofill()'s -1, propagated as "unexpected EOF" -> the range
+	 * coder's own error() call) holds for every truncation from 79
+	 * bytes down to 1.
+	 */
+	{
+		unsigned int half = sizeof(lt_unlzma_arc) / 2;
+		u8 *arc2 = kmemdup(lt_unlzma_arc, half, GFP_KERNEL);
+
+		if (arc2) {
+			memset(got, 0, plain_len + 65536);
+			rc = unlzma(arc2, half, NULL, NULL, got, NULL, lt_unlzma_error);
+			check(rc != 0, "unlzma rejects a truncated stream");
+			kfree(arc2);
+		} else {
+			check(false, "unlzma truncated-stream test could not allocate");
+		}
+	}
+out:
+	kfree(arc);
+	kfree(got);
+	kfree(want);
+}
+#else
+static void __init test_unlzma(void) { }
+#endif
+
 static int __init libtest_init(void)
 {
 	test_base64();
@@ -2568,16 +5294,33 @@ static int __init libtest_init(void)
 	test_win_minmax();
 	test_sort();
 	test_bsearch();
+	test_find_bit();
 	test_list_sort();
 	test_xxhash();
 	test_earlycpio();
 	test_plist();
 	test_crc_ccitt();
+	test_crc32();
 	test_arc4();
 	test_clz_ctz();
 	test_chacha();
+	test_md5();
+	test_hmac_md5();
 	test_crypto_xor();
 	test_memneq();
+	test_sha512();
+	test_sha1();
+	test_aes();
+	test_errname();
+	test_dql();
+	test_ratelimit();
+	test_flex_proportions();
+	test_buildid();
+	test_seq_buf();
+	test_iomap();
+	test_bug();
+	test_asn1_decoder();
+	test_interval_tree();
 	test_bitrev();
 	test_uuid();
 	test_ctype();
@@ -2590,11 +5333,24 @@ static int __init libtest_init(void)
 	test_ucs2();
 	test_check_signature();
 	test_mpih();
+	test_mpi_add();
+	test_mpi_sub_ui();
+	test_mpi_mul();
+	test_mpi_powm();
+	test_mpi_bit();
+	test_mpicoder();
 	test_zlib_inflate();
 	test_lzo();
 	test_xz();
 	test_lz4();
 	test_zstd();
+	test_bunzip2();
+	test_unlz4();
+	test_unlzo();
+	test_unxz();
+	test_unzstd();
+	test_gunzip();
+	test_unlzma();
 
 	pr_info("libtest: %u self-tests passed, %u failed\n", passed, failed);
 
