@@ -68,6 +68,23 @@ strictly stronger than what the equivalent C ever required. "It's the same
 pointer and the same length" is not the same claim as "it's the same
 contract."
 
+**Update: raised as a question, and it turns out to already have a
+considered, deliberate answer.** Exactly this — `from_raw_parts` accepting
+`(null, 0)` as an alternate spelling of an empty slice — was proposed and
+rejected in [rust-lang/rust#120243](https://github.com/rust-lang/rust/issues/120243).
+The rejection isn't "nobody got around to it": the non-null requirement is
+load-bearing for codegen even at zero length (LLVM is told the pointer is
+`nonnull`/`dereferenceable`, not just handed a niche-optimization detail),
+maintainers who work in FFI professionally disputed that the C convention
+this finding describes is actually the dominant one, and — most relevant to
+us — a compiler-level debug assertion to catch exactly this misuse was
+already in progress at the time (`saethlin`, 2024-01-23), which is the exact
+mechanism this project's own repro above hit under
+`-C debug-assertions=on`. So "guard the zero-length case yourself before
+constructing the slice" isn't a workaround for a gap; it's the considered
+answer, with a debug-time backstop already built for the case where someone
+doesn't.
+
 ## A Rust kernel can have module versioning and full LTO at the same time
 
 `CONFIG_GENDWARFKSYMS` (the tool that fingerprints exported symbols by
