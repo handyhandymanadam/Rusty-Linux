@@ -41,8 +41,8 @@ pub unsafe extern "C" fn rust_iter_div_u64_rem(
 
     while dividend >= divisor {
         dividend = core::hint::black_box(dividend);
-        dividend -= divisor;
-        ret += 1;
+        dividend = dividend.wrapping_sub(divisor);
+        ret = ret.wrapping_add(1);
     }
 
     // SAFETY: the caller guarantees `remainder` is valid and writable.

@@ -1,0 +1,13 @@
+# Kani proofs for crypto/cmac_rs.rs:  cd rig/cmac-kani && cargo kani
+# (the harnesses are the `#[cfg(kani)] mod proofs` at the bottom of cmac_rs.rs itself).
+[package]
+name = "cmac_rs_kani"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "../../port/tree/crypto/cmac_rs.rs"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }

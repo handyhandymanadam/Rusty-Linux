@@ -4,7 +4,7 @@
 //!
 //! Pulls in the file the kernel build compiles, BY PATH, rather than copying
 //! it -- a stale copy tested here while the kernel builds something else is
-//! the failure PRIOR-ART.md §2 records four times.
+//! the failure notes/PRIOR-ART.md §2 records four times.
 //!
 //! It presents the port's nine entry points under `rs_*` so both arms can live
 //! in one binary. All nine keep their own names in the kernel: none is

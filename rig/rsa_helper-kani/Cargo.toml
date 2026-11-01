@@ -1,0 +1,13 @@
+# Kani proofs for crypto/rsa_helper_rs.rs:  cd rig/rsa_helper-kani && cargo kani
+# (the harnesses are the `#[cfg(kani)] mod proofs` at the bottom of rsa_helper_rs.rs itself).
+[package]
+name = "rsa_helper_rs_kani"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "../../port/tree/crypto/rsa_helper_rs.rs"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }

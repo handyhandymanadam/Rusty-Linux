@@ -20,7 +20,7 @@
 # caught the first two, and only because they happened to be on a path the
 # boot self-tests exercise. The other five were found by reading history.
 #
-# GOALS.md's ratchet says a check is earned when a defect gets through. Seven
+# notes/GOALS.md's ratchet says a check is earned when a defect gets through. Seven
 # did, from one cause, so this is the check for that cause.
 #
 # WHAT IT DOES. For every exported symbol this port defines in Rust rather

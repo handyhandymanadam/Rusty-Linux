@@ -1,0 +1,27 @@
+diff --git a/port/tree/arch/x86/boot/compressed/misc.c b/port/tree/arch/x86/boot/compressed/misc.c
+index 71acbc3..6ccdac1 100644
+--- a/port/tree/arch/x86/boot/compressed/misc.c
++++ b/port/tree/arch/x86/boot/compressed/misc.c
+@@ -464,6 +464,22 @@ asmlinkage __visible void *extract_kernel(void *rmode, unsigned char *output)
+ 	boot_params_ptr->acpi_rsdp_addr = get_rsdp_addr();
+ 
+ 	debug_putstr("early console in extract_kernel\n");
++	/* STUBE-PROBE-PFERR (scratch, never committed): feed boot_page_fault a hand-made frame with the error code
++	 * (and CR2) given on the command line (pferr=<code> pfcr2=<addr>, decimal) so do_boot_page_fault()'s
++	 * "Unexpected page-fault" error path runs and its serial output can be compared C stub vs Rust stub. */
++	{
++		extern int cmdline_find_option(const char *option, char *buffer, int bufsize);
++		char buf[24];
++		unsigned long code, cr2v = 0x1234567890UL;
++
++		if (cmdline_find_option("pfcr2", buf, sizeof(buf)) > 0)
++			cr2v = simple_strtoull(buf, NULL, 10);
++		if (cmdline_find_option("pferr", buf, sizeof(buf)) > 0) {
++			code = simple_strtoull(buf, NULL, 10);
++			asm volatile("mov %0, %%cr2" : : "r" (cr2v));
++			asm volatile("pushq $0x4000000\n\tpushq %0\n\tjmp boot_page_fault" : : "r" (code));
++		}
++	}
+ 
+ 	/* Pre-boot Rust probe -- logs/preboot-experiment.md.
+ 	 *

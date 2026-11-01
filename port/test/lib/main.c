@@ -1332,10 +1332,10 @@ static void stage_plist(unsigned long rounds)
  *
  * With any bucket after it, requeue is correct.
  *
- * NOT FIXED IN THE PORT. GOALS.md §5's first question is "can anything
+ * NOT FIXED IN THE PORT. notes/GOALS.md §5's first question is "can anything
  * outside observe the difference", and the answer is yes: the list order
  * changes. Callers -- mm/swapfile.c is the only one in tree -- get this
- * behaviour today. Recorded rather than corrected, and flagged in STATUS.md
+ * behaviour today. Recorded rather than corrected, and flagged in notes/STATUS.md
  * as something to take upstream.
  */
 static void stage_plist_requeue_bug(void)

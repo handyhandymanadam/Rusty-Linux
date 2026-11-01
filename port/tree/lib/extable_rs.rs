@@ -22,7 +22,10 @@
 //! `search_extable()` on every recoverable fault), so they move and the
 //! module-lifecycle helper does not.
 //!
-//! # `ARCH_HAS_RELATIVE_EXTABLE`'s x86 arm only -- the other is unreachable here
+//! # `ARCH_HAS_RELATIVE_EXTABLE` arm only -- the other is unreachable here
+//!
+//! (The struct itself is per-arch: see `ExceptionTableEntry` below, x86_64 vs
+//! the arm64/riscv/loongarch `type`/`data` split.)
 //!
 //! x86-64 always defines it (`arch/x86/include/asm/extable.h`), so this
 //! file reproduces only that arm: `exception_table_entry` as three `i32`
@@ -42,15 +45,43 @@
 
 use core::ffi::{c_int, c_void};
 
-/// Mirrors `struct exception_table_entry` on x86-64
-/// (`ARCH_HAS_RELATIVE_EXTABLE`): three offsets, relative to the entry's
-/// own field address, not absolute pointers.
+/// Mirrors `struct exception_table_entry`. ONE declaration with per-arch
+/// fields (rig/layout-check.sh refuses a name declared twice):
+///
+/// - x86-64 (`ARCH_HAS_RELATIVE_EXTABLE`): `int insn, fixup, data;` -- three
+///   offsets relative to the entry's own field address, not pointers.
+/// - arm64, riscv, loongarch: `int insn, fixup; short type, data;` -- the same
+///   12 bytes with the third word split in two `i16`. Only `insn` (offset 0)
+///   is read by the comparators, so the split changes nothing for
+///   `search_extable()`; `swap_ex()` swaps `type` and `data` as the arch's
+///   `swap_ex_entry_fixup` does.
+///
+/// REACHABLE on arm64 (proved 2026-10-03, `logs/arm64.md` failure 8):
+/// `BUILDTIME_TABLE_SORT` only spares the BUILT-IN table
+/// (`main_extable_sort_needed` is cleared by `sorttable`); a module's table
+/// is sorted by `sort_extable()` unconditionally in `post_relocation()`
+/// (`kernel/module/main.c`), and `search_extable()` runs on every fixup.
+/// Verified by reading source and by `rig/layout-check.sh` on arm64; the
+/// riscv/loongarch arm is source-read only, never built.
 #[repr(C)]
 pub struct ExceptionTableEntry {
     insn: i32,
     fixup: i32,
+    #[cfg(target_arch = "x86_64")]
     data: i32,
+    #[cfg(any(target_arch = "aarch64", target_arch = "riscv64", target_arch = "loongarch64"))]
+    r#type: i16,
+    #[cfg(any(target_arch = "aarch64", target_arch = "riscv64", target_arch = "loongarch64"))]
+    data: i16,
 }
+
+#[cfg(not(any(
+    target_arch = "x86_64",
+    target_arch = "aarch64",
+    target_arch = "riscv64",
+    target_arch = "loongarch64"
+)))]
+compile_error!("extable_rs.rs mirrors struct exception_table_entry only for x86_64 and the insn/fixup/type/data arches; check this arch's asm/extable.h");
 
 extern "C" {
     fn sort(
@@ -105,12 +136,19 @@ unsafe extern "C" fn swap_ex(a: *mut c_void, b: *mut c_void, _size: c_int) {
     unsafe {
         let tmp_insn = (*x).insn;
         let tmp_fixup = (*x).fixup;
+        #[cfg(any(target_arch = "aarch64", target_arch = "riscv64", target_arch = "loongarch64"))]
+        let tmp_type = (*x).r#type;
         let tmp_data = (*x).data;
 
-        (*x).insn = (*y).insn + delta;
-        (*y).insn = tmp_insn - delta;
-        (*x).fixup = (*y).fixup + delta;
-        (*y).fixup = tmp_fixup - delta;
+        (*x).insn = (*y).insn.wrapping_add(delta);
+        (*y).insn = tmp_insn.wrapping_sub(delta);
+        (*x).fixup = (*y).fixup.wrapping_add(delta);
+        (*y).fixup = tmp_fixup.wrapping_sub(delta);
+        #[cfg(any(target_arch = "aarch64", target_arch = "riscv64", target_arch = "loongarch64"))]
+        {
+            (*x).r#type = (*y).r#type;
+            (*y).r#type = tmp_type;
+        }
         (*x).data = (*y).data;
         (*y).data = tmp_data;
     }

@@ -13,7 +13,7 @@
  * WHICH CODE THE VECTORS ACTUALLY REACH IS MEASURED, NOT ASSUMED. A frame that
  * happens to use raw literals never calls HUF_readStats and never touches the
  * ported file; a boot test built from such frames would pass while proving
- * nothing (STATUS.md lesson 9). So this walks each frame's block headers and
+ * nothing (notes/STATUS.md lesson 9). So this walks each frame's block headers and
  * reports the Literals_Block_Type of every block, and REFUSES TO EMIT unless
  * enough of them are Compressed (type 2, a Huffman table is present) or
  * Treeless (type 3).

@@ -415,7 +415,21 @@ pub unsafe extern "C" fn dql_completed(dql: *mut Dql, count: u32) {
     // SAFETY: completion-path-only, `dql` valid per contract.
     let (min_limit, max_limit) =
         unsafe { (*(&raw const (*dql).min_limit), *(&raw const (*dql).max_limit)) };
-    limit = limit.clamp(min_limit, max_limit);
+    // Not `.clamp()`: Rust's panics if `min_limit > max_limit` (an
+    // internal assert with no C-side equivalent -- `min_limit`/
+    // `max_limit` are plain fields of `struct dql`, and the kernel's own
+    // `clamp()` macro (include/linux/minmax.h) has no such assertion,
+    // just `val >= hi ? hi : (val <= lo ? lo : val)`, silently well-defined
+    // for any lo/hi ordering). Reproduced literally instead of using
+    // `.clamp()`, so an inverted min_limit/max_limit stays a silent (if
+    // questionable) result here too, not a new Rust-only panic.
+    limit = if limit >= max_limit {
+        max_limit
+    } else if limit <= min_limit {
+        min_limit
+    } else {
+        limit
+    };
 
     let mut ovlimit = ovlimit;
     if limit != limit_field {

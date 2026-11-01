@@ -1,0 +1,44 @@
+below_ge~if c >= u {<NL>            return false;~if c > u {<NL>            return false;
+below_inc~match v.compare_exchange(c, c + 1, Ordering::SeqCst, Ordering::Relaxed) {<NL>            Ok(_) => return true,~match v.compare_exchange(c, c + 2, Ordering::SeqCst, Ordering::Relaxed) {<NL>            Ok(_) => return true,
+dip_neg~let dec = c.wrapping_sub(1);<NL>        if dec < 0 {~let dec = c.wrapping_sub(1);<NL>        if dec <= 0 {
+dip_store~match v.compare_exchange(c, dec, Ordering::SeqCst, Ordering::Relaxed) {<NL>            Ok(_) => return dec,~match v.compare_exchange(c, c, Ordering::SeqCst, Ordering::Relaxed) {<NL>            Ok(_) => return dec,
+inc_max_type~(tns as *mut u8).add(rust_uc_off_ns_ucount_max + 8 * t)~(tns as *mut u8).add(rust_uc_off_ns_ucount_max)
+inc_fail_noundo~ucount(it, t).fetch_sub(1, Ordering::Relaxed);~
+inc_undo_bad~while it != bad {<NL>                    ucount(it, t)~while it != parent(bad) {<NL>                    ucount(it, t)
+inc_noput~rust_uc_put(ucounts);<NL>                return core::ptr::null_mut();~return core::ptr::null_mut();
+inc_ret~            iter = parent(iter);<NL>        }<NL>        ucounts<NL>    }<NL>}<NL><NL>/// Body of `dec_ucount()`.<NL>#[no_mangle]<NL>pub unsafe extern "C" fn rust_dec_ucount~            iter = parent(iter);<NL>        }<NL>        core::ptr::null_mut()<NL>    }<NL>}<NL><NL>/// Body of `dec_ucount()`.<NL>#[no_mangle]<NL>pub unsafe extern "C" fn rust_dec_ucount
+inc_tns~let tns = ns_of(iter);<NL>            let max~let tns = ns;<NL>            let max
+dec_warn~if dec < 0 {<NL>                rust_uc_warn_dec_ucount();~if dec < -1 {<NL>                rust_uc_warn_dec_ucount();
+dec_noput~            iter = parent(iter);<NL>        }<NL>        rust_uc_put(ucounts);<NL>    }~            iter = parent(iter);<NL>        }<NL>    }
+dec_plain~let dec = dec_if_positive(ucount(iter, ty as usize));~let dec = ucount(iter, ty as usize).fetch_sub(1, Ordering::SeqCst) - 1;
+rinc_neg~if new < 0 || new > max {<NL>                ret = c_long::MAX;~if new < 0 || new >= max {<NL>                ret = c_long::MAX;
+rinc_neg2~if new < 0 || new > max {<NL>                ret = c_long::MAX;~if new > max {<NL>                ret = c_long::MAX;
+rinc_first~} else if iter == ucounts {<NL>                ret = new;~} else {<NL>                ret = new;
+rinc_max~max = rlimit_max(ns_of(iter), t);<NL>            iter = parent(iter);<NL>        }<NL>        ret<NL>    }<NL>}<NL><NL>/// Body of `dec_rlimit_ucounts()`.<NL>#[no_mangle]<NL>pub unsafe extern "C" fn rust_dec_rlimit_ucounts~max = c_long::MAX;<NL>            iter = parent(iter);<NL>        }<NL>        ret<NL>    }<NL>}<NL><NL>/// Body of `dec_rlimit_ucounts()`.<NL>#[no_mangle]<NL>pub unsafe extern "C" fn rust_dec_rlimit_ucounts
+rinc_add~fetch_add(v as isize, Ordering::SeqCst).wrapping_add(v as isize) as c_long;<NL>            if new < 0 || new > max {<NL>                ret = c_long::MAX;~fetch_add(v as isize, Ordering::SeqCst) as c_long;<NL>            if new < 0 || new > max {<NL>                ret = c_long::MAX;
+rdec_new~let mut new: c_long = -1;~let mut new: c_long = 0;
+rdec_first~if iter == ucounts {<NL>                new = dec;~if true {<NL>                new = dec;
+rdec_warn~if dec < 0 {<NL>                rust_uc_warn_dec_rlimit();~if dec <= 0 {<NL>                rust_uc_warn_dec_rlimit();
+rdec_ret~        new == 0<NL>~        new <= 0<NL>
+rdec_sub~fetch_sub(v as isize, Ordering::SeqCst).wrapping_sub(v as isize) as c_long;<NL>            if dec < 0 {~fetch_sub(v as isize, Ordering::SeqCst) as c_long;<NL>            if dec < 0 {
+dd_last~while iter != last {~while !iter.is_null() {
+dd_put~if dec == 0 {<NL>                rust_uc_put(iter);~if dec <= 0 {<NL>                rust_uc_put(iter);
+dd_noput~if dec == 0 {<NL>                rust_uc_put(iter);<NL>            }~if false {<NL>                rust_uc_put(iter);<NL>            }
+dd_warn~if dec < 0 {<NL>                rust_uc_warn_do_dec();~if dec < -1 {<NL>                rust_uc_warn_do_dec();
+dd_next~let next = parent(iter);<NL>            if dec == 0~let next = iter;<NL>            if dec == 0
+get_unwind~let mut unwind = new < 0 || new > max;~let mut unwind = new < 0 || new >= max;
+get_unwind2~let mut unwind = new < 0 || new > max;~let mut unwind = new > max;
+get_ret~if iter == ucounts {<NL>                    ret = new;<NL>                }<NL>                if !override~if true {<NL>                    ret = new;<NL>                }<NL>                if !override
+get_override~if !override_rlimit {<NL>                    max = rlimit_max(ns_of(iter), t);~if override_rlimit {<NL>                    max = rlimit_max(ns_of(iter), t);
+get_new1~if new == 1 && rust_uc_get(iter).is_null() {~if new <= 1 && rust_uc_get(iter).is_null() {
+get_noget~if new == 1 && rust_uc_get(iter).is_null() {<NL>                    unwind = true;~if new == 1 && false {<NL>                    unwind = true;
+get_always_get~if new == 1 && rust_uc_get(iter).is_null() {~if rust_uc_get(iter).is_null() {
+get_unwind_dec~let dec = rlimit(iter, t).fetch_sub(1, Ordering::SeqCst).wrapping_sub(1);<NL>                if dec < 0 {<NL>                    rust_uc_warn_unwind();~let dec = 0;<NL>                if dec < 0 {<NL>                    rust_uc_warn_unwind();
+get_unwind_last~do_dec_rlimit_put_ucounts(ucounts, iter, t);<NL>                return 0;~do_dec_rlimit_put_ucounts(ucounts, core::ptr::null_mut(), t);<NL>                return 0;
+get_unwind_ret~do_dec_rlimit_put_ucounts(ucounts, iter, t);<NL>                return 0;~do_dec_rlimit_put_ucounts(ucounts, iter, t);<NL>                return ret;
+get_unwind_warn~if dec < 0 {<NL>                    rust_uc_warn_unwind();~if dec <= 0 {<NL>                    rust_uc_warn_unwind();
+ov_cap~if rl > c_long::MAX as u64 { c_long::MAX } else { rl as c_long }~rl as c_long
+ov_gt~if val < 0 || val > max {<NL>                return true;~if val < 0 || val >= max {<NL>                return true;
+ov_neg~if val < 0 || val > max {<NL>                return true;~if val > max {<NL>                return true;
+ov_max~max = rlimit_max(ns_of(iter), t);<NL>            iter = parent(iter);<NL>        }<NL>        false~iter = parent(iter);<NL>        }<NL>        false
+ov_ret~        false<NL>    }<NL>}<NL>~        true<NL>    }<NL>}<NL>

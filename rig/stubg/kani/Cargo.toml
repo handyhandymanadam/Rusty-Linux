@@ -1,0 +1,13 @@
+# Kani proofs for the stub's misc_rs.rs:  RUSTFLAGS="--cfg need_relocs --cfg relocatable" cargo kani   (rig/stubg/run-kani.sh)
+# (the harnesses are the `#[cfg(kani)] mod proofs` at the bottom of misc_rs.rs itself).
+[package]
+name = "misc_rs_kani"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "../../../port/tree/arch/x86/boot/compressed/misc_rs.rs"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)", "cfg(need_relocs)", "cfg(relocatable)", "cfg(verbose_bootup)", "cfg(early_printk)", "cfg(acpi)", "cfg(randomize_base)", "cfg(tdx_guest)", "cfg(amd_mem_encrypt)", "cfg(unaccepted_memory)"] }

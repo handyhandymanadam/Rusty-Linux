@@ -207,7 +207,7 @@ pub unsafe extern "C" fn mpi_resize(a: *mut MpiUtilGcryMpi, nlimbs: c_uint) -> c
     // SAFETY: caller guarantees `a` valid.
     unsafe {
         if !(*a).d.is_null() {
-            let old_len = (*a).alloced as usize * core::mem::size_of::<c_ulong>();
+            let old_len = ((*a).alloced as usize).wrapping_mul(core::mem::size_of::<c_ulong>());
             // SAFETY: `(*a).d` is `(*a).alloced` limbs long (caller
             // contract), `p` is freshly allocated for at least that many
             // (since `nlimbs > (*a).alloced` was established above).

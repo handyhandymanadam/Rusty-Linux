@@ -69,11 +69,20 @@ pub unsafe extern "C" fn rust_memweight(ptr: *const core::ffi::c_void, bytes: us
     // aligned middle and never reads outside `area`.
     let (head, words, tail) = unsafe { area.align_to::<usize>() };
 
+    // Neither this function's own `+` nor `Iterator::sum()`'s internal
+    // accumulation (also a checked `+`) can be proven not to overflow by
+    // the compiler, even though a popcount total can never exceed the
+    // area's own bit count (`bytes * 8`), provably within `usize` for any
+    // real allocation. `wrapping_add` throughout, via an explicit fold
+    // rather than `.sum()`.
     fn bytewise(s: &[u8]) -> usize {
-        s.iter().map(|b| b.count_ones() as usize).sum()
+        s.iter()
+            .fold(0usize, |acc, b| acc.wrapping_add(b.count_ones() as usize))
     }
 
-    bytewise(head)
-        + words.iter().map(|w| w.count_ones() as usize).sum::<usize>()
-        + bytewise(tail)
+    let words_count = words
+        .iter()
+        .fold(0usize, |acc, w| acc.wrapping_add(w.count_ones() as usize));
+
+    bytewise(head).wrapping_add(words_count).wrapping_add(bytewise(tail))
 }

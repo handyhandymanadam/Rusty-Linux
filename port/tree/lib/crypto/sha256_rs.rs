@@ -213,10 +213,10 @@ fn sha256_block_generic(state: &mut Sha256BlockState, data: &[u8; SHA256_BLOCK_S
         w[i] = u32::from_be_bytes(chunk.try_into().unwrap());
     }
     for i in 16..64 {
-        w[i] = small_s1(w[i - 2])
-            .wrapping_add(w[i - 7])
-            .wrapping_add(small_s0(w[i - 15]))
-            .wrapping_add(w[i - 16]);
+        w[i] = small_s1(w[i.wrapping_sub(2)])
+            .wrapping_add(w[i.wrapping_sub(7)])
+            .wrapping_add(small_s0(w[i.wrapping_sub(15)]))
+            .wrapping_add(w[i.wrapping_sub(16)]);
     }
 
     let [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut h] = state.h;
@@ -271,7 +271,7 @@ pub unsafe extern "C" fn rust_sha256_blocks_generic(
         sha256_block_generic(state, block);
         // SAFETY: one block consumed; `nblocks` still bounds what is left.
         data = unsafe { data.add(SHA256_BLOCK_SIZE) };
-        nblocks -= 1;
+        nblocks = nblocks.wrapping_sub(1);
     }
 }
 
@@ -331,15 +331,15 @@ pub unsafe extern "C" fn __sha256_update(ctx: *mut Sha256CoreCtx, data: *const u
 
     ctx.bytecount = ctx.bytecount.wrapping_add(len as u64);
 
-    if partial + len >= SHA256_BLOCK_SIZE {
+    if partial.wrapping_add(len) >= SHA256_BLOCK_SIZE {
         if partial != 0 {
-            let l = SHA256_BLOCK_SIZE - partial;
+            let l = SHA256_BLOCK_SIZE.wrapping_sub(partial);
             // SAFETY: `partial < 64` so this fits in `buf`; the caller
             // guarantees `data` readable for `len >= l` bytes here.
             unsafe { core::ptr::copy_nonoverlapping(data, ctx.buf.as_mut_ptr().add(partial), l) };
             // SAFETY: `l` bytes consumed above.
             data = unsafe { data.add(l) };
-            len -= l;
+            len = len.wrapping_sub(l);
             // SAFETY: `ctx.buf` holds one full, valid block.
             unsafe { sha256_blocks_dispatch(&mut ctx.state, ctx.buf.as_ptr(), 1) };
         }
@@ -378,13 +378,13 @@ unsafe fn sha256_core_final(ctx: *mut Sha256CoreCtx, out: *mut u8, digest_size: 
         let buf: *mut u8 = (&raw mut (*ctx).buf).cast();
 
         *buf.add(partial) = 0x80;
-        partial += 1;
+        partial = partial.wrapping_add(1);
         if partial > SHA256_BLOCK_SIZE - 8 {
-            core::ptr::write_bytes(buf.add(partial), 0, SHA256_BLOCK_SIZE - partial);
+            core::ptr::write_bytes(buf.add(partial), 0, SHA256_BLOCK_SIZE.wrapping_sub(partial));
             sha256_blocks_dispatch(&raw mut (*ctx).state, buf, 1);
             partial = 0;
         }
-        core::ptr::write_bytes(buf.add(partial), 0, SHA256_BLOCK_SIZE - 8 - partial);
+        core::ptr::write_bytes(buf.add(partial), 0, (SHA256_BLOCK_SIZE - 8).wrapping_sub(partial));
         core::ptr::copy_nonoverlapping(bitcount.to_be_bytes().as_ptr(), buf.add(SHA256_BLOCK_SIZE - 8), 8);
         sha256_blocks_dispatch(&raw mut (*ctx).state, buf, 1);
 
@@ -392,7 +392,7 @@ unsafe fn sha256_core_final(ctx: *mut Sha256CoreCtx, out: *mut u8, digest_size: 
         while i < digest_size {
             let bytes = (*ctx).state.h[i / 4].to_be_bytes();
             core::ptr::copy_nonoverlapping(bytes.as_ptr(), out.add(i), 4);
-            i += 4;
+            i = i.wrapping_add(4);
         }
     }
 }
@@ -735,9 +735,9 @@ unsafe fn hmac_core_final(ctx: *mut Sha256HmacCtxCore, out: *mut u8, digest_size
         let buf: *mut u8 = (&raw mut (*ctx).sha_ctx.buf).cast();
         sha256_core_final(sha_ctx_ptr, buf, digest_size);
 
-        core::ptr::write_bytes(buf.add(digest_size), 0, SHA256_BLOCK_SIZE - digest_size);
+        core::ptr::write_bytes(buf.add(digest_size), 0, SHA256_BLOCK_SIZE.wrapping_sub(digest_size));
         *buf.add(digest_size) = 0x80;
-        let bits: u32 = 8u32.wrapping_mul((SHA256_BLOCK_SIZE + digest_size) as u32);
+        let bits: u32 = 8u32.wrapping_mul((SHA256_BLOCK_SIZE.wrapping_add(digest_size)) as u32);
         core::ptr::copy_nonoverlapping(bits.to_be_bytes().as_ptr(), buf.add(SHA256_BLOCK_SIZE - 4), 4);
 
         let ostate_ptr: *mut Sha256BlockState = &raw mut (*ctx).ostate;
@@ -746,7 +746,7 @@ unsafe fn hmac_core_final(ctx: *mut Sha256HmacCtxCore, out: *mut u8, digest_size
         while i < digest_size {
             let bytes = (*ctx).ostate.h[i / 4].to_be_bytes();
             core::ptr::copy_nonoverlapping(bytes.as_ptr(), out.add(i), 4);
-            i += 4;
+            i = i.wrapping_add(4);
         }
 
         memzero_explicit_bytes(ctx.cast(), core::mem::size_of::<Sha256HmacCtxCore>());

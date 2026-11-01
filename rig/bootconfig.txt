@@ -1,0 +1,16 @@
+# rusty-linux boot config sample (rig/boot.sh appends it to the initramfs; rig/bootconfig.expected is what the C parser makes of it)
+kernel.rusty_bc_probe = 1
+kernel {
+	rusty_bc_two = "a b"
+	rusty_bc_three = x, "y z", w
+}
+init.rusty_init_arg = on
+feature.alpha.beta = 1
+feature.alpha.gamma := 2
+feature.alpha.gamma := 3
+feature.list = a, b
+feature.list += c
+feature {
+	delta = d; epsilon
+	zeta { eta = 'quoted ; value' }  # trailing comment
+}

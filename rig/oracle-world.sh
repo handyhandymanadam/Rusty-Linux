@@ -40,7 +40,7 @@ dst=$1; shift
 #   "lib lz4 lzo xz zlib_inflate glob math"
 # and had gone stale by three modules -- xz_stream, xz_lzma2 and zstd_entropy
 # all had harnesses this check never once ran. A stale list does not fail; it
-# passes, quietly, over a smaller world than it claims. That is STATUS.md
+# passes, quietly, over a smaller world than it claims. That is notes/STATUS.md
 # lesson 9 wearing rig clothes, so the list is now derived from what exists.
 mods=${*:-$(for d in "$root"/port/test/*/; do
                 [ -x "$d/run.sh" ] && basename "$d"

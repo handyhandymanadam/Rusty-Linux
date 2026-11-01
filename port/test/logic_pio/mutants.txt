@@ -1,0 +1,52 @@
+reg_nofw~(*new_range).fwnode.is_null() || (*new_range).size == 0~false || (*new_range).size == 0
+reg_nosize~|| (*new_range).size == 0 ||~|| false ||
+reg_noops~((*new_range).flags == LOGIC_PIO_INDIRECT && (*new_range).ops.is_null())~((*new_range).flags == LOGIC_PIO_INDIRECT && false)
+reg_noops_flag~((*new_range).flags == LOGIC_PIO_INDIRECT && (*new_range).ops.is_null())~((*new_range).flags == LOGIC_PIO_CPU_MMIO && (*new_range).ops.is_null())
+end_calc~let end = (*new_range).hw_start.wrapping_add((*new_range).size);~let end = (*new_range).hw_start.wrapping_add((*new_range).size).wrapping_sub(1);
+mmio_init~let mut mmio_end: u64 = 0;~let mut mmio_end: u64 = 1;
+iio_init~let mut iio_sz: u64 = rust_lp_mmio_upper_limit();~let mut iio_sz: u64 = rust_lp_io_space_limit();
+mmio_upper_const~let mmio_upper = iio_sz;~let mmio_upper = rust_lp_io_space_limit();
+dup_fw~if (*range).fwnode == (*new_range).fwnode {~if (*range).fwnode != (*new_range).fwnode {
+dup_ret~ret = -EEXIST;~ret = -EFAULT;
+both_mmio~if (*range).flags == LOGIC_PIO_CPU_MMIO && (*new_range).flags == LOGIC_PIO_CPU_MMIO {~if (*range).flags == LOGIC_PIO_CPU_MMIO || (*new_range).flags == LOGIC_PIO_CPU_MMIO {
+overlap_start~if start >= (*range).hw_start.wrapping_add((*range).size) || end < (*range).hw_start {~if start > (*range).hw_start.wrapping_add((*range).size) || end < (*range).hw_start {
+overlap_end~|| end < (*range).hw_start {~|| end <= (*range).hw_start {
+overlap_ret~ret = -EFAULT;<NL>                        break 'end_register;~ret = -EINVAL;<NL>                        break 'end_register;
+mmio_end_calc~mmio_end = (*range).io_start.wrapping_add((*range).size);~mmio_end = (*range).io_start;
+both_ind~} else if (*range).flags == LOGIC_PIO_INDIRECT && (*new_range).flags == LOGIC_PIO_INDIRECT {~} else if (*range).flags == LOGIC_PIO_INDIRECT || (*new_range).flags == LOGIC_PIO_INDIRECT {
+iio_acc~iio_sz = iio_sz.wrapping_add((*range).size);~iio_sz = iio_sz.wrapping_add(1);
+mmio_big~if mmio_end.wrapping_add((*new_range).size).wrapping_sub(1) > mmio_upper {~if mmio_end.wrapping_add((*new_range).size) > mmio_upper {
+mmio_big_gt~if mmio_end.wrapping_add((*new_range).size).wrapping_sub(1) > mmio_upper {~if mmio_end.wrapping_add((*new_range).size).wrapping_sub(1) >= mmio_upper {
+mmio_64k~if mmio_end.wrapping_add(SZ_64K).wrapping_sub(1) > mmio_upper {~if mmio_end.wrapping_add(SZ_64K) > mmio_upper {
+mmio_64k_ret~ret = -E2BIG;<NL>                        break 'end_register;<NL>                    }<NL>                    (*new_range).size = SZ_64K;~ret = -EINVAL;<NL>                        break 'end_register;<NL>                    }<NL>                    (*new_range).size = SZ_64K;
+mmio_64k_set~(*new_range).size = SZ_64K;~
+mmio_64k_warn~                    rust_lp_warn_too_big();~
+mmio_iostart~(*new_range).io_start = mmio_end;~(*new_range).io_start = 0;
+ind_big~if iio_sz.wrapping_add((*new_range).size).wrapping_sub(1) > rust_lp_io_space_limit() {~if iio_sz.wrapping_add((*new_range).size) > rust_lp_io_space_limit() {
+ind_big_lim~> rust_lp_io_space_limit() {~> rust_lp_mmio_upper_limit() {
+ind_iostart~(*new_range).io_start = iio_sz;~(*new_range).io_start = mmio_end;
+invalid_flag~                ret = -EINVAL;<NL>                break 'end_register;~                ret = -E2BIG;<NL>                break 'end_register;
+add_tail~rust_lp_add_tail_rcu(&raw mut (*new_range).list);~
+unreg_lock~        rust_lp_lock();<NL>        rust_lp_del_rcu(~        rust_lp_del_rcu(
+unreg_unlock~        rust_lp_unlock();<NL>        rust_lp_synchronize_rcu();~        rust_lp_synchronize_rcu();
+unreg_del~        rust_lp_del_rcu(&raw mut (*range).list);~
+unreg_sync~        rust_lp_synchronize_rcu();~
+find_fw~            if (*range).fwnode == fwnode {~            if (*range).fwnode != fwnode {
+find_fw_break~                found = range;<NL>                break;<NL>            }<NL>            p = rust_lp_next(p);<NL>        }<NL>        rust_lp_rcu_unlock();<NL>        found~                found = range;<NL>            }<NL>            p = rust_lp_next(p);<NL>        }<NL>        rust_lp_rcu_unlock();<NL>        found
+find_rcu_lock~        let mut found: *mut HwAddr = null_mut();<NL>        rust_lp_rcu_lock();<NL>        let head = rust_lp_head();<NL>        let mut p = rust_lp_next(head);<NL>        while p != head {<NL>            let range = entry(p);<NL>            if (*range).fwnode~        let mut found: *mut HwAddr = null_mut();<NL>        let head = rust_lp_head();<NL>        let mut p = rust_lp_next(head);<NL>        while p != head {<NL>            let range = entry(p);<NL>            if (*range).fwnode
+find_range~if in_range(pio as u64, (*range).io_start, (*range).size) {~if in_range(pio as u64, (*range).hw_start, (*range).size) {
+find_err~        if found.is_null() {<NL>            rust_lp_err_token(pio);~        if found.is_null() && false {<NL>            rust_lp_err_token(pio);
+in_range_fn~    val.wrapping_sub(start) < len~    val.wrapping_sub(start) <= len
+to_hw_calc~return (*range).hw_start.wrapping_add(pio as u64).wrapping_sub((*range).io_start);~return (*range).hw_start.wrapping_add(pio as u64);
+to_hw_none~        !0<NL>    }<NL>}<NL><NL>/// The body of C `logic_pio_trans_hwaddr~        0<NL>    }<NL>}<NL><NL>/// The body of C `logic_pio_trans_hwaddr
+trans_none~if range.is_null() || (*range).flags == LOGIC_PIO_CPU_MMIO {~if range.is_null() {
+trans_flag~if range.is_null() || (*range).flags == LOGIC_PIO_CPU_MMIO {~if range.is_null() || (*range).flags == LOGIC_PIO_INDIRECT {
+trans_size~if (*range).size < size {~if (*range).size <= size {
+trans_size_msg~rust_lp_err_size(size, (*range).size);~rust_lp_err_size((*range).size, size);
+trans_calc~addr.wrapping_sub((*range).hw_start).wrapping_add((*range).io_start) as c_ulong~addr.wrapping_sub((*range).io_start).wrapping_add((*range).hw_start) as c_ulong
+cpu_flag~if (*range).flags == LOGIC_PIO_CPU_MMIO && in_range(addr, (*range).hw_start, (*range).size) {~if in_range(addr, (*range).hw_start, (*range).size) {
+cpu_range~in_range(addr, (*range).hw_start, (*range).size) {~in_range(addr, (*range).io_start, (*range).size) {
+cpu_calc~let cpuaddr = addr.wrapping_sub((*range).hw_start).wrapping_add((*range).io_start) as c_ulong;~let cpuaddr = addr.wrapping_sub((*range).hw_start) as c_ulong;
+cpu_unlock~                rust_lp_rcu_unlock();<NL>                return cpuaddr;~                return cpuaddr;
+cpu_err~        rust_lp_err_cpuaddr(addr);~
+entry_off~p as *mut HwAddr~p.cast::<u8>().wrapping_add(8) as *mut HwAddr

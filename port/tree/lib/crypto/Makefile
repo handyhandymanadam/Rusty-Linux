@@ -39,7 +39,17 @@ libaesgcm-y					:= aesgcm.o
 
 obj-$(CONFIG_CRYPTO_LIB_ARC4)			+= libarc4.o
 
+# gf128mul.o is a composite when CONFIG_RUST: gf128mul_glue.o keeps the seven
+# exports and the allocation (kzalloc() is an alloc_hooks macro); gf128mul_rs.o
+# holds the multiplies, the reduction tables and the table fills. CONFIG_RUST=n
+# builds upstream's file, installed byte-identical as gf128mul_norust.c by
+# rig/apply.sh from port/pristine/. The object name stays gf128mul.o.
 obj-$(CONFIG_CRYPTO_LIB_GF128MUL)		+= gf128mul.o
+ifdef CONFIG_RUST
+gf128mul-y					:= gf128mul_glue.o gf128mul_rs.o
+else
+gf128mul-y					:= gf128mul_norust.o
+endif
 
 ################################################################################
 

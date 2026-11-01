@@ -1,0 +1,15 @@
+fsh~const FSHIFT: u32 = 11;~const FSHIFT: u32 = 10;
+pow_init~let mut result: u64 = 1 << frac_bits;~let mut result: u64 = 1 << (frac_bits - 1);
+pow_n~if n != 0 {<NL>        loop {~if n > 1 {<NL>        loop {
+pow_odd~if n & 1 != 0 {~if n & 2 != 0 {
+pow_round1~result = result.wrapping_add(1 << (frac_bits - 1));~result = result.wrapping_add(1 << frac_bits);
+pow_shift1~result >>= frac_bits;~result >>= frac_bits - 1;
+pow_n2~n >>= 1;<NL>            if n == 0 {~n >>= 2;<NL>            if n == 0 {
+pow_square~x = x.wrapping_mul(x);~x = x.wrapping_mul(2);
+pow_round2~x = x.wrapping_add(1 << (frac_bits - 1));~x = x.wrapping_add(1 << (frac_bits - 2));
+pow_shift2~x >>= frac_bits;<NL>        }<NL>    }~x >>= frac_bits - 1;<NL>        }<NL>    }
+load_mul~let mut newload = load.wrapping_mul(exp).wrapping_add(active.wrapping_mul(FIXED_1.wrapping_sub(exp)));~let mut newload = load.wrapping_mul(exp).wrapping_add(active.wrapping_mul(FIXED_1.wrapping_sub(exp)).wrapping_add(1));
+load_round~newload = newload.wrapping_add(FIXED_1 - 1);~newload = newload.wrapping_add(FIXED_1);
+load_div~newload / FIXED_1~newload / (FIXED_1 - 1)
+cl_exp~calc_load(load, fixed_power_int(exp, FSHIFT, n), active)~calc_load(load, exp, active)
+cl_args~calc_load(load, fixed_power_int(exp, FSHIFT, n), active)~calc_load(active, fixed_power_int(exp, FSHIFT, n), load)

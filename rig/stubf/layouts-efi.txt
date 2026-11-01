@@ -1,0 +1,11 @@
+type struct efi_info | EfiInfo | efi_loader_signature=efi_loader_signature efi_systab=efi_systab efi_memdesc_size=efi_memdesc_size efi_memdesc_version=efi_memdesc_version efi_memmap=efi_memmap efi_memmap_size=efi_memmap_size efi_systab_hi=efi_systab_hi efi_memmap_hi=efi_memmap_hi
+type struct setup_data | SetupData | next=next type=type_ len=len
+type struct efi_setup_data | EfiSetupData | fw_vendor=fw_vendor tables=tables smbios=smbios reserved=reserved
+type efi_table_hdr_t | EfiTableHdr | signature=signature revision=revision headersize=headersize crc32=crc32
+type efi_system_table_64_t | EfiSystemTable64 | hdr=hdr fw_vendor=fw_vendor nr_tables=nr_tables tables=tables runtime=runtime boottime=boottime
+type efi_system_table_32_t | EfiSystemTable32 | hdr=hdr fw_vendor=fw_vendor nr_tables=nr_tables tables=tables runtime=runtime boottime=boottime
+type efi_config_table_64_t | EfiConfigTable64 | guid=guid table=table
+type efi_config_table_32_t | EfiConfigTable32 | guid=guid table=table
+size efi_guid_t | core::mem::size_of::<EfiGuid>()
+const struct boot_params efi_info | BP_EFI_INFO
+const struct boot_params hdr.setup_data | BP_HDR_SETUP_DATA

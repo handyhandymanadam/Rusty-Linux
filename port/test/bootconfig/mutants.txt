@@ -1,0 +1,97 @@
+gi_null~if (*s.data).is_null() {<NL>            return -ENODEV;~if !(*s.data).is_null() {<NL>            return -ENODEV;
+gi_nodes~*node_size = *s.node_num;~*node_size = *s.node_num + 1;
+gi_data~*data_size = *s.data_size;~*data_size = *s.data_size + 1;
+pe_pos~(p as isize).wrapping_sub(*s.data as isize) as c_int;~(p as isize).wrapping_sub(*s.data as isize).wrapping_add(1) as c_int;
+ni_div~/ 8) as c_int }~/ 4) as c_int }
+gp_max~if parent as i32 == XBC_NODE_MAX {~if parent as i32 == XBC_NODE_MAX - 1 {
+gc_one~if child != 0 {<NL>            node_at(st(), child as usize)~if child > 1 {<NL>            node_at(st(), child as usize)
+gn_one~if next != 0 {<NL>            node_at(st(), next as usize)~if next > 1 {<NL>            node_at(st(), next as usize)
+gd_flag~let offset = ((*node).data as u32 & !XBC_VALUE) as c_int;~let offset = ((*node).data as u32 & 0x7ff0) as c_int;
+mp_cmp~if strncmp(*prefix, p, len) != 0 {~if strncmp(*prefix, p, len) == 0 {
+mp_dot~if *p == b'.' as c_char {~if *p == b',' as c_char {
+mp_end~} else if *p != 0 {<NL>            return false;~} else if *p != 1 {<NL>            return false;
+fs_parent~if !parent.is_null() { get_subkey(parent) }~if parent.is_null() { get_subkey(parent) }
+fs_key~while !node.is_null() && is_key(node) {~while !node.is_null() {
+fs_more~} else if *key != 0 {<NL>                node = get_subkey(node);~} else if *key != 1 {<NL>                node = get_subkey(node);
+fv_key~if node.is_null() || !is_key(node) {~if node.is_null() {
+fv_val~if !node.is_null() && !is_value(node) {<NL>            return null();~if !node.is_null() && is_value(node) {<NL>            return null();
+fv_empty~} else {<NL>            cstr!("")~} else {<NL>            cstr!("x")
+nl_first~if node_in.is_null() {~if !node_in.is_null() {
+nl_root~if node.is_null() {<NL>                node = nodes(s);~if !node.is_null() {<NL>                node = nodes(s);
+nl_self~if node_in == root {~if node_in != root {
+nl_next~while (*node).next == 0 {~while (*node).next != 0 {
+nl_rootret~if node == root {<NL>                        return null_mut();~if node != root {<NL>                        return null_mut();
+nl_leaf~while !node.is_null() && !is_leaf(node) {~while !node.is_null() && is_leaf(node) {
+kv_child~if (**leaf).child != 0 {~if (**leaf).child == 0 {
+kv_empty~cstr!("") // No value key~cstr!("-") // No value key
+in_flag~((offset as u16) as u32 | flag) as u16;~((offset as u16) as u32 | (flag & 0)) as u16;
+in_child~(*node).child = 0;<NL>        (*node).next = 0;~(*node).next = 0;
+in_warn~rust_xbcw_warn_init_node(offset as u64 >= XBC_DATA_MAX)~rust_xbcw_warn_init_node(offset as u64 > XBC_DATA_MAX)
+an_max~if *s.node_num == XBC_NODE_MAX {~if *s.node_num > XBC_NODE_MAX {
+as_parent~(*node).parent = XBC_NODE_MAX as u16;~(*node).parent = 0;
+as_head~if (*lp).child == 0 || head {~if (*lp).child == 0 && head {
+as_next~(*node).next = (*lp).child;~(*node).next = 0;
+as_last~sib = xbc_last_sibling(sib);~sib = sib.wrapping_add(0);
+as_msg~xbc_parse_error(cstr!("Too many nodes"), data);~xbc_parse_error(cstr!("Too many node"), data);
+vk_empty~if *key == 0 {<NL>            return false;~if *key == 1 {<NL>            return false;
+vk_dash~|| *key == b'-' as c_char~|| *key == b'+' as c_char
+vk_under~|| *key == b'_' as c_char~|| *key == b'.' as c_char
+sc_end~p.add(strlen(p))~p
+sc_nl~ret.add(1)~ret
+ss_nl~while isspace(*p as c_int) && *p != b'\n' as c_char {~while isspace(*p as c_int) {
+ob_depth~if *s.brace_index >= XBC_DEPTH_MAX {~if *s.brace_index > XBC_DEPTH_MAX {
+ob_msg~"Exceed max depth of braces"~"Exceed max depth of brace"
+cb_neg~|| *s.brace_index < 0~|| *s.brace_index < -5
+cb_zero~if *s.brace_index == 0 {<NL>            *s.last_parent = null_mut();~if *s.brace_index == 1 {<NL>            *s.last_parent = null_mut();
+cb_prev~*s.open_brace.add(*s.brace_index as usize - 1) as usize);~*s.open_brace.add(*s.brace_index as usize) as usize);
+pv_hash~while *v == b'#' as c_char {~while *v == b';' as c_char {
+pv_squote~if *v == b'"' as c_char || *v == b'\'' as c_char {~if *v == b'"' as c_char {
+pv_print~if !isprint(c) && !isspace(c) {~if !isprint(c) || !isspace(c) {
+pv_quote~if c != quotes {<NL>                    continue;~if c == quotes {<NL>                    continue;
+pv_delim~if c != 0 && strchr(cstr!(",;\n#}"), c).is_null() {~if c != 0 && strchr(cstr!(",;\n#"), c).is_null() {
+pv_adv~if *p != 0 {<NL>                    p = p.add(1);~if *p == 0 {<NL>                    p = p.add(1);
+pv_trim~v = strim(v);~v = skip_spaces(v);
+pv_comment~if c == b'#' as c_int {<NL>            p = skip_comment(p);~if c == b';' as c_int {<NL>            p = skip_comment(p);
+pv_set~",;\n#}"), c).is_null() {<NL>                    return xbc_parse_error(cstr!("No value delimiter"), p);~",;\n#}"), c).is_null() {<NL>                    return xbc_parse_error(cstr!("No value delimiters"), p);
+pa_child~if (*last_parent(s)).child != 0 {~if (*last_parent(s)).child == 0 {
+pa_break~if c != b',' as c_int {<NL>                break;~if c != b'}' as c_int {<NL>                break;
+mn_cmp~if strcmp(rust_xbc_node_get_data(node), k) == 0 {~if strcmp(rust_xbc_node_get_data(node), k) != 0 {
+ak_first~let add_node = *s.node_num == 0;~let add_node = *s.node_num == 1;
+ak_level~if last_parent(s).is_null() {<NL>                // the first level~if !last_parent(s).is_null() {<NL>                // the first level
+ak_skip~if !child.is_null() && is_value(child) {<NL>                    child = rust_xbc_node_get_next(child);~if !child.is_null() && !is_value(child) {<NL>                    child = rust_xbc_node_get_next(child);
+ak_found~if !node.is_null() {<NL>                *s.last_parent = node;<NL>                return 0;~if node.is_null() {<NL>                *s.last_parent = node;<NL>                return 0;
+pk_trim~k = strim(k);<NL>        loop {~k = skip_spaces(k);<NL>        loop {
+pk_dot~let p = strchr(k, b'.' as c_int);~let p = strchr(k, b':' as c_int);
+kv_redef~if op == b'=' as c_int {<NL>                return xbc_parse_error(cstr!("Value is redefined"), v);~if op == b'+' as c_int {<NL>                return xbc_parse_error(cstr!("Value is redefined"), v);
+kv_colon~if op == b':' as c_int {<NL>                let nidx~if op == b'+' as c_int {<NL>                let nidx
+kv_nidx~(*child).next = nidx; // keep subkeys~let _ = nidx; // keep subkeys
+kv_skip~skip_head = true;~skip_head = false;
+kv_last~*s.last_parent = xbc_last_child(child);~*s.last_parent = { let _ = xbc_last_child as *const (); child };
+kv_head~if xbc_add_head_sibling(v, XBC_VALUE).is_null() {~if { let _ = xbc_add_head_sibling as *const (); __xbc_add_sibling(v, XBC_VALUE, false) }.is_null() {
+kv_array~if c == b',' as c_int {<NL>            // Array~if c == b';' as c_int {<NL>            // Array
+kv_close~if c == b'}' as c_int {<NL>            ret = __xbc_close_brace(next.offset(-1));~if c == b'{' as c_int {<NL>            ret = __xbc_close_brace(next.offset(-1));
+kv_k~*k = next;~*k = *k;
+pk_nonempty~if **k != 0 {~if true {
+pk_restore~            *s.last_parent = prev_parent;<NL>        }<NL>        *k = n;~            let _ = prev_parent;<NL>        }<NL>        *k = n;
+ob_n~__xbc_open_brace(n.offset(-1))~__xbc_open_brace(n)
+cl_n~__xbc_close_brace(n.offset(-1))~__xbc_close_brace(n)
+vt_brace~if *s.brace_index != 0 {~if *s.brace_index > 1 {
+vt_empty~if *s.node_num == 0 {~if *s.node_num == 1 {
+vt_next~.next as c_int > *s.node_num {~.next as c_int >= *s.node_num {
+vt_len~if len > XBC_KEYLEN_MAX {~if len >= XBC_KEYLEN_MAX {
+vt_depth~if depth > XBC_DEPTH_MAX {~if depth >= XBC_DEPTH_MAX {
+vt_pop~len -= strlen(rust_xbc_node_get_data(n)) as c_int + 1;~len -= strlen(rust_xbc_node_get_data(n)) as c_int;
+pt_set~strpbrk(p, cstr!("{}=+;:\n#"))~strpbrk(p, cstr!("{}=+;:\n"))
+pt_eq~if eq != b'=' as c_char {~if eq == b'=' as c_char {
+pt_pos~q.offset(-2),~q.offset(-1),
+pt_skip~q = skip_comment(q);<NL>                    ret = xbc_parse_key(&mut p, q);~q = q.wrapping_add(0);<NL>                    ret = xbc_parse_key(&mut p, q);
+pt_nodelim~if *p != 0 {<NL>                    ret = xbc_parse_error(cstr!("No delimiter"), p);~if *p != 1 {<NL>                    ret = xbc_parse_error(cstr!("No delimiter"), p);
+pt_loop~            if ret != 0 {<NL>                break;<NL>            }<NL>        }~            if ret > 0 {<NL>                break;<NL>            }<NL>        }
+ex_num~*s.node_num = 0;~*s.node_num = *s.node_num;
+ex_brace~*s.brace_index = 0;~*s.brace_index = *s.brace_index;
+xi_size~if size as u64 > XBC_DATA_MAX || size == 0 {~if size as u64 >= XBC_DATA_MAX || size == 0 {
+xi_dsize~*s.data_size = size + 1;~*s.data_size = size;
+xi_nul~*(*s.data).add(size) = 0;~*(*s.data).add(size) = 1;
+xi_zero~core::ptr::write_bytes(*s.nodes as *mut u8, 0, 8 * XBC_NODE_MAX as usize);~core::ptr::write_bytes(*s.nodes as *mut u8, 0, 8 * 100);
+xi_epos~*epos = -1;~*epos = 0;
+xi_busy~*emsg = cstr!("Bootconfig is already initialized");~*emsg = cstr!("Bootconfig is initialized");

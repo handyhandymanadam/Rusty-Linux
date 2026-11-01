@@ -16,6 +16,7 @@
 
 minmax_running_max   likely/unlikely branch hints only; all four branches are in win_minmax_rs.rs running() (lines 108-117)
 minmax_running_min   likely/unlikely branch hints only; same running() body, called with the reversed comparator
+csum_partial   `likely(len >= 80)` branch hint only; the whole body (every branch) is csum_partial_rs.rs csum_partial_impl, no thunk stays
 
 # --- an attribute on a definition nothing outside the file could see ------
 #
@@ -148,3 +149,115 @@ mpi_write_to_sgl      same #if BYTES_PER_MPI_LIMB fork, same mpicoder_rs.rs cons
 
 __fprop_add_percpu_max  unlikely() branch hint only; the `max_frac < FPROP_FRAC_BASE` condition it guards is in flex_proportions_rs.rs __fprop_add_percpu_max(), condition and consequence both intact
 fprop_local_init_percpu  raw_spin_lock_init(&pl->lock) reproduced via rust_flexprop_lock_init() (lib/flex_proportions.c), a differently-named retained C thunk pass 1's same-symbol-name check does not look for
+
+# --- asn1_ber_decoder: every guard is present, `wrapping_sub`/`wrapping_add`
+# --- just changed the text pass 1 was matching on --------------------------
+#
+# The `rig/uaccess-panic-check.sh` pass across the crypto/mpi + asn1/oid
+# panic-triage (2026-09-06) converted this file's size/offset bookkeeping
+# (`datalen - dp`, `n + 1`, `csp -= 1`, etc.) from plain operators to
+# `wrapping_sub`/`wrapping_add`, to stop CONFIG_RUST_OVERFLOW_CHECKS from
+# panicking on arithmetic the pristine C relies on unsigned wraparound for
+# (see this file's own module doc). Every `if (unlikely(X - Y < N))`-shaped
+# guard pass 1 lists above is still in asn1_decoder_rs.rs, same condition,
+# same consequence -- `datalen.wrapping_sub(dp) < 2` decides exactly the
+# same way `datalen - dp < 2` did for every value, wrapped or not, since a
+# wrapped (huge) result still fails `< 2`. Verified by reading every line
+# pass 1 lists against the current file; none of the 18 conditions changed
+# meaning, only their spelling.
+
+asn1_ber_decoder  every unlikely()-guarded condition pass 1 lists is present in asn1_decoder_rs.rs with the same consequence; the arithmetic inside several of them is now wrapping_sub/wrapping_add (2026-09-06 panic-triage pass), which changed the text pass 1 matches on, not the guard
+
+# --- mpicoder.c: BYTES_PER_MPI_LIMB #if/#elif is architecture selection,
+# --- not a runtime guard -----------------------------------------------
+#
+# mpi_read_buffer and mpi_write_to_sgl each carry two
+# `#if BYTES_PER_MPI_LIMB == 4 / #elif == 8 / #else #error` blocks in the
+# pristine C, choosing __be32 vs __be64 and cpu_to_be32() vs cpu_to_be64().
+# BYTES_PER_MPI_LIMB is 8 unconditionally on this architecture (mpi_limb_t
+# is `unsigned long`, checked: lib/crypto/mpi/mpi-internal.h), so only the
+# `== 8` arm ever compiles here -- the same class as mpih-div.c's
+# UDIV_TIME/UMUL_TIME dead branch (this project's own module doc on that
+# file). mpicoder_rs.rs's `alimb.to_be_bytes()` on a `c_ulong` (always
+# 64-bit) IS that one surviving arm; there is no second arm to lose on a
+# single-architecture port. Pass 1 flags `#if`/`#elif` lines as guards by
+# construct, the same way it does for the CONFIG_DCACHE_WORD_ACCESS entries
+# above, and cannot tell a live fork from a compile-time-constant one.
+
+mpi_read_buffer   BYTES_PER_MPI_LIMB #if 4/#elif 8 is architecture selection (always 8 here, mpi_limb_t is unsigned long), not a runtime guard; mpicoder_rs.rs's to_be_bytes() on c_ulong is the one surviving arm
+mpi_write_to_sgl  as mpi_read_buffer; same two BYTES_PER_MPI_LIMB #if/#elif blocks, same reasoning
+
+kstrdup_quotable  WARN_ON(string_escape_mem(...) != dlen) reproduced as kernel::kabi_warn! in string_helpers_rs.rs kstrdup_quotable(), same condition and same file/line attribution (the whole point of the macro); same pattern as errseq_set/timerqueue_add above
+
+# --- lib/xarray.c: SIX REAL WARN SITES, LOST ON MERGE AND NOW REPRODUCED ----
+#
+# THESE WERE NOT FALSE POSITIVES. The port reproduced every condition and
+# every return value faithfully, and dropped the WARN itself at all six
+# sites -- no splat, no TAINT_WARN, no bug-table entry. Found 2026-09-06 by
+# an independent from-scratch gate run on master; recorded nowhere before
+# that. Fixed in xarray_rs.rs, and pass 1 cannot see a Rust-side guard, so
+# each is a decision here rather than a silencer.
+#
+# Five are WARN_ON_ONCE -> kernel::kabi_warn_on_once!. The sixth,
+# xas_split_alloc, is a plain WARN_ON in the C -- it reports on EVERY
+# occurrence -- so it uses kernel::warn_on!, not the _once macro; using
+# _once there would have reported once and silently diverged thereafter.
+#
+# Verified by enumerating every WARN/WARN_ON/WARN_ON_ONCE in the pristine C
+# and matching kind for kind, not by re-running this script: 5 WARN_ON_ONCE
+# + 1 WARN_ON in the C, 5 kabi_warn_on_once! + 1 warn_on! in the Rust.
+
+__xa_alloc           C:1990/1992 WARN_ON_ONCE(xa_is_advanced) and WARN_ON_ONCE(!xa_track_free), both reproduced at xarray_rs.rs:2934/2937
+__xa_store           C:1697 WARN_ON_ONCE(xa_is_advanced(entry)), reproduced at xarray_rs.rs:1573
+xa_store_range       C:1877 WARN_ON_ONCE(xa_is_internal(entry)), reproduced at xarray_rs.rs:2236
+xas_split            pass 1 misattributed this: body() matched the COMMENT at C:1038 ("called before calling xas_split()") and brace-walked into xas_split_alloc, whose WARN_ON(C:1051) is reproduced with kernel::warn_on! at xarray_rs.rs:1901. xas_split's own body carries no guard.
+
+# --- lib/xarray.c: the RCU read-side sections, genuinely reproduced -------
+#
+# rcu_read_lock/rcu_read_unlock is in guard_re and is load-bearing (not a
+# hint): reading an RCU-protected radix tree without it is a real bug. All
+# five moved with the body. Checked by counting lock/unlock per function
+# against the C, including xa_get_mark's two exit paths.
+
+xa_load              rcu_read_lock/unlock reproduced at xarray_rs.rs:1510/1517
+xa_get_mark          rcu_read_lock at xarray_rs.rs:1733, both unlock paths at 1737/1742, matching the C's two exits
+xa_get_order         rcu_read_lock/unlock reproduced at xarray_rs.rs:2163/2168
+xa_find              rcu_read_lock/unlock reproduced at xarray_rs.rs:2641/2652
+xa_find_after        rcu_read_lock/unlock reproduced at xarray_rs.rs:2702/2720
+
+# --- lib/xarray.c: XA_NODE_BUG_ON, dead in every build we or anyone ships --
+#
+# XA_NODE_BUG_ON expands to nothing unless XA_DEBUG is #define'd, and
+# include/linux/xarray.h:1189 only ever tests it -- no Kconfig symbol, no
+# Makefile, nothing in the tree defines it. 15 such sites in the C, all
+# inert. Documented at xarray_rs.rs:97 and :663.
+
+xas_destroy          XA_NODE_BUG_ON(node, !list_empty(&node->private_list)) only; inert under !XA_DEBUG, which nothing defines
+xas_get_order        XA_NODE_BUG_ON(xas->xa_node, xa_is_sibling(...)) only; same reasoning
+
+# --- lib/xarray.c: branch hints and a comment --------------------------------
+
+xas_find             unlikely() branch hint only; the whole body moved, so the branch moved with it
+xas_find_marked      unlikely() branch hint only; same case as xas_find
+xa_destroy           pass 1 matched a COMMENT -- "/* lockdep checks we're still holding the lock in xas_free_nodes() */". There is no guard in this body
+
+# --- lib/zlib_deflate: the definer-vs-caller lookup gap, in the wild ---------
+#
+# The instance logs/porting-hazards.md predicted. zlib_tr_tally is DEFINED in
+# port/pristine/lib/zlib_deflate/deftree.c:915, but the symbol->file lookup
+# greps for "zlib_tr_tally(" across all pristine .c and takes the first
+# alphabetically -- deflate.c, which only CALLS it (:964, :998, :1078, :1105,
+# :1123). The guard hit reported is "#if MIN_MATCH != 3" from deflate.c's
+# deflate_slow(), a preprocessor arm in a function that is not this symbol.
+
+zlib_tr_tally        misattributed to deflate.c (a caller) over deftree.c (the definer); the reported "#if MIN_MATCH != 3" belongs to deflate_slow(), not to this symbol
+
+# --- arch/x86/kernel/cpu/common.c early group (Phase E, wt-pe5, 2026-10-05) -------------------------
+early_cpu_init       the two "#ifdef CONFIG_PROCESSOR_SELECT" arms (pr_info of the supported-CPU list) are reproduced under cfg(CONFIG_PROCESSOR_SELECT) in common_rs.rs and compared with the C by rig/phase-e/cpu_cmp.sh (PROCESSOR_SELECT=1 builds, every message); no BUG/WARN is in this body
+# --- the symbol -> pristine-file lookup picked a CALLER, not the definer (logs/porting-hazards.md: "rig/guard-check.sh's
+# symbol->pristine-file lookup can pick a caller instead of the definer") -----------------------------------------------------
+# Adding port/pristine/crypto/rsa.c (2026-10-05, s4f) made the lookup name it for mpi_mul and mpi_sub: the lines it prints are
+# rsa_enc()'s `unlikely(!pkey->n || !pkey->e)`, i.e. rsa.c's own code, not the body of mpi_mul / mpi_sub (lib/crypto/mpi/mpi-mul.c,
+# mpi-add.c, ported long before; their own guards were read when those files were ported).
+mpi_mul   lookup picked crypto/rsa.c (a caller): the printed `unlikely(!pkey->n || !pkey->e)` is rsa_enc()'s; the definer is lib/crypto/mpi/mpi-mul.c
+mpi_sub   lookup picked crypto/rsa.c (a caller): the printed `unlikely(!pkey->n || !pkey->e)` is rsa_enc()'s; the definer is lib/crypto/mpi/mpi-add.c

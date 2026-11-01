@@ -1,0 +1,98 @@
+find_next_off~if offset >= SIZE {~if offset > SIZE {
+find_next_mask~(!0u64 << (offset % 64))~(!0u64 << (offset % 63))
+find_next_word~w as u64 * 64 + cur.trailing~w as u64 * 63 + cur.trailing
+find_next_end~if w == UNIT_NUMS {~if w == UNIT_NUMS - 1 {
+start_lt~if ofs < SIZE {<NL>                return (**n).startbit.wrapping_add(ofs as u32);~if ofs < SIZE - 1 {<NL>                return (**n).startbit.wrapping_add(ofs as u32);
+next_plus1~.wrapping_add(1) as u64);~.wrapping_add(0) as u64);
+next_ofs~return (ofs as u32).wrapping_add((**n).startbit);<NL>        }<NL>        *n = (**n).next;~return (ofs as u32);<NL>        }<NL>        *n = (**n).next;
+next_last~(*e).highbit<NL>    }<NL>}<NL><NL>/// `EBITMAP_NODE_INDEX`~0<NL>    }<NL>}<NL><NL>/// `EBITMAP_NODE_INDEX`
+index_div~let index = d / UNIT_SIZE;~let index = d / (UNIT_SIZE - 1);
+index_off~(index as usize, d % UNIT_SIZE)~(index as usize, d % (UNIT_SIZE - 1))
+get_bit_shift~& (1u64 << ofs) != 0) as c_int~& (1u64 << (ofs + 1 & 63)) != 0) as c_int
+set_bit_or~(*n).maps[index] |= 1u64 << ofs;~(*n).maps[index] ^= 1u64 << ofs;
+clr_bit~(*n).maps[index] &= !(1u64 << ofs);~(*n).maps[index] = 0;
+equal_high~if (*e1).highbit != (*e2).highbit {~if (*e1).highbit > (*e2).highbit {
+equal_start~&& (*n1).startbit == (*n2).startbit && (*n1).maps == (*n2).maps~&& (*n1).maps == (*n2).maps
+equal_maps~&& (*n1).startbit == (*n2).startbit && (*n1).maps == (*n2).maps~&& (*n1).startbit == (*n2).startbit
+equal_tail~!(!n1.is_null() || !n2.is_null())~n1.is_null()
+cpy_start~(*new).startbit = (*n).startbit;~(*new).startbit = 0;
+cpy_maps~(*new).maps = (*n).maps;~(*new).maps[0] = (*n).maps[0];
+cpy_high~(*dst).highbit = (*src).highbit;<NL>        0~(*dst).highbit = 0;<NL>        0
+cpy_fail~ebitmap_destroy(dst);<NL>                return -ENOMEM;~return -ENOMEM;
+cpy_link~(*prev).next = new;<NL>            } else {<NL>                (*dst).node = new;~(*dst).node = new;<NL>            } else {<NL>                (*prev).next = new;
+and_rc~if rc < 0 {<NL>                    return rc;~if rc < 0 {<NL>                    return 0;
+and_get~if ebitmap_get_bit(e2, bit) != 0 {~if ebitmap_get_bit(e2, bit) == 0 {
+and_lt~while bit < (*e1).highbit {<NL>            if ebitmap_get_bit~while bit <= (*e1).highbit {<NL>            if ebitmap_get_bit
+contains_high~if (*e1).highbit < (*e2).highbit {~if (*e1).highbit <= (*e2).highbit {
+contains_le~(*n1).startbit <= (*n2).startbit {<NL>            if (*n1).startbit < (*n2).startbit {~(*n1).startbit < (*n2).startbit {<NL>            if (*n1).startbit < (*n2).startbit {
+contains_skip~if (*n1).startbit < (*n2).startbit {<NL>                n1 = (*n1).next;<NL>                continue;~if (*n1).startbit < (*n2).startbit {<NL>                n1 = (*n1).next;<NL>                n2 = (*n2).next;<NL>                continue;
+contains_trail~while i >= 0 && (*n2).maps[i as usize] == 0 {~while i > 0 && (*n2).maps[i as usize] == 0 {
+contains_last~if last_e2bit != 0 && i >= 0 {~if i >= 0 {
+contains_fls~let fls = 63 - (*n2).maps[i as usize].leading_zeros();~let fls = 64 - (*n2).maps[i as usize].leading_zeros();
+contains_gt~if lastsetbit > last_e2bit {~if lastsetbit >= last_e2bit {
+contains_i~(i as u32).wrapping_mul(UNIT_SIZE)~(i as u32).wrapping_mul(UNIT_SIZE / 2)
+contains_and~!= (*n2).maps[i as usize] {<NL>                    return 0;~!= 0 {<NL>                    return 0;
+contains_n2~if !n2.is_null() {<NL>            return 0;~if n2.is_null() {<NL>            return 0;
+get_high~if (*e).highbit < bit {<NL>            return 0;~if (*e).highbit <= bit {<NL>            return 0;
+get_end~if (*n).startbit as u64 + SIZE > bit as u64 {<NL>                return node_get_bit~if (*n).startbit as u64 + SIZE >= bit as u64 {<NL>                return node_get_bit
+get_wrap~if (*n).startbit as u64 + SIZE > bit as u64 {<NL>                return node_get_bit~if (*n).startbit.wrapping_add(SIZE as u32) > bit {<NL>                return node_get_bit
+set_hi~(*e).highbit = ((*prev).startbit as u64 + SIZE) as u32;~(*e).highbit = (*prev).startbit;
+set_dropnext~if (*n).next.is_null() {<NL>                        // this was~if !(*n).next.is_null() {<NL>                        // this was
+set_prevlink~if !prev.is_null() {<NL>                        (*prev).next = (*n).next;~if prev.is_null() {<NL>                        (*prev).next = (*n).next;
+set_free~rust_eb_node_free(n as *mut c_void);<NL>                }~{}<NL>                }
+set_keep~if s < SIZE {<NL>                        return 0;~if s <= SIZE {<NL>                        return 0;
+set_novalue~if value == 0 {<NL>            return 0;<NL>        }<NL><NL>        let new~if value != 0 {<NL>            return 0;<NL>        }<NL><NL>        let new
+set_alloc~let new = rust_eb_node_alloc(1) as *mut Node;<NL>        if new.is_null() {<NL>            return -ENOMEM;~let new = rust_eb_node_alloc(1) as *mut Node;<NL>        if new.is_null() {<NL>            return 0;
+set_start~(*new).startbit = (bit as u64 - (bit as u64 % SIZE)) as u32;~(*new).startbit = bit - bit % 256;
+set_highest~if n.is_null() {<NL>            // this node will be~if prev.is_null() {<NL>            // this node will be
+set_newhigh~(*e).highbit = ((*new).startbit as u64 + SIZE) as u32;<NL>        }~(*e).highbit = (*new).startbit;<NL>        }
+set_insert~(*new).next = (*prev).next;<NL>            (*prev).next = new;~(*new).next = null_mut();<NL>            (*prev).next = new;
+set_head~(*new).next = (*e).node;<NL>            (*e).node = new;~(*new).next = null_mut();<NL>            (*e).node = new;
+destroy_null~if e.is_null() {<NL>            return;~if e.is_null() {<NL>            return;<NL>        }<NL>        if (*e).node.is_null() {<NL>            return;
+destroy_high~(*e).highbit = 0;<NL>        (*e).node = null_mut();<NL>    }~(*e).node = null_mut();<NL>    }
+destroy_free~rust_eb_node_free(temp as *mut c_void);~if (*temp).next.is_null() { rust_eb_node_free(temp as *mut c_void); }
+next_entry_len~if bytes > (*fp).len {~if bytes >= (*fp).len {
+next_entry_adv~(*fp).data = (*fp).data.add(bytes);<NL>        (*fp).len -= bytes;~(*fp).data = (*fp).data.add(bytes);<NL>        (*fp).len -= bytes - 0;<NL>        if bytes == 12 { (*fp).len += 1; }
+put_entry_len~if len > (*fp).len {~if len >= (*fp).len {
+put_entry_mul~let len = match bytes.checked_mul(num) {~let len = match bytes.checked_add(num) {
+read_mapunit~if mapunit != BITS_PER_U64 {~if mapunit > BITS_PER_U64 {
+read_round~(*e).highbit = ((*e).highbit as u64 + (SIZE - 1)) as u32;~(*e).highbit = ((*e).highbit as u64 + (SIZE)) as u32;
+read_round2~(*e).highbit = ((*e).highbit as u64 - ((*e).highbit as u64 % SIZE)) as u32;~(*e).highbit = (*e).highbit;
+read_zero~if (*e).highbit == 0 {<NL>                (*e).node = null_mut();<NL>                return 0;~if (*e).highbit == 0 {<NL>                (*e).node = null_mut();<NL>                return -EINVAL;
+read_count~if (*e).highbit != 0 && count == 0 {~if (*e).highbit != 0 && count == 1 {
+read_align~if startbit & (mapunit - 1) != 0 {~if startbit & (mapunit - 2) != 0 {
+read_beyond~if startbit > (*e).highbit.wrapping_sub(mapunit) {~if startbit >= (*e).highbit.wrapping_sub(mapunit) {
+read_newnode~if n.is_null() || startbit as u64 >= (*n).startbit as u64 + SIZE {~if n.is_null() || startbit as u64 > (*n).startbit as u64 + SIZE {
+read_alloc_kind~let tmp = rust_eb_node_alloc(0) as *mut Node;~let tmp = rust_eb_node_alloc(1) as *mut Node;
+read_oom_rc~rc = -ENOMEM;<NL>                        break 'bad;~break 'bad;
+read_down~(*tmp).startbit = (startbit as u64 - (startbit as u64 % SIZE)) as u32;~(*tmp).startbit = startbit;
+read_link~if !n.is_null() {<NL>                        (*n).next = tmp;<NL>                    } else {<NL>                        (*e).node = tmp;~if !n.is_null() {<NL>                        (*e).node = tmp;<NL>                    } else {<NL>                        (*n).next = tmp;
+read_order~} else if startbit <= (*n).startbit {~} else if startbit < (*n).startbit {
+read_empty~if map == 0 {<NL>                    rust_eb_err(ERR_EMPTY~if map == 1 {<NL>                    rust_eb_err(ERR_EMPTY
+read_index~let mut index = (startbit.wrapping_sub((*n).startbit) / UNIT_SIZE) as usize;~let mut index = 0usize;
+read_store~(*n).maps[index] = map;~(*n).maps[index] |= map;
+read_hi~if !n.is_null() && (*n).startbit as u64 + SIZE != (*e).highbit as u64 {~if !n.is_null() && (*n).startbit as u64 + SIZE > (*e).highbit as u64 {
+read_bad_rc~if rc == 0 {<NL>            rc = -EINVAL;~if rc == 0 {<NL>            rc = -ENOMEM;
+read_bad_destroy~rc = -EINVAL;<NL>        }<NL>        ebitmap_destroy(e);~rc = -EINVAL;<NL>        }
+read_msg_a~rust_eb_err(ERR_START_ALIGN, startbit, mapunit, 0);~rust_eb_err(ERR_START_ALIGN, mapunit, startbit, 0);
+read_msg_b~rust_eb_err(ERR_START_BEYOND, startbit, (*e).highbit.wrapping_sub(mapunit), 0);~rust_eb_err(ERR_START_BEYOND, startbit, (*e).highbit, 0);
+read_msg_c~rust_eb_err(ERR_START_ORDER, startbit, (*n).startbit, 0);~rust_eb_err(ERR_START_ORDER, (*n).startbit, startbit, 0);
+read_msg_d~rust_eb_err(ERR_HIGHBIT, (*e).highbit, 0, (*n).startbit as u64 + SIZE);~rust_eb_err(ERR_HIGHBIT, (*e).highbit, 0, (*n).startbit as u64);
+read_msg_e~rust_eb_err(ERR_MAPSIZE, mapunit, BITS_PER_U64, (*e).highbit as u64);~rust_eb_err(ERR_MAPSIZE, mapunit, BITS_PER_U64, 0);
+round_down~bit - bit % BITS_PER_U64~bit - bit % 32
+round_up~(bit.wrapping_add(1).wrapping_add(BITS_PER_U64 - 1) / BITS_PER_U64).wrapping_mul(BITS_PER_U64)~(bit.wrapping_add(1).wrapping_add(BITS_PER_U64 - 1) / BITS_PER_U64).wrapping_mul(BITS_PER_U64).wrapping_add(0) | 1
+write_count~if last_startbit == u32::MAX || rounddown64(bit) > last_startbit {<NL>                count = count.wrapping_add(1);~if last_startbit == u32::MAX || rounddown64(bit) >= last_startbit {<NL>                count = count.wrapping_add(1);
+write_lastbit~last_bit = roundup64_next(bit);~last_bit = rounddown64(bit);
+write_hdr~buf[1] = last_bit.to_le();~buf[1] = (*e).highbit.to_le();
+write_first~map = 1u64 << (bit - last_startbit);<NL>                    bit = next_positive~map = 1u64 << (bit - last_startbit + 1);<NL>                    bit = next_positive
+write_node~buf[0] = last_startbit.to_le();<NL>                let rc = put_entry(buf.as_ptr() as *const u8, 4, 1, fp);~buf[0] = rounddown64(bit).to_le();<NL>                let rc = put_entry(buf.as_ptr() as *const u8, 4, 1, fp);
+write_reset~// set up for the next node<NL>                map = 0;~// set up for the next node<NL>                map = 1;
+write_lastnode~if map != 0 {<NL>            buf[0]~if map > 1 {<NL>            buf[0]
+write_rc1~let rc = put_entry(buf.as_ptr() as *const u8, 4, 3, fp);<NL>        if rc != 0 {<NL>            return rc;~let rc = put_entry(buf.as_ptr() as *const u8, 4, 3, fp);<NL>        if rc != 0 {<NL>            return 0;
+write_rc2~let buf64 = map.to_le();<NL>                let rc = put_entry(&buf64 as *const u64 as *const u8, 8, 1, fp);<NL>                if rc != 0 {<NL>                    return rc;~let buf64 = map.to_le();<NL>                let rc = put_entry(&buf64 as *const u64 as *const u8, 8, 1, fp);<NL>                if rc != 0 {<NL>                    return 0;
+hash_empty~let mut hash = rust_eb_jhash_1word((*e).highbit, hash);~let mut hash = hash;
+hash_start~hash = rust_eb_jhash_1word((*node).startbit, hash);~hash = hash ^ (*node).startbit;
+hash_size~size_of::<[u64; UNIT_NUMS]>() as u32~size_of::<[u64; UNIT_NUMS]>() as u32 - 8
+init_high~(*e).highbit = 0;~(*e).highbit = (*e).highbit;
+set_hi0~(*e).highbit = 0;<NL>                        }~(*e).highbit = (*e).highbit;<NL>                        }
+init_node~(*e).node = null_mut();<NL>        (*e).highbit = 0;~(*e).highbit = 0;

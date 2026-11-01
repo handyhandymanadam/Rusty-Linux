@@ -1,0 +1,38 @@
+/* Preprocessed by the Makefile (CC -E -P; only the `pub const` lines are kept, C integer suffixes stripped) into
+ * cpucheck_gen.rs, which cpucheck_rs.rs include!s. The left-hand names carry an RM_ prefix because the macro names would expand there. Every number comes from the same headers the
+ * C file cpucheck.c uses (cpufeaturemasks.h, cpufeatures.h, msr-index.h, autoconf.h), so the
+ * Rust cannot drift from the build configuration. */
+#include <asm/cpufeatures.h>
+#include <asm/cpufeaturemasks.h>
+#include <asm/processor-flags.h>
+#include <asm/msr-index.h>
+
+pub const RM_NCAPINTS: usize = NCAPINTS;
+pub const RM_REQUIRED_MASK0: u32 = REQUIRED_MASK0;
+pub const RM_REQUIRED_MASK1: u32 = REQUIRED_MASK1;
+pub const RM_REQUIRED_MASK4: u32 = REQUIRED_MASK4;
+pub const RM_REQUIRED_MASK6: u32 = REQUIRED_MASK6;
+pub const RM_REQUIRED_MASK16: u32 = REQUIRED_MASK16;
+pub const RM_CONFIG_X86_MINIMUM_CPU_FAMILY: i32 = CONFIG_X86_MINIMUM_CPU_FAMILY;
+pub const RM_X86_FEATURE_XMM: u32 = X86_FEATURE_XMM;
+pub const RM_X86_FEATURE_XMM2: u32 = X86_FEATURE_XMM2;
+pub const RM_X86_FEATURE_CX8: u32 = X86_FEATURE_CX8;
+pub const RM_X86_FEATURE_PAE: u32 = X86_FEATURE_PAE;
+pub const RM_X86_FEATURE_LM: u32 = X86_FEATURE_LM;
+pub const RM_X86_EFLAGS_AC: u32 = X86_EFLAGS_AC;
+pub const RM_X86_FEATURE_FPU: u32 = X86_FEATURE_FPU;
+pub const RM_X86_EFLAGS_ID: u32 = X86_EFLAGS_ID;
+pub const RM_X86_CR0_EM: u32 = X86_CR0_EM;
+pub const RM_X86_CR0_TS: u32 = X86_CR0_TS;
+pub const RM_MSR_K7_HWCR: u32 = MSR_K7_HWCR;
+pub const RM_MSR_VIA_FCR: u32 = MSR_VIA_FCR;
+#ifdef CONFIG_X86_64
+pub const IS_X86_64: bool = true;
+#else
+pub const IS_X86_64: bool = false;
+#endif
+#ifdef CONFIG_X86_PAE
+pub const IS_X86_PAE: bool = true;
+#else
+pub const IS_X86_PAE: bool = false;
+#endif

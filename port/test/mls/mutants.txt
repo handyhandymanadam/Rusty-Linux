@@ -1,0 +1,141 @@
+bits_word~ofs = (ofs / 64 + 1) * 64;~ofs = (ofs / 64 + 2) * 64;
+bits_limit~while ofs < EBITMAP_SIZE {~while ofs < EBITMAP_SIZE - 64 {
+bits_first_start~return rd32(self.node, EBN_STARTBIT) + ofs;~return ofs;
+bits_first_skip0~let ofs = self.find_in_node(0);~let ofs = self.find_in_node(1);
+bits_next_plus1~bit.wrapping_sub(start).wrapping_add(1)~bit.wrapping_sub(start)
+bits_next_start~let start = rd32(self.node, EBN_STARTBIT);~let start = 0;
+bits_next_ret~return ofs + start;~return ofs + start + 1;
+bits_first_null~while !self.node.is_null() {~while false {
+cl_init~let mut len: c_int = 1; // for the beginning ":"~let mut len: c_int = 0; // for the beginning ":"
+cl_levels~for l in 0..2usize {~for l in 0..1usize {
+cl_sens~len = len.wrapping_add(strlen(sym_name(p, SYM_LEVELS, sens(lv).wrapping_sub(1))) as c_int);~len = len.wrapping_add(strlen(sym_name(p, SYM_LEVELS, 0)) as c_int);
+cl_gap~if (i as c_int).wrapping_sub(prev) > 1 {~if (i as c_int).wrapping_sub(prev) > 2 {
+cl_headprev~if head != prev {~if head == prev {
+cl_plus_a~strlen(sym_name(p, SYM_CATS, prev as u32)) as c_int + 1~strlen(sym_name(p, SYM_CATS, prev as u32)) as c_int
+cl_plus_b~strlen(sym_name(p, SYM_CATS, i)) as c_int + 1~strlen(sym_name(p, SYM_CATS, i)) as c_int + 2
+cl_head~head = i as c_int;~head = prev;
+cl_prev~prev = i as c_int;~prev = head;
+cl_tail~if prev != head {<NL>                len~if prev == head {<NL>                len
+cl_eq~if level_eq(level(context, C_RANGE, 0), level(context, C_RANGE, 1)) {~if false {
+cl_dash~len = len.wrapping_add(1);~len = len.wrapping_add(0);
+cl_mls~if !mls_enabled(p) {<NL>            return 0;~if !mls_enabled(p) {<NL>            return 1;
+sc_colon~*sp = b':' as c_char;~*sp = b',' as c_char;
+sc_dot_loop~*sp = if prev.wrapping_sub(head) > 1 { b'.' } else { b',' } as c_char;~*sp = if prev.wrapping_sub(head) > 2 { b'.' } else { b',' } as c_char;
+sc_dot_tail~if prev != head {<NL>                *sp = if prev.wrapping_sub(head) > 1 { b'.' }~if prev != head {<NL>                *sp = if prev.wrapping_sub(head) > 2 { b'.' }
+sc_colon_first~*sp = if prev < 0 { b':' } else { b',' } as c_char;~*sp = if prev < 1 { b':' } else { b',' } as c_char;
+sc_prevhead~if prev != head {<NL>                        *sp~if prev == head {<NL>                        *sp
+sc_gap~if (i as c_int).wrapping_sub(prev) > 1 {<NL>                    // one or more negative bits are skipped<NL>                    if prev != head {~if (i as c_int).wrapping_sub(prev) > 2 {<NL>                    // one or more negative bits are skipped<NL>                    if prev != head {
+sc_dash~*sp = b'-' as c_char;~*sp = b'+' as c_char;
+sc_eq~if level_eq(level(context, C_RANGE, 0), level(context, C_RANGE, 1)) {<NL>                    break;<NL>                } else {<NL>                    *sp~if !level_eq(level(context, C_RANGE, 0), level(context, C_RANGE, 1)) {<NL>                    break;<NL>                } else {<NL>                    *sp
+sc_end~*scontext = sp;~
+sc_mls~if !mls_enabled(p) {<NL>            return;~if mls_enabled(p) {<NL>            return;
+sc_tail_name~sp = sp.add(strcpy(sp, sym_name(p, SYM_CATS, prev as u32)));<NL>            }<NL><NL>            if l == 0~sp = sp.add(strcpy(sp, sym_name(p, SYM_CATS, 0)));<NL>            }<NL><NL>            if l == 0
+sc_head~head = i as c_int;<NL>                }<NL>                prev = i as c_int;<NL>                i = it.next(i);<NL>            }<NL><NL>            if prev~head = prev;<NL>                }<NL>                prev = i as c_int;<NL>                i = it.next(i);<NL>            }<NL><NL>            if prev
+lv_zero~if s == 0 || s > nprim(p, SYM_LEVELS) {~if s > nprim(p, SYM_LEVELS) {
+lv_max~if s == 0 || s > nprim(p, SYM_LEVELS) {~if s == 0 || s >= nprim(p, SYM_LEVELS) {
+lv_name~sym_name(p, SYM_LEVELS, s - 1));<NL>        if levdatum~sym_name(p, SYM_LEVELS, s));<NL>        if levdatum
+lv_last~cat(l), nprim(p, SYM_CATS))~cat(l), 0)
+lv_which~cat(levdatum.cast::<u8>().add(LD_LEVEL).cast()), cat(l)~cat(l), cat(levdatum.cast::<u8>().add(LD_LEVEL).cast())
+rg_lo~mls_level_isvalid(p, lo) != 0 && mls_level_isvalid(p, hi) != 0~mls_level_isvalid(p, hi) != 0
+rg_hi~mls_level_isvalid(p, lo) != 0 && mls_level_isvalid(p, hi) != 0~mls_level_isvalid(p, lo) != 0
+rg_dom~&& level_dom(hi, lo)) as c_int~&& level_dom(lo, hi)) as c_int
+rg_nodom~&& level_dom(hi, lo)) as c_int~) as c_int
+cx_mls~if !mls_enabled(p) {<NL>            return 1;~if !mls_enabled(p) {<NL>            return 0;
+cx_range~== 0 {<NL>            return 0;<NL>        }<NL>        if rd32(c, C_ROLE)~!= 0 {<NL>            return 0;<NL>        }<NL>        if rd32(c, C_ROLE)
+cx_role~if rd32(c, C_ROLE) == OBJECT_R_VAL {~if rd32(c, C_ROLE) != OBJECT_R_VAL {
+cx_user0~if user == 0 || user > nprim(p, SYM_USERS) {~if user > nprim(p, SYM_USERS) {
+cx_usermax~if user == 0 || user > nprim(p, SYM_USERS) {~if user == 0 || user >= nprim(p, SYM_USERS) {
+cx_userdatum~.add((user - 1) as usize).read();~.add(0).read();
+cx_low~level_dom(level(c, C_RANGE, 0), ur.cast())~level_dom(ur.cast(), level(c, C_RANGE, 0))
+cx_high~level_dom(ur.add(LEVEL_SIZE).cast(), level(c, C_RANGE, 1))~level_dom(level(c, C_RANGE, 1), ur.add(LEVEL_SIZE).cast())
+cx_and~level_dom(level(c, C_RANGE, 0), ur.cast()) && level_dom~level_dom(level(c, C_RANGE, 0), ur.cast()) || level_dom
+sid_mls_noxattr~if oldc != 0 && def_sid == SECSID_NULL {~if oldc != 0 || def_sid == SECSID_NULL {
+sid_mls_nodef~if oldc != 0 && def_sid == SECSID_NULL {~if oldc != 0 {
+sid_mls_ret~            return 0;<NL>        }<NL><NL>        // No MLS component~            return -EINVAL;<NL>        }<NL><NL>        // No MLS component
+sid_old0~if oldc == 0 {<NL>            if def_sid == SECSID_NULL {~if oldc != 0 {<NL>            if def_sid == SECSID_NULL {
+sid_defcon~if defcon.is_null() {<NL>                return -EINVAL;~if defcon.is_null() {<NL>                return 0;
+sid_range~strchr(scontext, b'-')~strchr(scontext, b':')
+sid_range_nul~*rangep[1] = 0;~
+sid_range_inc~rangep[1] = rangep[1].add(1);~
+sid_colon~let mut next_cat = strchr(sensitivity, b':');~let mut next_cat = strchr(sensitivity, b',');
+sid_colon_nul~*next_cat = 0;<NL>                next_cat = next_cat.add(1);<NL>            }<NL><NL>            // Parse~next_cat = next_cat.add(1);<NL>            }<NL><NL>            // Parse
+sid_sens_null~if levdatum.is_null() {<NL>                return -EINVAL;~if levdatum.is_null() {<NL>                return 0;
+sid_sens_store~wr32(lv, L_SENS, sens(levdatum.cast::<u8>().add(LD_LEVEL).cast()));~wr32(lv, L_SENS, sens(levdatum.cast::<u8>().add(LD_LEVEL).cast()) + 1);
+sid_comma~next_cat = strchr(next_cat, b',');~next_cat = strchr(next_cat, b'.');
+sid_comma_nul~*next_cat = 0;<NL>                    next_cat = next_cat.add(1);~next_cat = next_cat.add(1);
+sid_dot~let mut rngptr = strchr(cur_cat, b'.');~let mut rngptr = strchr(cur_cat, b',');
+sid_dot_nul~*rngptr = 0;~
+sid_dot_inc~rngptr = rngptr.add(1);~
+sid_cat_null~if catdatum.is_null() {<NL>                    return -EINVAL;~if catdatum.is_null() {<NL>                    return 0;
+sid_cat_bit~ebitmap_set_bit(cat(lv), cvalue.wrapping_sub(1), 1)~ebitmap_set_bit(cat(lv), cvalue, 1)
+sid_cat_rc~if rc != 0 {<NL>                    return rc;<NL>                }<NL><NL>                // If range~if rc != 0 {<NL>                    return -EINVAL;<NL>                }<NL><NL>                // If range
+sid_cont~if rngptr.is_null() {<NL>                    continue;~if rngptr.is_null() {<NL>                    break;
+sid_rng_null~if rngdatum.is_null() {<NL>                    return -EINVAL;~if rngdatum.is_null() {<NL>                    return 0;
+sid_rng_cmp~if cvalue >= rvalue {~if cvalue > rvalue {
+sid_rng_cmp2~if cvalue >= rvalue {~if cvalue + 1 >= rvalue {
+sid_rng_start~let mut i = cvalue;~let mut i = cvalue + 1;
+sid_rng_end~while i < rvalue {~while i + 1 < rvalue {
+sid_rng_rc~if rc != 0 {<NL>                        return rc;~if rc != 0 {<NL>                        break;
+sid_rng_bit~ebitmap_set_bit(cat(lv), i, 1)~ebitmap_set_bit(cat(lv), i + 1, 1)
+sid_single~if rangep[1].is_null() {<NL>            let (lo, hi)~if !rangep[1].is_null() {<NL>            let (lo, hi)
+sid_single_sens~wr32(hi, L_SENS, sens(lo));~wr32(hi, L_SENS, sens(hi));
+sid_single_cpy~let rc = ebitmap_cpy(cat(hi), cat(lo));~let rc = ebitmap_cpy(cat(lo), cat(hi));
+sid_single_rc~let rc = ebitmap_cpy(cat(hi), cat(lo));<NL>            if rc != 0 {<NL>                return rc;~let rc = ebitmap_cpy(cat(hi), cat(lo));<NL>            if rc != 0 {<NL>                return 0;
+rs_sens~wr32(dst, L_SENS, sens(src));~wr32(dst, L_SENS, sens(src) + 1);
+rs_rc~            if rc != 0 {<NL>                break;~            if rc != 0 {<NL>                continue;
+rs_levels~let src = range.cast::<u8>().add(l * LEVEL_SIZE)~let src = range.cast::<u8>().add(0)
+su_mls~if mls_enabled(p) {<NL>            let fromcon_sen~if !mls_enabled(p) {<NL>            let fromcon_sen
+su_1~if level_between(user_def, fromcon_sen, fromcon_clr) {~if level_between(user_def, fromcon_clr, fromcon_sen) {
+su_2~} else if level_between(fromcon_sen, user_def, user_clr) {~} else if level_between(fromcon_sen, user_clr, user_def) {
+su_3~} else if level_between(fromcon_clr, user_low, user_def) {~} else if level_between(fromcon_clr, user_def, user_low) {
+su_copy1~copy_nonoverlapping(user_def.cast::<u8>(), usercon_sen.cast::<u8>(), LEVEL_SIZE)~copy_nonoverlapping(user_def.cast::<u8>(), usercon_sen.cast::<u8>(), LEVEL_SIZE - 8)
+su_copy2~copy_nonoverlapping(fromcon_sen.cast::<u8>(), usercon_sen.cast::<u8>(), LEVEL_SIZE)~copy_nonoverlapping(fromcon_sen.cast::<u8>(), usercon_clr.cast::<u8>(), LEVEL_SIZE)
+su_copy3~copy_nonoverlapping(user_low.cast::<u8>(), usercon_sen.cast::<u8>(), LEVEL_SIZE)~copy_nonoverlapping(user_clr.cast::<u8>(), usercon_sen.cast::<u8>(), LEVEL_SIZE)
+su_dom1~if level_dom(user_clr, fromcon_clr) {~if level_dom(fromcon_clr, user_clr) {
+su_dom2~} else if level_dom(fromcon_clr, user_clr) {~} else if level_dom(user_clr, fromcon_clr) {
+su_copy4~copy_nonoverlapping(fromcon_clr.cast::<u8>(), usercon_clr.cast::<u8>(), LEVEL_SIZE)~copy_nonoverlapping(fromcon_sen.cast::<u8>(), usercon_clr.cast::<u8>(), LEVEL_SIZE)
+su_copy5~copy_nonoverlapping(user_clr.cast::<u8>(), usercon_clr.cast::<u8>(), LEVEL_SIZE)~copy_nonoverlapping(user_low.cast::<u8>(), usercon_clr.cast::<u8>(), LEVEL_SIZE)
+cv_mls~if !mls_enabled(oldp) || !mls_enabled(newp) {~if !mls_enabled(oldp) && !mls_enabled(newp) {
+cv_name~let name = sym_name(oldp, SYM_LEVELS, sens(level(oldc, C_RANGE, l)).wrapping_sub(1));~let name = sym_name(oldp, SYM_LEVELS, 0);
+cv_lookup~symtab_search(symtab(newp, SYM_LEVELS), name)~symtab_search(symtab(oldp, SYM_LEVELS), name)
+cv_null~if levdatum.is_null() {<NL>                return -EINVAL;<NL>            }<NL>            wr32(level(newc~if levdatum.is_null() {<NL>                return 0;<NL>            }<NL>            wr32(level(newc
+cv_sens~wr32(level(newc, C_RANGE, l), L_SENS, sens(levdatum.cast::<u8>().add(LD_LEVEL).cast()));~wr32(level(newc, C_RANGE, l), L_SENS, sens(level(oldc, C_RANGE, l)));
+cv_cat_lookup~symtab_search(symtab(newp, SYM_CATS), sym_name(oldp, SYM_CATS, i))~symtab_search(symtab(newp, SYM_CATS), sym_name(newp, SYM_CATS, i))
+cv_cat_null~if catdatum.is_null() {<NL>                    return -EINVAL;<NL>                }<NL>                let rc = ebitmap_set_bit(cat(level(newc~if catdatum.is_null() {<NL>                    return 0;<NL>                }<NL>                let rc = ebitmap_set_bit(cat(level(newc
+cv_bit~rd32(catdatum, CD_VALUE).wrapping_sub(1), 1);~rd32(catdatum, CD_VALUE), 1);
+cv_rc~if rc != 0 {<NL>                    return rc;<NL>                }<NL>                i = it.next(i);~if rc != 0 {<NL>                    return 0;<NL>                }<NL>                i = it.next(i);
+cv_src~let mut it = Bits::new(cat(level(oldc, C_RANGE, l)));~let mut it = Bits::new(cat(level(oldc, C_RANGE, 0)));
+cp_hi~cpy_levels(dst, src, 0, 1)~cpy_levels(dst, src, 0, 0)
+cp_low~cpy_levels(dst, src, 0, 0)~cpy_levels(dst, src, 0, 1)
+cp_high~cpy_levels(dst, src, 1, 1)~cpy_levels(dst, src, 0, 1)
+cp_destroy~ebitmap_destroy(cat(d0));~
+cp_rc1~    if rc != 0 {<NL>            return rc;<NL>        }<NL>        wr32(d1~    if rc != 0 {<NL>            return 0;<NL>        }<NL>        wr32(d1
+cp_sens1~wr32(d1, L_SENS, sens(s1));~wr32(d1, L_SENS, sens(s0));
+gl_nocommon~if sens(r1(1)) < sens(r2(0)) || sens(r2(1)) < sens(r1(0)) {~if sens(r1(1)) <= sens(r2(0)) || sens(r2(1)) < sens(r1(0)) {
+gl_nocommon2~if sens(r1(1)) < sens(r2(0)) || sens(r2(1)) < sens(r1(0)) {~if sens(r1(1)) < sens(r2(0)) || sens(r2(1)) <= sens(r1(0)) {
+gl_max~sens(r1(0)).max(sens(r2(0)))~sens(r1(0)).min(sens(r2(0)))
+gl_min~sens(r1(1)).min(sens(r2(1)))~sens(r1(1)).max(sens(r2(1)))
+gl_and0~let rc = ebitmap_and(cat(level(dst, C_RANGE, 0)), cat(r1(0)), cat(r2(0)));~let rc = ebitmap_and(cat(level(dst, C_RANGE, 0)), cat(r1(0)), cat(r2(1)));
+gl_rc~    if rc != 0 {<NL>            return rc;<NL>        }<NL>        ebitmap_and~    if rc != 0 {<NL>            return 0;<NL>        }<NL>        ebitmap_and
+gl_and1~ebitmap_and(cat(level(dst, C_RANGE, 1)), cat(r1(1)), cat(r2(1)))~ebitmap_and(cat(level(dst, C_RANGE, 1)), cat(r1(0)), cat(r2(1)))
+cs_mls~if !mls_enabled(p) {<NL>            return 0;<NL>        }<NL>        // `case~if !mls_enabled(p) {<NL>            return -EINVAL;<NL>        }<NL>        // `case
+cs_change~let mut change = specified == AVTAB_CHANGE;~let mut change = false;
+cs_trans~if specified == AVTAB_TRANSITION {~if specified == AVTAB_MEMBER {
+cs_key_src~source_type: rd32(scontext, 8), target_type: rd32(tcontext, 8)~source_type: rd32(tcontext, 8), target_type: rd32(scontext, 8)
+cs_key_cls~target_class: tclass }~target_class: 0 }
+cs_found~if !r.is_null() {<NL>                return mls_range_set(newcontext, r);~if r.is_null() {<NL>                return mls_range_set(newcontext, r);
+cs_cls0~if tclass != 0 && (tclass as u32) <= nprim(p, 1) {~if (tclass as u32) <= nprim(p, 1) {
+cs_clsmax~(tclass as u32) <= nprim(p, 1)~(tclass as u32) < nprim(p, 1)
+cs_clsidx~.add(tclass as usize - 1).read();~.add(tclass as usize).read();
+cs_clsnull~if !cladatum.is_null() {~if cladatum.is_null() {
+cs_slow~DEFAULT_SOURCE_LOW => return mls_context_cpy_low(newcontext, scontext),~DEFAULT_SOURCE_LOW => return mls_context_cpy_low(newcontext, tcontext),
+cs_shigh~DEFAULT_SOURCE_HIGH => return mls_context_cpy_high(newcontext, scontext),~DEFAULT_SOURCE_HIGH => return mls_context_cpy_low(newcontext, scontext),
+cs_slh~DEFAULT_SOURCE_LOW_HIGH => return mls_context_cpy(newcontext, scontext),~DEFAULT_SOURCE_LOW_HIGH => return mls_context_cpy_low(newcontext, scontext),
+cs_tlow~DEFAULT_TARGET_LOW => return mls_context_cpy_low(newcontext, tcontext),~DEFAULT_TARGET_LOW => return mls_context_cpy_low(newcontext, scontext),
+cs_thigh~DEFAULT_TARGET_HIGH => return mls_context_cpy_high(newcontext, tcontext),~DEFAULT_TARGET_HIGH => return mls_context_cpy_low(newcontext, tcontext),
+cs_tlh~DEFAULT_TARGET_LOW_HIGH => return mls_context_cpy(newcontext, tcontext),~DEFAULT_TARGET_LOW_HIGH => return mls_context_cpy(newcontext, scontext),
+cs_fall~            change = true;~            change = false;
+cs_proc~return if tclass == process_class || sock {~return if tclass == process_class && sock {
+cs_sock~return if tclass == process_class || sock {~return if tclass == process_class {
+cs_full~mls_context_cpy(newcontext, scontext)<NL>            } else {~mls_context_cpy_low(newcontext, scontext)<NL>            } else {
+cs_member~if specified == AVTAB_MEMBER {~if specified == AVTAB_MEMBER && sock {

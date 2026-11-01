@@ -81,11 +81,34 @@ const FPROP_FRAC_BASE: c_ulong = 1 << FPROP_FRAC_SHIFT;
 /// See this file's module doc, primitive class 1. Opaque and
 /// deliberately not `Mirrors`-annotated -- same reasoning as
 /// `ratelimit_rs.rs`'s `RawSpinlockT`.
+#[cfg(not(any(CONFIG_DEBUG_SPINLOCK, CONFIG_DEBUG_LOCK_ALLOC)))]
 #[repr(C)]
 pub struct RawSpinlockT {
     /// Opaque -- see this struct's own doc comment.
     pub bits: u32,
 }
+
+/// Same type under `CONFIG_DEBUG_SPINLOCK` and/or `CONFIG_DEBUG_LOCK_ALLOC`
+/// (the concurrency checker builds, configs/chk-ka.fragment): `raw_spinlock_t`
+/// then carries `magic`, `owner_cpu`, `owner` and/or a 40-byte `lockdep_map`, and the
+/// C struct is 24 / 48 / 64 bytes (pahole on build-chk-ka: 64), 8-aligned.
+/// Found by the checker build: the 4-byte mirror put the following fields at the wrong
+/// offsets and a KASAN+lockdep kernel died in early boot (logs/concurrency-tooling.md).
+#[cfg(any(CONFIG_DEBUG_SPINLOCK, CONFIG_DEBUG_LOCK_ALLOC))]
+#[repr(C, align(8))]
+pub struct RawSpinlockT {
+    /// Opaque -- see this struct's own doc comment.
+    pub bits: [u8; RAW_SPINLOCK_DEBUG_SIZE],
+}
+
+#[cfg(all(CONFIG_DEBUG_SPINLOCK, CONFIG_DEBUG_LOCK_ALLOC))]
+const RAW_SPINLOCK_DEBUG_SIZE: usize = 64;
+#[cfg(all(not(CONFIG_DEBUG_SPINLOCK), CONFIG_DEBUG_LOCK_ALLOC))]
+const RAW_SPINLOCK_DEBUG_SIZE: usize = 48;
+#[cfg(all(CONFIG_DEBUG_SPINLOCK, not(CONFIG_DEBUG_LOCK_ALLOC)))]
+const RAW_SPINLOCK_DEBUG_SIZE: usize = 24;
+#[cfg(CONFIG_LOCK_STAT)]
+compile_error!("CONFIG_LOCK_STAT adds fields to lockdep_map; the RawSpinlockT mirror sizes are for it off");
 
 /// `struct list_head` (`include/linux/types.h`): two pointers, never
 /// dereferenced here -- only round-tripped as part of `PercpuCounter`'s
@@ -112,7 +135,10 @@ pub struct PercpuCounter {
     pub lock: RawSpinlockT,
     /// Opaque -- see this struct's own doc comment.
     pub count: i64,
-    /// Opaque -- see this struct's own doc comment.
+    /// Opaque -- see this struct's own doc comment. Present only with
+    /// `CONFIG_HOTPLUG_CPU` (`#ifdef` in the C struct): x86-64 SMP always has it,
+    /// arm64 allnoconfig does not (logs/arm64.md).
+    #[cfg(CONFIG_HOTPLUG_CPU)]
     pub list: ListHead,
     /// Opaque -- see this struct's own doc comment.
     pub counters: *mut i32,
@@ -123,9 +149,17 @@ pub struct PercpuCounter {
 /// type still get a real, stable, unique address, which is all
 /// `__percpu_counter_init_many()` needs from it when lockdep is
 /// compiled out.
+#[cfg(not(CONFIG_LOCKDEP))]
 #[repr(C)]
 pub struct LockClassKey {
     _never_constructed: [u8; 0],
+}
+/// With `CONFIG_LOCKDEP` the key is a real 16-byte object (`hash_entry`/`subkeys[8]`, pahole on
+/// build-chk-ka) whose ADDRESS is the lock class; zero-sized keys of different callsites could share it.
+#[cfg(CONFIG_LOCKDEP)]
+#[repr(C, align(8))]
+pub struct LockClassKey {
+    _never_constructed: [u8; 16],
 }
 unsafe impl Sync for LockClassKey {}
 
@@ -137,11 +171,22 @@ unsafe impl Sync for LockClassKey {}
 /// `compiler_fence` rather than an `AtomicU32`'s own ordering: the C
 /// issues the read and the barrier as two separate steps, and this
 /// mirrors that structure rather than folding it into one atomic op.
+#[cfg(not(CONFIG_DEBUG_LOCK_ALLOC))]
 #[repr(C)]
 pub struct SeqcountT {
     /// Odd while a writer is inside `write_seqcount_begin()`/`end()`;
     /// even otherwise. Bumped by exactly one on each call.
     pub sequence: c_uint,
+}
+/// With `CONFIG_DEBUG_LOCK_ALLOC` `seqcount_t` also embeds a 40-byte `lockdep_map` (48 bytes, 8-aligned;
+/// pahole on build-chk-ka). This file never calls the seqcount lockdep annotations, so the map is only sized.
+#[cfg(CONFIG_DEBUG_LOCK_ALLOC)]
+#[repr(C, align(8))]
+pub struct SeqcountT {
+    /// Odd while a writer is inside `write_seqcount_begin()`/`end()`;
+    /// even otherwise. Bumped by exactly one on each call.
+    pub sequence: c_uint,
+    _dep_map: [u8; 44],
 }
 
 /// Mirrors `struct fprop_global` (`include/linux/flex_proportions.h`).
@@ -192,8 +237,13 @@ unsafe extern "C" {
 // ---- percpu_counter: static-inline wrappers over the real exports ----
 
 unsafe fn percpu_counter_init(fbc: *mut PercpuCounter, amount: i64, gfp: c_uint) -> c_int {
+    #[cfg(not(CONFIG_LOCKDEP))]
     static KEY: LockClassKey = LockClassKey {
         _never_constructed: [],
+    };
+    #[cfg(CONFIG_LOCKDEP)]
+    static KEY: LockClassKey = LockClassKey {
+        _never_constructed: [0; 16],
     };
     unsafe { __percpu_counter_init_many(fbc, amount, gfp, 1, &KEY as *const _ as *mut _) }
 }
@@ -275,6 +325,7 @@ unsafe fn read_seqcount_retry(s: *const SeqcountT, start: c_uint) -> bool {
 /// real C's own `"memory"` clobber makes it a full compiler barrier,
 /// matched here by asm!'s default (memory-clobbering, stack-using)
 /// behaviour when no `options()` narrows it.
+#[cfg(target_arch = "x86_64")]
 #[inline(always)]
 unsafe fn native_save_fl() -> c_ulong {
     let flags: c_ulong;
@@ -287,6 +338,7 @@ unsafe fn native_save_fl() -> c_ulong {
 /// `native_irq_disable()`: `cli`. Modifies EFLAGS.IF, so NOT
 /// `preserves_flags`; the real C's `"memory"` clobber is matched by
 /// asm!'s default.
+#[cfg(target_arch = "x86_64")]
 #[inline(always)]
 unsafe fn native_irq_disable() {
     unsafe {
@@ -296,6 +348,7 @@ unsafe fn native_irq_disable() {
 
 /// `native_irq_enable()`: `sti`. Same clobber reasoning as
 /// `native_irq_disable()`.
+#[cfg(target_arch = "x86_64")]
 #[inline(always)]
 unsafe fn native_irq_enable() {
     unsafe {
@@ -303,11 +356,13 @@ unsafe fn native_irq_enable() {
     }
 }
 
+#[cfg(target_arch = "x86_64")]
 const X86_EFLAGS_IF: c_ulong = 1 << 9;
 
 /// `arch_local_irq_save()`: save flags, THEN disable -- matching the
 /// real function's own order (`flags = arch_local_save_flags();
 /// arch_local_irq_disable();`) exactly, not just its net effect.
+#[cfg(target_arch = "x86_64")]
 #[inline(always)]
 unsafe fn arch_local_irq_save() -> c_ulong {
     let flags = unsafe { native_save_fl() };
@@ -317,10 +372,70 @@ unsafe fn arch_local_irq_save() -> c_ulong {
 
 /// `arch_local_irq_restore(flags)`: re-enable only if IF was set before
 /// (`!arch_irqs_disabled_flags(flags)` == `flags & X86_EFLAGS_IF`).
+#[cfg(target_arch = "x86_64")]
 #[inline(always)]
 unsafe fn arch_local_irq_restore(flags: c_ulong) {
     if flags & X86_EFLAGS_IF != 0 {
         unsafe { native_irq_enable() };
+    }
+}
+
+// ---- aarch64 arm (logs/arm64.md; x86-64 code above is unchanged) ----
+//
+// Save/disable/restore for arm64 with CONFIG_ARM64_PSEUDO_NMI=n, i.e. what
+// `arch/arm64/include/asm/irqflags.h` compiles to via its `__daif_*` paths:
+// save = `mrs <r>, daif`; disable = `msr daifset, #3`; restore = `msr daif,
+// <flags>`. With pseudo-NMI configured the kernel masks via the GIC PMR when
+// the CPU uses priority masking, and these instructions would be WRONG, so
+// that configuration is refused at compile time. UNTESTED beyond qemu virt.
+#[cfg(all(target_arch = "aarch64", CONFIG_ARM64_PSEUDO_NMI))]
+compile_error!("flex_proportions_rs: arm64 arm assumes CONFIG_ARM64_PSEUDO_NMI=n");
+
+#[cfg(target_arch = "aarch64")]
+#[inline(always)]
+unsafe fn arch_local_irq_save() -> c_ulong {
+    let flags: c_ulong;
+    unsafe {
+        core::arch::asm!("mrs {0}, daif", "msr daifset, #3", out(reg) flags);
+    }
+    flags
+}
+
+#[cfg(target_arch = "aarch64")]
+#[inline(always)]
+unsafe fn arch_local_irq_restore(flags: c_ulong) {
+    unsafe {
+        core::arch::asm!("msr daif, {0}", in(reg) flags);
+    }
+}
+
+// ---- riscv64 arm (logs/riscv64.md; x86-64 and aarch64 code above is unchanged) ----
+//
+// `arch/riscv/include/asm/irqflags.h` S-mode: save = `csr_read_clear(sstatus,
+// SR_IE)` (one `csrrc`: read old value AND clear SIE atomically); restore =
+// `csr_set(sstatus, flags & SR_IE)`. SR_IE is SR_SIE (bit 1) except in
+// RISCV_M_MODE (SR_MIE, mstatus), which is refused at compile time.
+#[cfg(all(target_arch = "riscv64", CONFIG_RISCV_M_MODE))]
+compile_error!("flex_proportions_rs: riscv64 arm assumes S-mode (CONFIG_RISCV_M_MODE=n)");
+
+#[cfg(target_arch = "riscv64")]
+const SR_SIE: c_ulong = 1 << 1;
+
+#[cfg(target_arch = "riscv64")]
+#[inline(always)]
+unsafe fn arch_local_irq_save() -> c_ulong {
+    let flags: c_ulong;
+    unsafe {
+        core::arch::asm!("csrrc {0}, sstatus, {1}", out(reg) flags, in(reg) SR_SIE);
+    }
+    flags
+}
+
+#[cfg(target_arch = "riscv64")]
+#[inline(always)]
+unsafe fn arch_local_irq_restore(flags: c_ulong) {
+    unsafe {
+        core::arch::asm!("csrs sstatus, {0}", in(reg) flags & SR_SIE);
     }
 }
 
@@ -333,7 +448,7 @@ unsafe fn arch_local_irq_restore(flags: c_ulong) {
 /// itself -- `leading_zeros()` already compiles to the same instruction.
 #[inline(always)]
 fn fls(x: u32) -> i32 {
-    (32 - x.leading_zeros()) as i32
+    (32u32.wrapping_sub(x.leading_zeros())) as i32
 }
 
 /// `PROP_BATCH`, `8*(1+ilog2(nr_cpu_ids))`. `ilog2()` on a non-constant
@@ -341,7 +456,7 @@ fn fls(x: u32) -> i32 {
 #[inline(always)]
 fn prop_batch() -> i32 {
     let nr_cpu_ids = unsafe { core::ptr::read_volatile(&raw const NR_CPU_IDS) };
-    8 * (1 + (fls(nr_cpu_ids) - 1))
+    8i32.wrapping_mul(1i32.wrapping_add(fls(nr_cpu_ids).wrapping_sub(1)))
 }
 
 /// `fprop_global_init()`.
@@ -418,10 +533,10 @@ pub unsafe extern "C" fn fprop_new_period(p: *mut FpropGlobal, periods: c_int) -
 pub unsafe extern "C" fn fprop_new_period_locked(p: *mut FpropGlobal, periods: c_int, mut events: i64) {
     unsafe { write_seqcount_begin(&raw mut (*p).sequence) };
     if periods < 64 {
-        events -= events >> periods;
+        events = events.wrapping_sub(events.wrapping_shr(periods as u32));
     }
     // Use addition to avoid losing events happening between sum and set.
-    unsafe { percpu_counter_add(&raw mut (*p).events, -events) };
+    unsafe { percpu_counter_add(&raw mut (*p).events, events.wrapping_neg()) };
     unsafe { (*p).period = (*p).period.wrapping_add(periods as c_uint) };
     unsafe { write_seqcount_end(&raw mut (*p).sequence) };
 }
@@ -472,26 +587,29 @@ unsafe fn fprop_reflect_period_percpu(p: *mut FpropGlobal, pl: *mut FpropLocalPe
         return;
     }
 
-    // Aging zeroed our fraction? `period - pl->period` is safe as plain
-    // (non-wrapping) unsigned subtraction here: the check just above
-    // already established `pl->period < period`. BITS_PER_LONG is 64 on
-    // this LP64 target -- note `period`/`pl->period` are only 32 bits
-    // wide themselves, so this comparison is real (a 32-bit difference
-    // is not always under 64), not vacuous.
+    // Aging zeroed our fraction? `period - pl->period` never actually
+    // wraps here: the check just above already established
+    // `pl->period < period`. `wrapping_sub` regardless --
+    // `rig/uaccess-panic-check.sh` found the checked subtraction live,
+    // since the compiler cannot see that invariant either, and wrapping
+    // changes nothing when it holds. BITS_PER_LONG is 64 on this LP64
+    // target -- note `period`/`pl->period` are only 32 bits wide
+    // themselves, so this comparison is real (a 32-bit difference is not
+    // always under 64), not vacuous.
     const BITS_PER_LONG: u32 = 64;
-    let age = period - unsafe { (*pl).period };
+    let age = period.wrapping_sub(unsafe { (*pl).period });
     if age < BITS_PER_LONG {
         let mut val = unsafe { percpu_counter_read(&raw const (*pl).events) };
         let nr_cpu_ids = unsafe { core::ptr::read_volatile(&raw const NR_CPU_IDS) } as i64;
 
-        if val < nr_cpu_ids * prop_batch() as i64 {
+        if val < nr_cpu_ids.wrapping_mul(prop_batch() as i64) {
             val = unsafe { percpu_counter_sum(&raw mut (*pl).events) };
         }
 
         unsafe {
             percpu_counter_add_batch(
                 &raw mut (*pl).events,
-                -val + (val >> age),
+                (val.wrapping_neg()).wrapping_add(val.wrapping_shr(age)),
                 prop_batch(),
             )
         };

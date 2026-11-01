@@ -4,7 +4,7 @@
 //!
 //! This pulls in the file the kernel build compiles, by path, rather than
 //! copying it — a stale copy tested here while the kernel builds something
-//! else is the failure PRIOR-ART.md §2 records four times.
+//! else is the failure notes/PRIOR-ART.md §2 records four times.
 //!
 //! It exists only to add [`rs_bcj_filter`], which reaches the seven filters
 //! directly instead of through `xz_dec_bcj_run()`. That is the whole reason

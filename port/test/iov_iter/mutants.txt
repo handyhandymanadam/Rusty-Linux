@@ -1,0 +1,49 @@
+bvec_adv_lt~if size < (*bvec).len as usize {~if size <= (*bvec).len as usize {
+bvec_adv_count0~if (*i).count == 0 {<NL>            return;<NL>        }<NL>        (*i).count = (*i).count.wrapping_sub(size);<NL>        size = size.wrapping_add((*i).iov_offset);<NL><NL>        let start = (*i).seg as *const BioVec;~if false {<NL>            return;<NL>        }<NL>        (*i).count = (*i).count.wrapping_sub(size);<NL>        size = size.wrapping_add((*i).iov_offset);<NL><NL>        let start = (*i).seg as *const BioVec;
+bvec_adv_nsegs~(*i).nr_segs = (*i).nr_segs.wrapping_sub(bvec.offset_from(start) as usize);~(*i).nr_segs = (*i).nr_segs.wrapping_sub(bvec.offset_from(start) as usize + 1);
+iovec_adv_lt~if size < (*iov).len {~if size <= (*iov).len {
+iovec_adv_off~size = size.wrapping_add((*i).iov_offset);<NL><NL>        let start = iter_iov(i);~size = size.wrapping_add(0);<NL><NL>        let start = iter_iov(i);
+iovec_adv_ptr~(*i).seg = iov as usize;<NL>    }<NL>}<NL><NL>/// `iov_iter_folioq_advance()`.~(*i).seg = start as usize;<NL>    }<NL>}<NL><NL>/// `iov_iter_folioq_advance()`.
+folioq_adv_slotge~if slot >= rust_iw_folioq_nr_slots(folioq as *const c_void) {<NL>            folioq = folioq_next(folioq);~if slot > rust_iw_folioq_nr_slots(folioq as *const c_void) {<NL>            folioq = folioq_next(folioq);
+folioq_adv_lt~if size < fsize {<NL>                break;<NL>            }<NL>            size = size.wrapping_sub(fsize);<NL>            slot = slot.wrapping_add(1);~if size <= fsize {<NL>                break;<NL>            }<NL>            size = size.wrapping_sub(fsize);<NL>            slot = slot.wrapping_add(1);
+folioq_adv_next~&& folioq_next(folioq) != 0 {~&& folioq_next(folioq) == 0 {
+adv_ubuf~if is_ubuf(&*i) || is_xarray(&*i) {~if is_ubuf(&*i) {
+adv_discard~} else if is_discard(&*i) {<NL>            (*i).count = (*i).count.wrapping_sub(size);~} else if is_discard(&*i) {<NL>            (*i).count = (*i).count.wrapping_sub(size + 1);
+folioq_rev_zero~if slot == 0 {<NL>                folioq = folioq_prev(folioq);~if slot == 1 {<NL>                folioq = folioq_prev(folioq);
+folioq_rev_le~if unroll <= fsize {<NL>                (*i).iov_offset = fsize.wrapping_sub(unroll);~if unroll < fsize {<NL>                (*i).iov_offset = fsize.wrapping_sub(unroll);
+folioq_rev_off~(*i).iov_offset = fsize.wrapping_sub(unroll);~(*i).iov_offset = fsize.wrapping_sub(unroll) + 1;
+rev_zero~if unroll == 0 {<NL>            return;<NL>        }<NL>        if rust_iw_warn_revert~if unroll == 1 {<NL>            return;<NL>        }<NL>        if rust_iw_warn_revert
+rev_warn~rust_iw_warn_revert(unroll > rust_iw_max_rw_count)~rust_iw_warn_revert(unroll >= rust_iw_max_rw_count)
+rev_count~(*i).count = (*i).count.wrapping_add(unroll);<NL>        if is_discard~(*i).count = (*i).count.wrapping_add(unroll + 1);<NL>        if is_discard
+rev_le_off~if unroll <= (*i).iov_offset {<NL>            (*i).iov_offset -= unroll;~if unroll < (*i).iov_offset {<NL>            (*i).iov_offset -= unroll;
+rev_sub_off~unroll = unroll.wrapping_sub((*i).iov_offset);<NL>        if is_xarray~unroll = unroll.wrapping_sub(0);<NL>        if is_xarray
+rev_bug~if is_xarray(&*i) || is_ubuf(&*i) {~if is_xarray(&*i) {
+rev_bvec_le~if unroll <= n {<NL>                    (*i).seg = bvec as usize;~if unroll < n {<NL>                    (*i).seg = bvec as usize;
+rev_bvec_nsegs~(*i).nr_segs = (*i).nr_segs.wrapping_add(1);<NL>                if unroll <= n {<NL>                    (*i).seg = bvec as usize;~(*i).nr_segs = (*i).nr_segs.wrapping_add(2);<NL>                if unroll <= n {<NL>                    (*i).seg = bvec as usize;
+rev_iovec_off~(*i).seg = iov as usize;<NL>                    (*i).iov_offset = n.wrapping_sub(unroll);~(*i).seg = iov as usize;<NL>                    (*i).iov_offset = n.wrapping_sub(unroll) + 1;
+seg_nsegs~if it.nr_segs > 1 {~if it.nr_segs > 2 {
+seg_iov~return core::cmp::min(it.count, (*iov).len.wrapping_sub(it.iov_offset));~return core::cmp::min(it.count, (*iov).len);
+seg_bvec~return core::cmp::min(it.count, ((*bvec).len as usize).wrapping_sub(it.iov_offset));~return core::cmp::min(it.count, (*bvec).len as usize);
+seg_folioq0~return if it.count == 0 {<NL>                0<NL>            }~return if it.count == 1 {<NL>                0<NL>            }
+seg_folioq_min~core::cmp::min(rust_iw_folioq_folio_size(it.seg as *const c_void, (it.nr_segs & 0xff) as c_uint), it.count)~rust_iw_folioq_folio_size(it.seg as *const c_void, (it.nr_segs & 0xff) as c_uint)
+al_iovec_skip~res |= ((*iov).base as c_ulong).wrapping_add(skip as c_ulong);~res |= (*iov).base as c_ulong;
+al_iovec_zero~let mut len = (*iov).len.wrapping_sub(skip);<NL>            if len != 0 {~let mut len = (*iov).len.wrapping_sub(skip);<NL>            if true {
+al_bvec_off~res |= (*bvec).offset.wrapping_add(skip);~res |= (*bvec).offset;
+al_bvec_len~            res |= len as c_uint;<NL>            bvec = bvec.add(1);~            res |= (len as c_uint) & 0xfff;<NL>            bvec = bvec.add(1);
+al_ubuf~return (it.seg as c_ulong).wrapping_add(it.iov_offset as c_ulong) | size as c_ulong;~return (it.seg as c_ulong) | size as c_ulong;
+al_ubuf_zero~if size != 0 {<NL>                return (it.seg~if size != 1 {<NL>                return (it.seg
+al_folioq~return it.iov_offset as c_ulong | it.count as c_ulong;~return it.count as c_ulong;
+al_xarray~return (it.nr_segs as c_ulong).wrapping_add(it.iov_offset as c_ulong) | it.count as c_ulong;~return (it.nr_segs as c_ulong) | it.count as c_ulong;
+gap_ubuf~if is_ubuf(it) {<NL>            return 0;<NL>        }<NL><NL>        if rust_iw_warn_gap~if false {<NL>            return 0;<NL>        }<NL><NL>        if rust_iw_warn_gap
+gap_warn~rust_iw_warn_gap(!is_iovec(it))~rust_iw_warn_gap(!is_iovec(it) && !is_kvec(it))
+gap_first~if v != 0 {<NL>                    // if not the first one~if true {<NL>                    // if not the first one
+gap_break~if size <= (*iov).len {<NL>                    break;~if size < (*iov).len {<NL>                    break;
+gap_end~v = base.wrapping_add((*iov).len as c_ulong);~v = base;
+np_ubuf_offs~let offs = (it.seg.wrapping_add(it.iov_offset) & (PAGE_SIZE - 1)) as usize;~let offs = (it.seg & (PAGE_SIZE - 1)) as usize;
+np_zero~if it.count == 0 {<NL>            return 0;<NL>        }<NL>        if is_ubuf~if it.count == 1 {<NL>            return 0;<NL>        }<NL>        if is_ubuf
+np_iov_skip~let offs = (((*p).base.wrapping_add(skip)) & (PAGE_SIZE - 1)) as usize;~let offs = (((*p).base) & (PAGE_SIZE - 1)) as usize;
+np_bvec_skip~let offs = ((*p).offset as usize).wrapping_add(skip) % PAGE_SIZE;~let offs = ((*p).offset as usize) % PAGE_SIZE;
+np_folioq_off~let offset = it.iov_offset % PAGE_SIZE;~let offset = 0usize;
+np_xarray~let offset = (it.nr_segs).wrapping_add(it.iov_offset) % PAGE_SIZE;~let offset = (it.iov_offset) % PAGE_SIZE;
+restore_count~it.count = (*state).count;~it.count = (*state).count + 1;
+restore_warn_kvec~&& !is_kvec(it) {<NL>            return;~&& is_kvec(it) {<NL>            return;

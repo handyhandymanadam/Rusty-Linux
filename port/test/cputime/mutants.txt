@@ -1,0 +1,13 @@
+mono_sum~if (*prev_stime).wrapping_add(*prev_utime) >= rtime {~if (*prev_stime) >= rtime {
+st0~if stime == 0 {<NL>                utime = rtime;~if stime == 1 {<NL>                utime = rtime;
+ut0~if utime == 0 {<NL>                stime = rtime;~if utime == 1 {<NL>                stime = rtime;
+ut0b~stime = rtime;<NL>                break 'update;~stime = 0;<NL>                break 'update;
+scale~stime = rust_cp_mul_u64_u64_div_u64(stime, rtime, stime.wrapping_add(utime));~stime = rust_cp_mul_u64_u64_div_u64(stime, rtime, utime);
+scale2~stime = rust_cp_mul_u64_u64_div_u64(stime, rtime, stime.wrapping_add(utime));~stime = rust_cp_mul_u64_u64_div_u64(utime, rtime, stime.wrapping_add(utime));
+cap~if stime > rtime {<NL>                stime = rtime;~if stime > rtime + 1 {<NL>                stime = rtime;
+cap2~if stime > rtime {<NL>                stime = rtime;~if stime > rtime {<NL>                stime = rtime - 1;
+back_s2~stime = *prev_stime;<NL>        }<NL>        utime = rtime~stime = *prev_utime;<NL>        }<NL>        utime = rtime
+ut_calc~utime = rtime.wrapping_sub(stime);<NL><NL>        // Make sure utime~utime = rtime.wrapping_sub(stime).wrapping_add(1);<NL><NL>        // Make sure utime
+back_u2~utime = *prev_utime;<NL>            stime = rtime.wrapping_sub(utime);~utime = *prev_utime;<NL>            stime = rtime;
+store_s~*prev_stime = stime;~*prev_stime = utime;
+store_u~*prev_utime = utime;~*prev_utime = stime;

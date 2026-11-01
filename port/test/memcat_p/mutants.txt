@@ -1,0 +1,12 @@
+count_a~        let mut p = a;<NL>        while !(*p).is_null() {~        let mut p = b;<NL>        while !(*p).is_null() {
+count_a_inc~            nr += 1;<NL>            p = p.add(1);<NL>        }<NL>        p = b;~            nr += 2;<NL>            p = p.add(1);<NL>        }<NL>        p = b;
+count_b_start~        p = b;<NL>        while~        p = a;<NL>        while
+count_b_inc~            nr += 1;<NL>            p = p.add(1);<NL>        }<NL>        // one~            nr += 2;<NL>            p = p.add(1);<NL>        }<NL>        // one
+terminator~        nr += 1;<NL><NL>        let new~        nr += 0;<NL><NL>        let new
+null_check~        if new.is_null() {~        if false {
+fill_start~        nr -= 1;<NL>        while nr >= 0 {~        while nr >= 0 {
+fill_store~            *new.add(nr as usize) = *p;~            *new.add(nr as usize) = *a;
+fill_cond~        while nr >= 0 {~        while nr > 0 {
+fill_switch~p = if p == b { a.offset(nr as isize) } else { p.sub(1) };~p = if p == b { a.offset(nr as isize + 1) } else { p.sub(1) };
+fill_prev~else { p.sub(1) }~else { p }
+fill_dec~            nr -= 1;<NL>            p = if~            p = if

@@ -5,7 +5,7 @@
  * lib shim. Keeping them apart is cheaper than reconciling two shims.
  *
  * SEVEN benchmarks rather than one, and that is the whole point.
- * PRIOR-ART.md §5 records a TWELVE-FOLD spread on a decompression routine
+ * notes/PRIOR-ART.md §5 records a TWELVE-FOLD spread on a decompression routine
  * between two corpus inputs, from a single mechanism. A lone "inflate"
  * number here would be worth almost nothing; what is worth something is the
  * spread across shapes, so the corpus is varied deliberately: one repeated

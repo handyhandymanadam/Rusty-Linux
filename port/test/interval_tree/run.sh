@@ -102,14 +102,14 @@ pub unsafe extern "C" fn rs_geometry(out: *mut usize) {
         *out.add(3) = offset_of!(IntervalTreeNode, start);
         *out.add(4) = offset_of!(IntervalTreeNode, last);
         *out.add(5) = offset_of!(IntervalTreeNode, subtree_last);
-        *out.add(6) = size_of::<RbNode>();
-        *out.add(7) = offset_of!(RbNode, rb_parent_color);
-        *out.add(8) = offset_of!(RbNode, rb_right);
-        *out.add(9) = offset_of!(RbNode, rb_left);
-        *out.add(10) = size_of::<RbRoot>();
-        *out.add(11) = size_of::<RbRootCached>();
-        *out.add(12) = offset_of!(RbRootCached, rb_root);
-        *out.add(13) = offset_of!(RbRootCached, rb_leftmost);
+        *out.add(6) = size_of::<IntervalTreeRbNode>();
+        *out.add(7) = offset_of!(IntervalTreeRbNode, rb_parent_color);
+        *out.add(8) = offset_of!(IntervalTreeRbNode, rb_right);
+        *out.add(9) = offset_of!(IntervalTreeRbNode, rb_left);
+        *out.add(10) = size_of::<IntervalTreeRbRoot>();
+        *out.add(11) = size_of::<IntervalTreeRbRootCached>();
+        *out.add(12) = offset_of!(IntervalTreeRbRootCached, rb_root);
+        *out.add(13) = offset_of!(IntervalTreeRbRootCached, rb_leftmost);
         #[cfg(CONFIG_INTERVAL_TREE_SPAN_ITER)]
         {
             *out.add(14) = size_of::<IntervalTreeSpanIter>();

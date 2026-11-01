@@ -1,0 +1,13 @@
+# chk-ka -- lockdep + atomic-sleep + PROVE_RCU + KASAN (generic, clang, outline). See logs/concurrency-tooling.md.
+CONFIG_LIB_STRESS=y
+CONFIG_PROVE_LOCKING=y
+CONFIG_PROVE_RCU=y
+CONFIG_DEBUG_ATOMIC_SLEEP=y
+CONFIG_PREEMPT=y
+CONFIG_DEBUG_PREEMPT=y
+CONFIG_KASAN=y
+CONFIG_KASAN_GENERIC=y
+CONFIG_KASAN_OUTLINE=y
+# SMP: build-fast has no ACPI, and then QEMU -smp N still brings up ONE cpu (even the pristine C kernel: logs/concurrency-tooling.md)
+CONFIG_ACPI=y
+CONFIG_PCI=y

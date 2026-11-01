@@ -4,7 +4,7 @@
 //!
 //! This pulls in the file the kernel build compiles, by path, rather than
 //! copying it — a stale copy tested here while the kernel builds something
-//! else is the failure PRIOR-ART.md §2 records four times.
+//! else is the failure notes/PRIOR-ART.md §2 records four times.
 //!
 //! It carries ALL THREE ported files in this directory, so the Rust arm of the
 //! differential is the real pipeline: `zlib_inflate()` in pristine C calling a

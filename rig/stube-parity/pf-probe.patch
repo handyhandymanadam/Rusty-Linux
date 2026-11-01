@@ -1,0 +1,19 @@
+diff --git a/port/tree/arch/x86/boot/compressed/misc.c b/port/tree/arch/x86/boot/compressed/misc.c
+index 71acbc3..1306220 100644
+--- a/port/tree/arch/x86/boot/compressed/misc.c
++++ b/port/tree/arch/x86/boot/compressed/misc.c
+@@ -464,6 +464,14 @@ asmlinkage __visible void *extract_kernel(void *rmode, unsigned char *output)
+ 	boot_params_ptr->acpi_rsdp_addr = get_rsdp_addr();
+ 
+ 	debug_putstr("early console in extract_kernel\n");
++	/* STUBE-PROBE (scratch, never committed): exercise the stub IDT and the on-demand identity map */
++	{
++		volatile unsigned char *pp = (volatile unsigned char *)0x180000000UL; /* above 4G: not in the startup map, no RAM behind it (reads as ones) */
++		(void)*pp;                       /* #PF -> boot_page_fault -> kernel_add_identity_map() */
++		__putstr("STUBE-PROBE pf ok\n");
++		asm volatile("int $2");          /* NMI gate -> do_boot_nmi_trap() */
++		__putstr("STUBE-PROBE nmi ok\n");
++	}
+ 
+ 	/* Pre-boot Rust probe -- logs/preboot-experiment.md.
+ 	 *

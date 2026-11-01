@@ -1,0 +1,13 @@
+get_released~if cnt >= RCUREF_RELEASED {~if cnt > RCUREF_RELEASED {
+get_dead_store~r.store(RCUREF_DEAD, Ordering::Relaxed);<NL>            return false;~r.store(RCUREF_SATURATED, Ordering::Relaxed);<NL>            return false;
+get_sat_store~r.store(RCUREF_SATURATED, Ordering::Relaxed);<NL>        }<NL>        true~r.store(RCUREF_DEAD, Ordering::Relaxed);<NL>        }<NL>        true
+get_ret~        }<NL>        true<NL>    }<NL>}~        }<NL>        false<NL>    }<NL>}
+put_noref~if cnt == RCUREF_NOREF {~if cnt >= RCUREF_NOREF - 1 {
+put_cmpxchg~r.compare_exchange(cnt, RCUREF_DEAD, Ordering::Release, Ordering::Relaxed).is_err()~r.compare_exchange(cnt, RCUREF_DEAD, Ordering::Release, Ordering::Relaxed).is_ok()
+put_dead_val~r.compare_exchange(cnt, RCUREF_DEAD,~r.compare_exchange(cnt, RCUREF_RELEASED,
+put_swap~r.compare_exchange(cnt, RCUREF_DEAD, Ordering::Release, Ordering::Relaxed).is_err()~{ r.store(RCUREF_DEAD, Ordering::Release); false }
+put_imbal~rust_rcw_warn_imbalanced(cnt >= RCUREF_RELEASED)~rust_rcw_warn_imbalanced(cnt > RCUREF_RELEASED)
+put_imbal_store~if rust_rcw_warn_imbalanced(cnt >= RCUREF_RELEASED) {<NL>            r.store(RCUREF_DEAD, Ordering::Relaxed);~if rust_rcw_warn_imbalanced(cnt >= RCUREF_RELEASED) {<NL>            r.store(RCUREF_SATURATED, Ordering::Relaxed);
+put_imbal_ret~r.store(RCUREF_DEAD, Ordering::Relaxed);<NL>            return false;<NL>        }<NL><NL>        // This is a put~r.store(RCUREF_DEAD, Ordering::Relaxed);<NL>            return true;<NL>        }<NL><NL>        // This is a put
+put_sat_store~r.store(RCUREF_SATURATED, Ordering::Relaxed);<NL>        }<NL>        false~r.store(RCUREF_DEAD, Ordering::Relaxed);<NL>        }<NL>        false
+put_sat_skip~if cnt > RCUREF_MAXREF {<NL>            r.store(RCUREF_SATURATED, Ordering::Relaxed);<NL>        }<NL>        false~false

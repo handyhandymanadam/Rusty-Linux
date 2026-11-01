@@ -56,7 +56,7 @@ if [ "$self" = 0 ]; then
     #
     # A target whose `core` is not installed is reported as UNSWEPT and fails
     # the run. Quietly skipping it would leave the sweep passing while one of
-    # the two arms had never been compiled -- the shape of failure STATUS.md
+    # the two arms had never been compiled -- the shape of failure notes/STATUS.md
     # lesson 9 records twice.
     swept_nonx86=0
         # THE THIRD ARM, added 2026-09-04 after adversarial review. DYNAMIC_BMI2 is

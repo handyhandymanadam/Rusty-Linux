@@ -2,7 +2,7 @@
  *
  * Differential test: lib/glob.c's matcher (the oracle) against the Rust port.
  *
- * This is the "simple tests, fast, userspace" step of the loop in GOALS.md
+ * This is the "simple tests, fast, userspace" step of the loop in notes/GOALS.md
  * §3. It is not a harness and is not reusable apparatus -- it is one file,
  * built by one line of shell, that answers one question: do the two arms
  * agree on every input we can think of and a few million we cannot.
@@ -229,7 +229,7 @@ int main(int argc, char **argv)
 	unsigned long rounds = argc > 1 ? strtoul(argv[1], NULL, 0) : 2000000;
 
 	if (getenv("GLOB_PROVE_CAN_FAIL")) {
-		/* PRIOR-ART.md §5: a test that has never failed is not known
+		/* notes/PRIOR-ART.md §5: a test that has never failed is not known
 		 * to work. Read one byte past the guarded buffer and confirm
 		 * the arrangement kills us. */
 		size_t ps;

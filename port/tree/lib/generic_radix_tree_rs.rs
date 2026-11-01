@@ -44,6 +44,26 @@
 //! near either CAS that depends on ordering relative to *other* threads,
 //! re-derive this reasoning rather than assuming it still holds.
 //!
+//! # `rig/uaccess-panic-check.sh`: `children[...]` indexing stays checked
+//!
+//! Every `(*n).children[idx]` here has `idx` masked or bounded before the
+//! index: `offset >> shift` / `off >> genradix_depth_shift(level)` where
+//! `shift` only ever decreases from a value the tree's own depth
+//! invariant keeps `< GENRADIX_ARY_SHIFT` bits above the next level down
+//! (so the shifted value is provably `< GENRADIX_ARY`), and the two `i`
+//! loop counters are explicitly checked against `0`/`GENRADIX_ARY` right
+//! next to every increment or decrement that could move them out of
+//! range. Provably in bounds by construction, the same category as this
+//! project's other "the compiler can't see the invariant" bounds checks
+//! (`generic_mpih_rs.rs`'s `mpihelp_cmp`, `earlycpio_rs.rs`'s buffer
+//! offsets). Left checked rather than silenced: an unchecked index would
+//! turn a tree-invariant violation into a silent out-of-bounds read
+//! instead of a panic, on a lock-free structure where getting that
+//! invariant wrong is exactly the kind of bug this check would catch.
+//! Every plain `+`/`-`/`*`/`<<`/`>>` elsewhere in this file is
+//! `wrapping_*` for the usual reason -- bounded by the same tree-depth
+//! invariants, but the compiler cannot see that either.
+//!
 //! # `ilog2()`/`round_down()` reproduced directly
 //!
 //! Both are `include/linux/{log2,math}.h` macros with no linkable symbol;
@@ -76,7 +96,7 @@ const fn ilog2_const(n: u64) -> u32 {
     if n < 2 {
         0
     } else {
-        63 - n.leading_zeros()
+        63u32.wrapping_sub(n.leading_zeros())
     }
 }
 
@@ -85,7 +105,7 @@ const fn roundup_pow_of_two_const(n: u64) -> u64 {
     if n <= 1 {
         1
     } else {
-        1u64 << (64 - (n - 1).leading_zeros())
+        1u64.wrapping_shl(64u32.wrapping_sub((n.wrapping_sub(1)).leading_zeros()))
     }
 }
 
@@ -102,13 +122,13 @@ fn ilog2(n: u64) -> i32 {
     if n == 0 {
         -1
     } else {
-        (63 - n.leading_zeros()) as i32
+        (63u32.wrapping_sub(n.leading_zeros())) as i32
     }
 }
 
 #[inline]
 fn round_down(x: usize, y: usize) -> usize {
-    x & !(y - 1)
+    x & !(y.wrapping_sub(1))
 }
 
 /// Opaque: never dereferenced as a struct anywhere, C or Rust -- only ever
@@ -152,12 +172,12 @@ extern "C" {
 /// `genradix_depth_shift()`: `int` in the C, deliberately -- see [`ilog2`].
 #[inline]
 fn genradix_depth_shift(depth: u32) -> i32 {
-    (GENRADIX_NODE_SHIFT + GENRADIX_ARY_SHIFT * depth) as i32
+    (GENRADIX_NODE_SHIFT.wrapping_add(GENRADIX_ARY_SHIFT.wrapping_mul(depth))) as i32
 }
 
 #[inline]
 fn genradix_depth_size(depth: u32) -> usize {
-    1usize << (genradix_depth_shift(depth) as u32)
+    1usize.wrapping_shl(genradix_depth_shift(depth) as u32)
 }
 
 #[inline]
@@ -202,11 +222,11 @@ unsafe fn genradix_ptr_inlined(radix: *const Genradix, offset: usize) -> *mut c_
 
     let mut offset = offset;
     while !n.is_null() && shift > GENRADIX_NODE_SHIFT {
-        shift -= GENRADIX_ARY_SHIFT;
+        shift = shift.wrapping_sub(GENRADIX_ARY_SHIFT);
         // SAFETY: `n` is non-null and, by construction of this tree, a
         // valid interior node whenever `shift > GENRADIX_NODE_SHIFT`.
-        n = unsafe { (*n).children[offset >> shift] };
-        offset &= (1usize << shift) - 1;
+        n = unsafe { (*n).children[offset.wrapping_shr(shift)] };
+        offset &= (1usize.wrapping_shl(shift)).wrapping_sub(1);
     }
 
     if n.is_null() {
@@ -307,7 +327,7 @@ pub unsafe extern "C" fn __genradix_ptr_alloc(
 
         // SAFETY: `new_node` is a freshly allocated, exclusively-owned node.
         unsafe { (*new_node).children[0] = n };
-        let new_depth = if !n.is_null() { level + 1 } else { 0 };
+        let new_depth = if !n.is_null() { level.wrapping_add(1) } else { 0 };
         let new_root = genradix_root_new(new_node, new_depth);
 
         // SAFETY: `&(*radix).root` is a valid atomic; `new_node` remains
@@ -332,11 +352,11 @@ pub unsafe extern "C" fn __genradix_ptr_alloc(
 
     let mut offset = offset;
     while level > 0 {
-        level -= 1;
+        level = level.wrapping_sub(1);
         // SAFETY: `n` is non-null on every iteration (checked below after
         // the first, and guaranteed non-null on entry by the loop above).
-        let p = unsafe { core::ptr::addr_of_mut!((*n).children[offset >> genradix_depth_shift(level)]) };
-        offset &= genradix_depth_size(level) - 1;
+        let p = unsafe { core::ptr::addr_of_mut!((*n).children[offset.wrapping_shr(genradix_depth_shift(level) as u32)]) };
+        offset &= (genradix_depth_size(level)).wrapping_sub(1);
 
         // SAFETY: `p` is a valid child-pointer slot.
         let mut child = unsafe { core::ptr::read_volatile(p) };
@@ -423,10 +443,10 @@ pub unsafe extern "C" fn __genradix_iter_peek(
         }
 
         while level > 0 {
-            level -= 1;
+            level = level.wrapping_sub(1);
             // SAFETY: `iter` is valid.
             let off = unsafe { (*iter).offset };
-            let mut i = (off >> genradix_depth_shift(level)) & (GENRADIX_ARY - 1);
+            let mut i = (off.wrapping_shr(genradix_depth_shift(level) as u32)) & (GENRADIX_ARY - 1);
 
             loop {
                 // SAFETY: `n` is a valid interior node at this depth.
@@ -448,12 +468,12 @@ pub unsafe extern "C" fn __genradix_iter_peek(
                     return core::ptr::null_mut();
                 }
 
-                i += 1;
+                i = i.wrapping_add(1);
                 let new_offset = round_down(cur.wrapping_add(objs_per_ptr), objs_per_ptr);
                 // SAFETY: `iter` is valid.
                 unsafe {
                     (*iter).offset = new_offset;
-                    (*iter).pos = (new_offset >> GENRADIX_NODE_SHIFT) * objs_per_page;
+                    (*iter).pos = (new_offset >> GENRADIX_NODE_SHIFT).wrapping_mul(objs_per_page);
                 }
                 if i == GENRADIX_ARY {
                     continue 'restart;
@@ -508,17 +528,17 @@ pub unsafe extern "C" fn __genradix_iter_peek_prev(
             // SAFETY: `iter` is valid.
             unsafe {
                 (*iter).offset = sz;
-                (*iter).pos = (sz >> GENRADIX_NODE_SHIFT) * objs_per_page;
-                (*iter).offset -= obj_size_plus_page_remainder;
-                (*iter).pos -= 1;
+                (*iter).pos = (sz >> GENRADIX_NODE_SHIFT).wrapping_mul(objs_per_page);
+                (*iter).offset = (*iter).offset.wrapping_sub(obj_size_plus_page_remainder);
+                (*iter).pos = (*iter).pos.wrapping_sub(1);
             }
         }
 
         while level > 0 {
-            level -= 1;
+            level = level.wrapping_sub(1);
             // SAFETY: `iter` is valid.
             let off = unsafe { (*iter).offset };
-            let mut i = (off >> genradix_depth_shift(level)) & (GENRADIX_ARY - 1);
+            let mut i = (off.wrapping_shr(genradix_depth_shift(level) as u32)) & (GENRADIX_ARY - 1);
 
             loop {
                 // SAFETY: `n` is a valid interior node at this depth.
@@ -535,7 +555,7 @@ pub unsafe extern "C" fn __genradix_iter_peek_prev(
                 // SAFETY: `iter` is valid.
                 unsafe {
                     (*iter).offset = new_offset;
-                    (*iter).pos = (new_offset >> GENRADIX_NODE_SHIFT) * objs_per_page;
+                    (*iter).pos = (new_offset >> GENRADIX_NODE_SHIFT).wrapping_mul(objs_per_page);
                 }
 
                 if new_offset == 0 {
@@ -544,14 +564,14 @@ pub unsafe extern "C" fn __genradix_iter_peek_prev(
 
                 // SAFETY: `iter` is valid.
                 unsafe {
-                    (*iter).offset -= obj_size_plus_page_remainder;
-                    (*iter).pos -= 1;
+                    (*iter).offset = (*iter).offset.wrapping_sub(obj_size_plus_page_remainder);
+                    (*iter).pos = (*iter).pos.wrapping_sub(1);
                 }
 
                 if i == 0 {
                     continue 'restart;
                 }
-                i -= 1;
+                i = i.wrapping_sub(1);
             }
         }
 
@@ -574,7 +594,7 @@ unsafe fn genradix_free_recurse(n: *mut GenradixNode, level: u32) {
             // SAFETY: `n` is a valid interior node at this level.
             let child = unsafe { (*n).children[i] };
             // SAFETY: `child`, if non-null, is a valid node at `level - 1`.
-            unsafe { genradix_free_recurse(child, level - 1) };
+            unsafe { genradix_free_recurse(child, level.wrapping_sub(1)) };
         }
     }
     // SAFETY: `n` is non-null here and was allocated by
@@ -606,7 +626,7 @@ pub unsafe extern "C" fn __genradix_prealloc(
         {
             return -12; // -ENOMEM
         }
-        offset += GENRADIX_NODE_SIZE;
+        offset = offset.wrapping_add(GENRADIX_NODE_SIZE);
     }
     0
 }

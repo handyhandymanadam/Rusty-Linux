@@ -69,7 +69,7 @@
  */
 #ifdef XZ_DEC_BCJ
 
-#ifdef STATIC
+#if defined(STATIC) && !defined(XZ_BOOT_RUST)
 
 /* ---------------------------------------------------------------------
  * Pre-boot. The original C, unchanged. Do not "simplify" this to call the

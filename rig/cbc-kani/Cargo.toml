@@ -1,0 +1,13 @@
+# Kani proofs for crypto/cbc_rs.rs:  cd rig/cbc-kani && cargo kani
+# (the harnesses are the `#[cfg(kani)] mod proofs` at the bottom of cbc_rs.rs itself).
+[package]
+name = "cbc_rs_kani"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "../../port/tree/crypto/cbc_rs.rs"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }

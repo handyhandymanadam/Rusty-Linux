@@ -4,7 +4,7 @@
 //!
 //! Pulls in the file the kernel build compiles, BY PATH, rather than copying
 //! it — a stale copy tested here while the kernel builds something else is the
-//! failure PRIOR-ART.md §2 records four times.
+//! failure notes/PRIOR-ART.md §2 records four times.
 //!
 //! It exists to present the port under the `rs_xz_dec_*` names the harness
 //! calls, allocating the state with `malloc` because the kernel's own

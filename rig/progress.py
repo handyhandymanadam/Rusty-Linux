@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """progress.py <root> -- how much of lib/ is Rust, computed, never typed.
 
-WHY THIS EXISTS. STATUS.md carried "43 modules / 7,040 lines" for several
+WHY THIS EXISTS. notes/STATUS.md carried "43 modules / 7,040 lines" for several
 sessions after it had stopped being true, and said so about itself: "a
 hand-maintained number with no rig behind it, which is exactly the kind that
 drifts". Adam asked for a percentage; a percentage that is retyped is the same
@@ -10,7 +10,7 @@ defect with a % sign on it.
 WHAT IT COUNTS, and the three denominators, because there is no single honest
 one:
 
-  candidates      GOALS.md §8's rule -- everything in lib/ that is a
+  candidates      notes/GOALS.md §8's rule -- everything in lib/ that is a
                   self-contained algorithm over buffers -- as computed by
                   rig/candidates.sh, restricted to files that exist in the
                   6.18.49 tarball so our own generated files cannot inflate it.
@@ -135,14 +135,14 @@ def main():
     report("config-fast", lambda r: r[4])
     print()
 
-    # SCOPE.md §3a, Adam's ruling of 2026-09-04: code no x86-64 build compiles
+    # notes/SCOPE.md §3a, Adam's ruling of 2026-09-04: code no x86-64 build compiles
     # is DEFERRED until there is a cross-architecture testing strategy. It
     # stays in the widest denominator -- it is still lib/ -- but it is not
     # work in progress, and a percentage that does not say so invites the
     # reader to think the project is stalled on it.
     defer = [r for r in rows if not r[3] and not r[4]]
     if defer:
-        print("DEFERRED, SCOPE.md \u00a73a: %d files / %d lines that neither "
+        print("DEFERRED, notes/SCOPE.md \u00a73a: %d files / %d lines that neither "
               "config compiles\n%38s(raid6 SIMD, crc/{riscv,s390}, fdt, fonts, "
               "vdso, options nothing turns on).\n%38sNot excluded -- waiting on "
               "a cross-architecture test strategy."

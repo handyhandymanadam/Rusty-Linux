@@ -6,7 +6,7 @@
  * FSE_decompress_wksp_bmi2 is renamed too even though this file does not
  * define it: this TU CALLS it, and the call has to land in the C arm's copy
  * rather than the port's. That cross-TU edge is the whole reason the two
- * files are ported together -- see STATUS.md.
+ * files are ported together -- see notes/STATUS.md.
  *
  * CONFIGURATION, per logs/floor.md criterion 8: DEBUGLEVEL is left at its
  * default 0 and ZSTD_DEPS_NEED_* are left unset, which is what the kernel

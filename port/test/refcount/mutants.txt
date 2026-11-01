@@ -1,0 +1,19 @@
+sat_const~const REFCOUNT_SATURATED: i32 = -1_073_741_824;~const REFCOUNT_SATURATED: i32 = -1_073_741_823;
+warn_store~(*r).store(REFCOUNT_SATURATED, Ordering::Relaxed);~(*r).store(0, Ordering::Relaxed);
+warn_site0~REFCOUNT_ADD_NOT_ZERO_OVF => rust_rfw_warn(0),~REFCOUNT_ADD_NOT_ZERO_OVF => rust_rfw_warn(1),
+warn_site1~REFCOUNT_ADD_OVF => rust_rfw_warn(1),~REFCOUNT_ADD_OVF => rust_rfw_warn(0),
+warn_uaf~REFCOUNT_ADD_UAF => rust_rfw_warn(2),~REFCOUNT_ADD_UAF => rust_rfw_warn(3),
+warn_sub~REFCOUNT_SUB_UAF => rust_rfw_warn(3),~REFCOUNT_SUB_UAF => rust_rfw_warn(2),
+warn_leak~REFCOUNT_DEC_LEAK => rust_rfw_warn(4),~REFCOUNT_DEC_LEAK => rust_rfw_warn(5),
+warn_default~_ => rust_rfw_warn(5),~_ => rust_rfw_warn(4),
+dif_new~compare_exchange(1, 0,~compare_exchange(1, 1,
+dif_old~compare_exchange(1, 0,~compare_exchange(2, 0,
+dnone_sat~if val == REFCOUNT_SATURATED as u32 {~if val == (REFCOUNT_SATURATED + 1) as u32 {
+dnone_one~if val == 1 {~if val == 2 {
+dnone_new~let new = val.wrapping_sub(1);~let new = val.wrapping_sub(2);
+dnone_under~if new > val {~if new < val {
+dnone_warn_ret~rust_rfw_warn(6);<NL>                return true;~rust_rfw_warn(6);<NL>                return false;
+dnone_cas_val~compare_exchange(val as i32, new as i32,~compare_exchange(val as i32, val as i32,
+dnone_retry~Err(cur) => val = cur as u32,~Err(_) => { let _ = &mut val; }
+dnone_ok~Ok(_) => return true,~Ok(_) => return false,
+dnone_nonatomic~match a.compare_exchange(val as i32, new as i32, Ordering::Release, Ordering::Relaxed) {~match { a.store(new as i32, Ordering::Release); Ok::<i32, i32>(0) } {

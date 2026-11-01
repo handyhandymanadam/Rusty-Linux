@@ -1,0 +1,11 @@
+empty_or~.load(Ordering::Acquire).is_null() && read_volatile(new_of(q)).is_null()~.load(Ordering::Acquire).is_null() || read_volatile(new_of(q)).is_null()
+empty_new~.is_null() && read_volatile(new_of(q)).is_null()~.is_null() && !read_volatile(new_of(q)).is_null()
+deq_new_cond~if this.is_null() && !read_volatile(new_of(q)).is_null() {~if this.is_null() || !read_volatile(new_of(q)).is_null() {
+deq_reverse~this = llist_reverse_order(llist_del_all(q));~this = llist_del_all(q);
+deq_next~write_volatile(ready_of(q), (*this).next);~write_volatile(ready_of(q), null_mut());
+deq_this~let mut this = read_volatile(ready_of(q));~let mut this = null_mut::<LlistNode>();
+all_noclear~        write_volatile(ready_of(q), null_mut());<NL>        let t = llist_del_all(q);~        let t = llist_del_all(q);
+all_tail~*ep = llist_reverse_order(t);~*ep = t; let _ = llist_reverse_order as *const ();
+all_walk~while !(*ep).is_null() {~while false && !(*ep).is_null() {
+all_ready~let mut r = read_volatile(ready_of(q));~let mut r = null_mut::<LlistNode>();
+delall_nonatomic~AtomicPtr::from_ptr(new_of(q)).swap(null_mut(), Ordering::SeqCst)~{ let p = read_volatile(new_of(q)); write_volatile(new_of(q), null_mut()); p }

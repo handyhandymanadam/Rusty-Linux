@@ -1536,8 +1536,12 @@ pub unsafe extern "C" fn rust_zlib_inflateIncomp(strm: *mut ZStream) -> c_int {
     z.next_out = saved_no;
 
     // SAFETY: `next_in` has `avail_in` readable bytes.
-    let consumed =
-        unsafe { core::slice::from_raw_parts(z.next_in, avail_in as usize) };
+    // `next_in` may be NULL when `avail_in == 0`.
+    let consumed: &[u8] = if avail_in == 0 {
+        &[]
+    } else {
+        unsafe { core::slice::from_raw_parts(z.next_in, avail_in as usize) }
+    };
     state.check = adler32(state.check, consumed);
     z.adler = state.check;
 

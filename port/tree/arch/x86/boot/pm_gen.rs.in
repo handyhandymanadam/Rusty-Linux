@@ -1,0 +1,15 @@
+/* Preprocessed by the Makefile (CC -E -P; only the `pub const` lines are kept, C integer suffixes stripped) into
+ * pm_gen.rs, which pm_rs.rs include!s. Every number comes from the same headers and macros pm.c uses
+ * (asm/segment.h GDT_ENTRY / GDT_ENTRY_BOOT_*, asm/desc_defs.h DESC_*), so the GDT bytes cannot drift from the C. */
+#include <asm/desc_defs.h>
+#include <asm/segment.h>
+
+pub const RM_GDT_ENTRY_BOOT_CS: usize = GDT_ENTRY_BOOT_CS;
+pub const RM_GDT_ENTRY_BOOT_DS: usize = GDT_ENTRY_BOOT_DS;
+pub const RM_GDT_ENTRY_BOOT_TSS: usize = GDT_ENTRY_BOOT_TSS;
+pub const RM_DESC_CODE32: u64 = DESC_CODE32;
+pub const RM_DESC_DATA32: u64 = DESC_DATA32;
+pub const RM_DESC_TSS32: u64 = DESC_TSS32;
+pub const RM_GDT_CS: u64 = GDT_ENTRY(DESC_CODE32, 0, 0xfffff);
+pub const RM_GDT_DS: u64 = GDT_ENTRY(DESC_DATA32, 0, 0xfffff);
+pub const RM_GDT_TSS: u64 = GDT_ENTRY(DESC_TSS32, 4096, 103);

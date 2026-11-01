@@ -12,14 +12,14 @@
 
 unsigned long ref_int_sqrt(unsigned long x);
 uint64_t ref_int_pow(uint64_t base, unsigned int exp);
-unsigned long rust_int_sqrt(unsigned long x);
-uint64_t rust_int_pow(uint64_t base, unsigned int exp);
+unsigned long int_sqrt(unsigned long x);
+uint64_t int_pow(uint64_t base, unsigned int exp);
 
 static unsigned long checked, mismatches;
 
 void ref_rational_best_approximation(unsigned long, unsigned long, unsigned long,
 				     unsigned long, unsigned long *, unsigned long *);
-void rust_rational_best_approximation(unsigned long, unsigned long, unsigned long,
+void rational_best_approximation(unsigned long, unsigned long, unsigned long,
 				      unsigned long, unsigned long *, unsigned long *);
 uint32_t ref_iter_div_u64_rem(uint64_t dividend, uint32_t divisor, uint64_t *remainder);
 uint32_t rust_iter_div_u64_rem(uint64_t dividend, uint32_t divisor, uint64_t *remainder);
@@ -30,7 +30,7 @@ static void cmp_rational(unsigned long gn, unsigned long gd,
 	unsigned long an, ad, bn, bd;
 
 	ref_rational_best_approximation(gn, gd, mn, md, &an, &ad);
-	rust_rational_best_approximation(gn, gd, mn, md, &bn, &bd);
+	rational_best_approximation(gn, gd, mn, md, &bn, &bd);
 
 	checked++;
 	if (an != bn || ad != bd) {
@@ -51,7 +51,7 @@ static void cmp_rational(unsigned long gn, unsigned long gd,
 	 *                           straight back out regardless of the limits
 	 *   max_denominator == 0    the only reachable answer is 0/1, and 1 > 0
 	 *
-	 * GOALS.md §7: the C is a reference, not a specification, and it is
+	 * notes/GOALS.md §7: the C is a reference, not a specification, and it is
 	 * sometimes wrong. Making the Rust "fix" either case would change
 	 * what callers observe, which §5 forbids. Recorded, not corrected. */
 	if (gd == 0 || md == 0)
@@ -101,8 +101,8 @@ unsigned long ref_lcm(unsigned long a, unsigned long b);
 unsigned long ref_lcm_not_zero(unsigned long a, unsigned long b);
 unsigned long rust_binary_gcd(unsigned long a, unsigned long b);
 unsigned long rust_gcd_even_odd(unsigned long a, unsigned long b);
-unsigned long rust_lcm(unsigned long a, unsigned long b);
-unsigned long rust_lcm_not_zero(unsigned long a, unsigned long b);
+unsigned long lcm(unsigned long a, unsigned long b);
+unsigned long lcm_not_zero(unsigned long a, unsigned long b);
 
 static void cmp_gcd(unsigned long a, unsigned long b)
 {
@@ -140,8 +140,8 @@ static void cmp_gcd(unsigned long a, unsigned long b)
 
 static void cmp_lcm(unsigned long a, unsigned long b)
 {
-	unsigned long r1 = ref_lcm(a, b), r2 = rust_lcm(a, b);
-	unsigned long r3 = ref_lcm_not_zero(a, b), r4 = rust_lcm_not_zero(a, b);
+	unsigned long r1 = ref_lcm(a, b), r2 = lcm(a, b);
+	unsigned long r3 = ref_lcm_not_zero(a, b), r4 = lcm_not_zero(a, b);
 
 	checked += 2;
 	if (r1 != r2) {
@@ -212,7 +212,7 @@ static void cmp_recip(uint32_t d, unsigned char prec)
 
 static void cmp_sqrt(unsigned long x)
 {
-	unsigned long a = ref_int_sqrt(x), b = rust_int_sqrt(x);
+	unsigned long a = ref_int_sqrt(x), b = int_sqrt(x);
 
 	checked++;
 	if (a != b) {
@@ -224,7 +224,7 @@ static void cmp_sqrt(unsigned long x)
 
 static void cmp_pow(uint64_t base, unsigned int exp)
 {
-	uint64_t a = ref_int_pow(base, exp), b = rust_int_pow(base, exp);
+	uint64_t a = ref_int_pow(base, exp), b = int_pow(base, exp);
 
 	checked++;
 	if (a != b) {
@@ -287,7 +287,7 @@ int main(int argc, char **argv)
 	before = checked;
 	for (unsigned long i = 0; i < rounds; i++) {
 		unsigned long x = rnd() >> 32;
-		unsigned long y = rust_int_sqrt(x);
+		unsigned long y = int_sqrt(x);
 
 		checked++;
 		if (y * y > x || (y + 1) * (y + 1) <= x) {

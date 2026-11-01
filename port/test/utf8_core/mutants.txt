@@ -1,0 +1,32 @@
+val_neg~if utf8nlen(um, UTF8_NFDI, name, len as usize) < 0 {<NL>            return -1;~if utf8nlen(um, UTF8_NFDI, name, len as usize) <= 0 {<NL>            return -1;
+cmp_c1~if utf8ncursor(&mut cur1, um, n, name1, len1 as usize) < 0 {~if utf8ncursor(&mut cur1, um, n, name1, len2 as usize) < 0 {
+cmp_c2~if utf8ncursor(&mut cur2, um, n, name2, len2 as usize) < 0 {~if utf8ncursor(&mut cur2, um, n, name2, len1 as usize) < 0 {
+cmp_c2name~if utf8ncursor(&mut cur2, um, n, name2, len2 as usize) < 0 {~if utf8ncursor(&mut cur2, um, n, name1, len2 as usize) < 0 {
+cmp_err1~if utf8ncursor(&mut cur1, um, n, name1, len1 as usize) < 0 {<NL>            return -EINVAL;~if utf8ncursor(&mut cur1, um, n, name1, len1 as usize) < 0 {<NL>            return 1;
+cmp_neg~if c1 < 0 || c2 < 0 {~if c1 < 0 && c2 < 0 {
+cmp_neg1~if c1 < 0 || c2 < 0 {~if c1 < 0 {
+cmp_neg2~if c1 < 0 || c2 < 0 {~if c2 < 0 {
+cmp_ne~if c1 != c2 {<NL>                return 1;~if c1 < c2 {<NL>                return 1;
+cmp_zero~if c1 == 0 {<NL>                break;~if c1 == 1 {<NL>                break;
+cmp_ret~        0<NL>    }<NL>}<NL><NL>/// `utf8_strncmp()`.~        1<NL>    }<NL>}<NL><NL>/// `utf8_strncmp()`.
+ncmp_form~compare(um, UTF8_NFDI, name1, len1, name2, len2)~compare(um, UTF8_NFDICF, name1, len1, name2, len2)
+ncase_form~compare(um, UTF8_NFDICF, name1, len1, name2, len2)~compare(um, UTF8_NFDI, name1, len1, name2, len2)
+fold_cur~if utf8ncursor(&mut cur1, um, UTF8_NFDICF, name, len as usize) < 0 {~if utf8ncursor(&mut cur1, um, UTF8_NFDI, name, len as usize) < 0 {
+fold_c2~let c2 = *cf.add(i) as c_int;~let c2 = *cf.add(i + 1) as c_int;
+fold_neg~if c1 < 0 {<NL>                return -EINVAL;~if c1 < -1 {<NL>                return -EINVAL;
+fold_ne~if c1 != c2 {<NL>                return 1;<NL>            }<NL>            if c1 == 0 {<NL>                break;<NL>            }<NL>        }<NL><NL>        0<NL>    }<NL>}<NL><NL>/// The copy loop~if c1 > c2 {<NL>                return 1;<NL>            }<NL>            if c1 == 0 {<NL>                break;<NL>            }<NL>        }<NL><NL>        0<NL>    }<NL>}<NL><NL>/// The copy loop
+emit_cur~if utf8ncursor(&mut cur, um, n, name, len as usize) < 0 {~if utf8ncursor(&mut cur, um, n, name, len as usize) <= 0 {
+emit_loop~while nlen < dlen {~while nlen <= dlen {
+emit_store~*dest.add(nlen) = c as u8;~*dest.add(nlen) = (c as u8).wrapping_add(1);
+emit_zero~if c == 0 {<NL>                return nlen as c_int;~if c == 0 {<NL>                return nlen as c_int + 1;
+emit_blob~if c == -1 {<NL>                break;~if c == -2 {<NL>                break;
+emit_inc~            nlen += 1;<NL>        }<NL>        -EINVAL~            nlen += 2;<NL>        }<NL>        -EINVAL
+cf_form~emit(um, UTF8_NFDICF, name, len, dest, dlen)~emit(um, UTF8_NFDI, name, len, dest, dlen)
+nm_form~emit(um, UTF8_NFDI, name, len, dest, dlen)~emit(um, UTF8_NFDICF, name, len, dest, dlen)
+h_salt~let mut h: usize = salt as usize;~let mut h: usize = 0;
+h_cur~if utf8ncursor(&mut cur, um, UTF8_NFDICF, name, len as usize) < 0 {~if utf8ncursor(&mut cur, um, UTF8_NFDI, name, len as usize) < 0 {
+h_neg~if c < 0 {<NL>                return -EINVAL;~if c < -1 {<NL>                return -EINVAL;
+h_mix~h = h.wrapping_add(ch << 4).wrapping_add(ch >> 4).wrapping_mul(11);~h = h.wrapping_add(ch << 4).wrapping_add(ch >> 3).wrapping_mul(11);
+h_mul~wrapping_mul(11);~wrapping_mul(13);
+h_end~*hash = rust_u8c_end_name_hash(h);~*hash = h as u32;
+h_store~*hash = rust_u8c_end_name_hash(h);<NL>        0~0

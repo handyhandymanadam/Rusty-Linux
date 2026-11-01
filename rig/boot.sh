@@ -12,6 +12,30 @@ LIMIT=${2:-120}
 NAME=$(basename "$BUILD")
 LOG="$RIG/../logs/boot-$NAME.log"
 
+# GUARD: refuse to trust a build/boot result if port/tree/ has drifted from
+# the src/linux/ tree kbuild actually reads. rig/apply.sh installs port/tree/
+# into src/linux/ (gitignored, not versioned); kmake never looks at
+# port/tree/ directly. A stale src/linux/ builds and boots "clean" while
+# silently testing whatever state src/linux/ was last APPLIED to, not
+# port/tree/'s current one. Caught 2026-09-06: a merge's verification build
+# succeeded and booted clean against pre-merge C objects because apply.sh
+# was never re-run in that worktree after the merge -- only the new .o
+# file's literal absence gave it away, not the build or boot exit status.
+# Only kept on disk (under logs/, for post-mortem) if the check actually
+# fails -- on the (overwhelmingly common) clean pass there is nothing here
+# worth the churn of a tracked file changing on every single boot.sh run.
+APPLY_CHECK_TMP=$(mktemp)
+if ! "$RIG/apply.sh" --check > "$APPLY_CHECK_TMP" 2>&1; then
+    APPLY_CHECK_LOG="$RIG/../logs/apply-check-$NAME.log"
+    mv "$APPLY_CHECK_TMP" "$APPLY_CHECK_LOG"
+    echo "REFUSING to trust $BUILD: 'rig/apply.sh --check' reports port/tree/"
+    echo "has drifted from src/linux/. This build may not reflect port/tree/'s"
+    echo "current state at all -- run rig/apply.sh, rebuild $BUILD, then retry."
+    echo "(diff: $APPLY_CHECK_LOG)"
+    exit 1
+fi
+rm -f "$APPLY_CHECK_TMP"
+
 BZ="$BUILD/arch/x86/boot/bzImage"
 [ -f "$BZ" ] || { echo "no bzImage at $BZ"; exit 1; }
 
@@ -24,19 +48,46 @@ cp "$RIG/init"    "$TMP/init"
 ln -sf busybox "$TMP/bin/sh"
 chmod +x "$TMP/init" "$TMP/bin/busybox"
 ( cd "$TMP" && find . | cpio -o -H newc --quiet | gzip -9 ) > "$TMP.cpio.gz"
+# A boot config appended to the initramfs (lib/bootconfig.c). Kernels without CONFIG_BOOT_CONFIG ignore it (and the `bootconfig` parameter).
+BCARG=""
+if [ -f "$RIG/bootconfig.txt" ]; then
+    python3 "$RIG/bootconfig-append.py" "$TMP.cpio.gz" "$RIG/bootconfig.txt" && BCARG=" bootconfig"
+fi
 
 KVM=""
 [ -w /dev/kvm ] && KVM="-enable-kvm -cpu host"
+# BOOT_TCG=1: no KVM, QEMU's software CPU (TCG) -- stricter about some instruction semantics (STUBH).
+[ -n "${BOOT_TCG:-}" ] && KVM="-accel tcg"
+# BOOT_CPU=max: QEMU CPU model (TCG "max" has LA57, so the stub runs its 4->5-level paging trampoline, la57toggle)
+[ -n "${BOOT_CPU:-}" ] && KVM="$KVM -cpu $BOOT_CPU"
+
+# BOOT_EFI=1: boot through OVMF (EFI firmware) instead of QEMU's built-in BIOS path, so a kernel
+# built with CONFIG_EFI_STUB runs its EFI entry (logs/test-gaps.md). Needs the edk2-ovmf package.
+EFI=""
+if [ -n "${BOOT_EFI:-}" ]; then
+    OVMF=/usr/share/edk2/ovmf
+    [ -f "$OVMF/OVMF_CODE.fd" ] && [ -f "$OVMF/OVMF_VARS.fd" ] || { echo "BOOT_EFI set but no OVMF in $OVMF"; exit 1; }
+    EFIVARS=$(mktemp); cp "$OVMF/OVMF_VARS.fd" "$EFIVARS"
+    EFI="-machine q35 -drive if=pflash,format=raw,unit=0,readonly=on,file=$OVMF/OVMF_CODE.fd -drive if=pflash,format=raw,unit=1,file=$EFIVARS"
+fi
+
+# BOOT_DISK=image: attach a raw disk image as a virtio-blk device (copy-on-write, nothing is written back) and tell rig/init to print /proc/partitions (rig/disk-check.sh). Needs a kernel with
+# CONFIG_VIRTIO_BLK (build-full has it).
+DISKARG=""; DSKCMD=""
+if [ -n "${BOOT_DISK:-}" ]; then
+    DISKARG="-drive file=$BOOT_DISK,if=none,id=d0,format=raw,snapshot=on -device virtio-blk-pci,drive=d0"
+    DSKCMD=" rig_disk"
+fi
 
 START=$(date +%s.%N)
-timeout "$LIMIT" qemu-system-x86_64 $KVM \
+timeout "$LIMIT" qemu-system-x86_64 $KVM $EFI $DISKARG \
         -m 1024 -smp 2 -no-reboot -display none \
         -kernel "$BZ" -initrd "$TMP.cpio.gz" \
-        -append "console=ttyS0 panic=-1 loglevel=7" \
+        -append "console=ttyS0 panic=-1 loglevel=7$BCARG$DSKCMD" \
         -serial mon:stdio < /dev/null > "$LOG" 2>&1
 QEXIT=$?
 END=$(date +%s.%N)
-rm -rf "$TMP" "$TMP.cpio.gz"
+rm -rf "${TMP:?}" "${TMP:?}.cpio.gz" "${EFIVARS:-}"
 
 # --- Report the state that was READ from the log.
 say() { printf '  %-12s %s\n' "$1" "$2"; }
@@ -47,6 +98,16 @@ grep -q "RIG: init running" "$LOG" && say "init" "reached"      || say "init" "N
 grep -q "RIG: done"         "$LOG" && say "userspace" "completed" || say "userspace" "DID NOT COMPLETE"
 grep -q "RIG: rust-ran YES" "$LOG" && say "rust-ran" "YES"      || say "rust-ran" "NO"
 grep -qE "Kernel panic|BUG:|Oops" "$LOG" && say "faults" "PRESENT -- read the log" || say "faults" "none in log"
+# lib/bootconfig.c: /proc/bootconfig as the kernel rendered it, against rig/bootconfig.expected (the C parser's rendering of rig/bootconfig.txt); and the
+# command line the kernel built from its "kernel." keys.
+if grep -q "RIG: bc-begin" "$LOG"; then
+    sed -n 's/^RIG: bc //p' "$LOG" | tr -d '\r' > "$LOG.bc"
+    if [ -f "$RIG/bootconfig.expected" ] && cmp -s "$LOG.bc" "$RIG/bootconfig.expected"; then say "bootconfig" "PASS ($(wc -l < "$LOG.bc") lines, as the C parser renders it)"
+    else say "bootconfig" "MISMATCH -- diff $LOG.bc $RIG/bootconfig.expected"; fi
+    for w in rusty_bc_probe=1 'rusty_bc_two="a b"' 'rusty_bc_three=x'; do
+        grep -qF "RIG: cmdline " "$LOG" && grep "RIG: cmdline " "$LOG" | grep -qF -- "$w" || say "bootconfig" "cmdline lacks $w"
+    done
+else say "bootconfig" "ABSENT -- no /proc/bootconfig (kernel without CONFIG_BOOT_CONFIG, or the config was not loaded)"; fi
 sed -n 's/^RIG: userspace /  userspace   /p;s/^RIG: kallsyms /  kallsyms    /p;s/^RIG: version /  version     /p' "$LOG"
 
 grep -q "RIG: done" "$LOG" && grep -q "RIG: rust-ran YES" "$LOG"

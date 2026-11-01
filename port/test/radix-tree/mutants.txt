@@ -1,0 +1,95 @@
+retry_const~const RETRY: *mut c_void = ((256usize << 2) | 2) as *mut c_void;~const RETRY: *mut c_void = ((255usize << 2) | 2) as *mut c_void;
+internal~(p as usize) & 3 == 2~(p as usize) & 3 != 0
+is_node_4096~is_internal(p) && (p as usize) > 4096~is_internal(p) && (p as usize) > 4095
+tag_set_word~(*node).tags[tag as usize][offset / BITS_PER_LONG] |= 1usize << (offset % BITS_PER_LONG)~(*node).tags[tag as usize][offset / BITS_PER_LONG] |= 1usize << ((offset + 1) % BITS_PER_LONG)
+find_next_start~let tmp = addr[i] >> (offset % BITS_PER_LONG);<NL>            if tmp != 0 {~let tmp = addr[i] >> ((offset + 1) % BITS_PER_LONG);<NL>            if tmp != 0 {
+find_next_end~        MAP_SIZE<NL>    }<NL>}<NL><NL>// ---- geometry~        MAP_SIZE - 1<NL>    }<NL>}<NL><NL>// ---- geometry
+root_tag_clear_all~unsafe { *flags_of(root) &= (1u32 << rust_rt_root_tag_shift) - 1 }~unsafe { *flags_of(root) &= (1u32 << rust_rt_root_tag_shift) - 1 - 0x3ffff00 }
+is_idr~unsafe { *flags_of(root) & ROOT_IS_IDR != 0 }~unsafe { *flags_of(root) & ROOT_IS_IDR == 0 }
+descend_mask~let offset = (index >> (*parent).shift) as usize & MAP_MASK;~let offset = (index >> (*parent).shift) as usize & (MAP_MASK >> 1);
+maxindex~((MAP_SIZE as c_ulong) << shift).wrapping_sub(1)~((MAP_SIZE as c_ulong) << shift).wrapping_sub(2)
+next_index~(index & !node_maxindex(node)).wrapping_add((offset as c_ulong) << (*node).shift)~(index & !node_maxindex(node)).wrapping_add((offset as c_ulong) << ((*node).shift + 1))
+load_root_shift~return (*n).shift as u32 + MAP_SHIFT as u32;~return (*n).shift as u32;
+extend_loop~while index > shift_maxindex(maxshift) {~while index >= shift_maxindex(maxshift) {
+extend_early~if entry.is_null() && (!is_idr(root) || root_tag_get(root, IDR_FREE)) {~if entry.is_null() {
+extend_idr_free~if !root_tag_get(root, IDR_FREE) {<NL>                    tag_clear(node, IDR_FREE, 0);~if root_tag_get(root, IDR_FREE) {<NL>                    tag_clear(node, IDR_FREE, 0);
+extend_tags~if root_tag_get(root, tag) {<NL>                        tag_set(node, tag, 0);~if !root_tag_get(root, tag) {<NL>                        tag_set(node, tag, 0);
+extend_value~(*node).nr_values = 1;~(*node).nr_values = 0;
+extend_parent~(*entry_to_node(entry)).parent = node;~(*entry_to_node(entry)).parent = null_mut();
+extend_slot0~(*node).slots[0] = entry;<NL>            entry = node_to_entry(node);~(*node).slots[0] = null_mut();<NL>            entry = node_to_entry(node);
+extend_ret~(maxshift + MAP_SHIFT as u32) as c_int<NL>    }<NL>}<NL><NL>/// `radix_tree_shrink()`~(maxshift) as c_int<NL>    }<NL>}<NL><NL>/// `radix_tree_shrink()`
+shrink_count~if (*node).count != 1 {~if (*node).count > 1 {
+shrink_idr~if (*node).shift == 0 && is_idr(root) {~if (*node).shift == 0 && !is_idr(root) {
+shrink_parent~(*entry_to_node(child)).parent = null_mut();~
+shrink_idrtag~if is_idr(root) && !tag_get(node, IDR_FREE, 0) {~if is_idr(root) && tag_get(node, IDR_FREE, 0) {
+shrink_retry~(*node).slots[0] = RETRY;~(*node).slots[0] = null_mut();
+shrink_count0~(*node).count = 0;<NL>            if !is_internal(child) {~(*node).count = 1;<NL>            if !is_internal(child) {
+delete_shrink~deleted |= shrink(root);~deleted |= shrink(root) && false;
+delete_parent~(*parent).slots[(*node).offset as usize] = null_mut();~(*parent).slots[(*node).offset as usize] = (*parent).slots[(*node).offset as usize];
+delete_count~(*parent).count = (*parent).count.wrapping_sub(1);~(*parent).count = (*parent).count.wrapping_sub(2);
+delete_tags~if !is_idr(root) {<NL>                    root_tag_clear_all(root);~if is_idr(root) {<NL>                    root_tag_clear_all(root);
+create_count~(*node).count = (*node).count.wrapping_add(1);<NL>                }<NL>            } else if !is_internal(child) {<NL>                break;<NL>            }<NL><NL>            // Go a level down~(*node).count = (*node).count;<NL>                }<NL>            } else if !is_internal(child) {<NL>                break;<NL>            }<NL><NL>            // Go a level down
+create_offset~rust_rt_node_alloc(gfp, node, root, shift, offset as c_uint, 0, 0);<NL>                if c.is_null() {<NL>                    return -ENOMEM;<NL>                }<NL>                child~rust_rt_node_alloc(gfp, node, root, shift, offset as c_uint + 1, 0, 0);<NL>                if c.is_null() {<NL>                    return -ENOMEM;<NL>                }<NL>                child
+create_gt~if max > maxindex {~if max >= maxindex {
+free_shift~if is_node(entry) && (*child).shift != 0 {~if is_node(entry) {
+free_top~if old == top {~if old == child {
+insert_exist~if !load(slot).is_null() {<NL>            return -EEXIST;~if false {<NL>            return -EEXIST;
+insert_value~if is_value(item) {<NL>                (*node).nr_values = (*node).nr_values.wrapping_add(1);~if !is_value(item) {<NL>                (*node).nr_values = (*node).nr_values.wrapping_add(1);
+lookup_gt~if index > maxindex {<NL>                return null_mut();<NL>            }<NL><NL>            while is_internal(node) {~if index >= maxindex {<NL>                return null_mut();<NL>            }<NL><NL>            while is_internal(node) {
+lookup_retry~if node == RETRY {<NL>                    continue 'restart;~if node == null_mut() {<NL>                    continue 'restart;
+lookup_shift0~if (*parent).shift == 0 {<NL>                    break;~if (*parent).shift == 6 {<NL>                    break;
+lookup_slot_null~if rust___radix_tree_lookup(root, index, null_mut(), &mut slot).is_null() {~if rust___radix_tree_lookup(root, index, null_mut(), &mut slot).is_null() && false {
+replace_count~(*node).count = (*node).count.wrapping_add(count as u8);~(*node).count = (*node).count.wrapping_add(count as u8).wrapping_add(1);
+replace_values~(*node).nr_values = (*node).nr_values.wrapping_add(values as u8);~(*node).nr_values = (*node).nr_values;
+calc_free~if !free {<NL>                return 0;~if free {<NL>                return 0;
+calc_old~if old.is_null() {<NL>                return 1;~if !old.is_null() {<NL>                return 1;
+calc_basic~(!item.is_null()) as c_int - (!old.is_null()) as c_int~(!item.is_null()) as c_int
+replace_delete~        if node.is_null() {<NL>            return;<NL>        }<NL><NL>        delete_node(root, node);~        if node.is_null() {<NL>            return;<NL>        }
+nodetagset_stop~if tag_get(node, tag, offset) {<NL>                return;<NL>            }<NL>            tag_set(node, tag, offset);~if tag_get(node, tag, offset) {<NL>                return;<NL>            }
+nodetagset_up~            offset = (*node).offset as usize;<NL>            node = (*node).parent;<NL>        }<NL><NL>        if !root_tag_get(root, tag) {<NL>            root_tag_set(root, tag);~            offset = (*node).offset as usize + 1;<NL>            node = (*node).parent;<NL>        }<NL><NL>        if !root_tag_get(root, tag) {<NL>            root_tag_set(root, tag);
+tagset_root~        // set the root's tag bit<NL>        if !root_tag_get(root, tag) {<NL>            root_tag_set(root, tag);<NL>        }<NL><NL>        node~        node
+tagset_parent~if !tag_get(parent, tag, offset) {<NL>                tag_set(parent, tag, offset);~if tag_get(parent, tag, offset) {<NL>                tag_set(parent, tag, offset);
+nodetagclear_any~if any_tag_set(node, tag) {<NL>                return;~if !any_tag_set(node, tag) {<NL>                return;
+nodetagclear_root~if root_tag_get(root, tag) {<NL>            root_tag_clear(root, tag);~if false {<NL>            root_tag_clear(root, tag);
+tagclear_gt~if index > maxindex {<NL>            return null_mut();<NL>        }<NL><NL>        let mut parent~if index >= maxindex {<NL>            return null_mut();<NL>        }<NL><NL>        let mut parent
+tagget_root~if !root_tag_get(root, tag) {<NL>            return 0;<NL>        }<NL><NL>        load_root~if root_tag_get(root, tag) {<NL>            return 0;<NL>        }<NL><NL>        load_root
+tagget_parent~if !tag_get(parent, tag, offset) {<NL>                return 0;~if tag_get(parent, tag, offset) {<NL>                return 0;
+tagged_val~(*flags_of(root) & (1u32 << (tag + rust_rt_root_tag_shift))) as c_int~((*flags_of(root) & (1u32 << (tag + rust_rt_root_tag_shift))) != 0) as c_int
+itertags_shift~iter.tags = (*node).tags[tag as usize][tag_long] >> tag_bit;~iter.tags = (*node).tags[tag as usize][tag_long] >> (tag_bit + 1);
+itertags_single~            iter.tags = 1;<NL>            return;~            iter.tags = 0;<NL>            return;
+resume_add~(*iter).index = (*iter).index.wrapping_add(1);~(*iter).index = (*iter).index.wrapping_add(0);
+chunk_tagged_root~if flags & ITER_TAGGED != 0 && !root_tag_get(root, tag) {~if flags & ITER_TAGGED != 0 && root_tag_get(root, tag) {
+chunk_overflow~if index == 0 && iter.index != 0 {~if index == 0 {
+chunk_single_next~iter.next_index = maxindex.wrapping_add(1);<NL>                iter.tags = 1;~iter.next_index = maxindex;<NL>                iter.tags = 1;
+chunk_contig~if flags & ITER_CONTIG != 0 {<NL>                        return null_mut();~if flags & ITER_CONTIG == 0 {<NL>                        return null_mut();
+chunk_tag_next~offset = find_next_bit(node, tag, offset + 1);~offset = find_next_bit(node, tag, offset);
+chunk_plain_next~                            offset += 1;<NL>                            if offset >= MAP_SIZE {~                            offset += 2;<NL>                            if offset >= MAP_SIZE {
+chunk_index~index = index.wrapping_add((offset as c_ulong) << (*node).shift);<NL>                    // Overflow~index = index.wrapping_add((offset as c_ulong) << ((*node).shift + 1));<NL>                    // Overflow
+chunk_restart~if offset == MAP_SIZE {<NL>                        continue 'restart;~if offset == MAP_SIZE {<NL>                        return null_mut();
+chunk_retry~if child == RETRY {<NL>                    break;~if child == null_mut() {<NL>                    break;
+chunk_iterindex~iter.index = (index & !node_maxindex(node)) | offset as c_ulong;~iter.index = (index & !node_maxindex(node)) + 1 + offset as c_ulong;
+chunk_nextindex~iter.next_index = (index | node_maxindex(node)).wrapping_add(1);~iter.next_index = (index | node_maxindex(node)).wrapping_add(0);
+nextslot_tag1~iter.tags >>= 1;<NL>            if iter.tags == 0 {~iter.tags >>= 2;<NL>            if iter.tags == 0 {
+nextslot_off~iter.tags >>= offset;<NL>                offset += 1;~iter.tags >>= offset;<NL>                offset += 2;
+nextslot_contig~                    iter.next_index = 0;~                    iter.next_index = 1;
+gang_retry~if is_internal(r) {<NL>                    slot = iter_retry(&mut iter);<NL>                    continue;<NL>                }<NL>                ret += 1;<NL>                if ret == max_items {<NL>                    break;<NL>                }<NL>            }<NL>            slot = next_slot(slot, &mut iter, 0);~if false {<NL>                    slot = iter_retry(&mut iter);<NL>                    continue;<NL>                }<NL>                ret += 1;<NL>                if ret == max_items {<NL>                    break;<NL>                }<NL>            }<NL>            slot = next_slot(slot, &mut iter, 0);
+gang_max~            ret += 1;<NL>            if ret == max_items {<NL>                break;<NL>            }<NL>            slot = next_slot(slot, &mut iter, ITER_TAGGED | tag);~            ret += 1;<NL>            if ret > max_items {<NL>                break;<NL>            }<NL>            slot = next_slot(slot, &mut iter, ITER_TAGGED | tag);
+gang_zero~if max_items == 0 {<NL>            return 0;<NL>        }<NL><NL>        let mut slot = iter_init(&mut iter, first_index);<NL>        while !slot.is_null() || {<NL>            slot = rust_radix_tree_next_chunk(root, &mut iter, 0);~if false {<NL>            return 0;<NL>        }<NL><NL>        let mut slot = iter_init(&mut iter, first_index);<NL>        while !slot.is_null() || {<NL>            slot = rust_radix_tree_next_chunk(root, &mut iter, 0);
+del_idr~if is_idr(root) {<NL>            node_tag_set(root, node, IDR_FREE, offset);~if !is_idr(root) {<NL>            node_tag_set(root, node, IDR_FREE, offset);
+del_tags~for tag in 0..MAX_TAGS as c_uint {<NL>                node_tag_clear(root, node, tag, offset);~for tag in 0..(MAX_TAGS - 1) as c_uint {<NL>                node_tag_clear(root, node, tag, offset);
+del_values~let values = if is_value(old) { -1 } else { 0 };~let values = if is_value(old) { 0 } else { 0 };
+del_ret~!node.is_null() && delete_node(root, node)~!node.is_null() && delete_node(root, node) && false
+iterdel_index~(*iter).index = (*iter).next_index;~(*iter).index = (*iter).index;
+delitem_idr~if entry.is_null() && (!is_idr(root) || node_tag_get(root, node, IDR_FREE, get_slot_offset(node, slot))) {~if entry.is_null() {
+delitem_item~if !item.is_null() && entry != item {~if !item.is_null() && entry == item {
+getfree_enospc~if start > max {<NL>                return -(ENOSPC as isize) as Slot;~if start >= max {<NL>                return -(ENOSPC as isize) as Slot;
+getfree_tagged~if rust_radix_tree_tagged(root, IDR_FREE) == 0 {<NL>                start = start.max(maxindex.wrapping_add(1));~if rust_radix_tree_tagged(root, IDR_FREE) != 0 {<NL>                start = start.max(maxindex.wrapping_add(1));
+getfree_zero~if start == 0 && shift == 0 {<NL>                shift = MAP_SHIFT as u32;~if start == 1 && shift == 0 {<NL>                shift = MAP_SHIFT as u32;
+getfree_alltag~all_tag_set(c, IDR_FREE);<NL>                    child~child
+getfree_next~offset = find_next_bit(node, IDR_FREE, offset + 1);~offset = find_next_bit(node, IDR_FREE, offset);
+getfree_start~if start > max || start == 0 {~if start > max {
+getfree_up~offset = (*node).offset as usize + 1;<NL>                        node = (*node).parent;~offset = (*node).offset as usize;<NL>                        node = (*node).parent;
+getfree_nexti~iter.next_index = 1 + max.min(start | node_maxindex(node));~iter.next_index = 1 + max.max(start | node_maxindex(node));
+getfree_single~            iter.next_index = 1;<NL>        }<NL>        iter.node = node;~            iter.next_index = 2;<NL>        }<NL>        iter.node = node;
+destroy_tag~write_volatile(head_of(root), null_mut());<NL>        root_tag_set(root, IDR_FREE);~write_volatile(head_of(root), null_mut());
+destroy_free~if is_internal(node) {<NL>            free_nodes(node);~if false {<NL>            free_nodes(node);

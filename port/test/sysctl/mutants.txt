@@ -1,0 +1,68 @@
+ss_cond~            if !rust_sysctl_isspace(**buf as u8 as c_int) {~            if rust_sysctl_isspace(**buf as u8 as c_int) {
+ss_dec~            *size -= 1;<NL>            *buf = (*buf).add(1);<NL>        }<NL>    }<NL>}<NL><NL>/// `proc_skip_char~            *size -= 1;<NL>            *buf = (*buf).add(2);<NL>        }<NL>    }<NL>}<NL><NL>/// `proc_skip_char
+sc_cmp~            if **buf != v {~            if **buf == v {
+sl_ovf~if (rv & KSTRTOX_OVERFLOW) != 0 ||~if
+sl_end~            *endp = cp as *mut c_char;~            *endp = cp.sub(1) as *mut c_char;
+sl_add~        let cp = cp.add(rv as usize);~        let cp = cp.add(rv as usize + 1);
+gl_cap~        if len > (TMPBUFLEN - 1) as isize {~        if len > TMPBUFLEN as isize {
+gl_cap2~            len = (TMPBUFLEN - 1) as isize;~            len = (TMPBUFLEN - 2) as isize;
+gl_neg~        if *p == b'-' as c_char && *size > 1 {~        if *p == b'-' as c_char {
+gl_neg2~        if *p == b'-' as c_char && *size > 1 {~        if *p == b'-' as c_char && *size > 2 {
+gl_negset~            *neg = true;~            *neg = false;
+gl_digit2~b'0' as c_char <= *p && *p <= b'9' as c_char~b'0' as c_char <= *p && *p < b'9' as c_char
+gl_full~        if len == (TMPBUFLEN - 1) as isize {~        if len == (TMPBUFLEN - 2) as isize {
+gl_full2~        if len == (TMPBUFLEN - 1) as isize {~        if len >= (TMPBUFLEN - 2) as isize {
+gl_perm~        if len < *size && perm_tr_len != 0 {~        if len <= *size && perm_tr_len != 0 {
+gl_perm2~        if len < *size && perm_tr_len != 0 {~        if len < *size {
+gl_found~            if !found {~            if found {
+gl_tr~        if !tr.is_null() && len < *size {~        if !tr.is_null() {
+gl_adv~        *buf = (*buf).add(len);~        *buf = (*buf).add(len + 1);
+gl_sz~        *size -= len;~        *size -= len + 1;
+pl_digit~            digits[nd] = b'0' + (v % 10) as u8;~            digits[nd] = b'1' + (v % 10) as u8;
+pl_loop~            if v == 0 {<NL>                break;~            if v < 10 {<NL>                break;
+pl_neg~        if neg {<NL>            tmp[len] = b'-';~        if !neg {<NL>            tmp[len] = b'-';
+pl_adv~        *buf = (*buf as *mut u8).add(len) as *mut c_void;~        *buf = (*buf as *mut u8).add(len + 1) as *mut c_void;
+pc_cond~        if *size != 0 {<NL>            let b = *buf as *mut c_char;~        if *size > 1 {<NL>            let b = *buf as *mut c_char;
+pc_dec~            *size -= 1;<NL>            *buf = b.add(1) as *mut c_void;~            *size -= 2;<NL>            *buf = b.add(1) as *mut c_void;
+ic_neg_lim~                if *lvalp > INT_MAX + 1 {~                if *lvalp > INT_MAX {
+ic_pos_lim~                if *lvalp > INT_MAX {<NL>                    return -EINVAL;<NL>                }<NL>                write_volatile(valp, *lvalp as c_int);~                if *lvalp > INT_MAX + 1 {<NL>                    return -EINVAL;<NL>                }<NL>                write_volatile(valp, *lvalp as c_int);
+ic_neg_val~                write_volatile(valp, (*lvalp).wrapping_neg() as c_int);~                write_volatile(valp, *lvalp as c_int);
+ic_rd_neg~            if val < 0 {<NL>                *negp = true;<NL>                *lvalp = (val as c_long as c_ulong).wrapping_neg();~            if val <= 0 {<NL>                *negp = true;<NL>                *lvalp = (val as c_long as c_ulong).wrapping_neg();
+uc_lim~            if *lvalp > c_uint::MAX as c_ulong {~            if *lvalp >= c_uint::MAX as c_ulong {
+uc_wr~            write_volatile(valp, *lvalp as c_uint);~            write_volatile(valp, (*lvalp as c_uint) + 1);
+jc_lim~            if *lvalp > (i32::MAX / hz) as c_ulong {~            if *lvalp >= (i32::MAX / hz) as c_ulong {
+jc_ret~                return 1;~                return 0;
+jc_mul~                write_volatile(valp, (*lvalp).wrapping_mul(hz_ul) as c_int);~                write_volatile(valp, (*lvalp).wrapping_mul(hz_ul + 1) as c_int);
+jc_neg~                write_volatile(valp, (*lvalp).wrapping_neg().wrapping_mul(hz_ul) as c_int);~                write_volatile(valp, (*lvalp).wrapping_mul(hz_ul) as c_int);
+jc_div~            *lvalp = lval / hz_ul;~            *lvalp = lval / (hz_ul + 1);
+di_early~tbl_data.is_null() || maxlen == 0 || *lenp == 0 || (*ppos != 0 && write == 0) {<NL>            *lenp = 0;<NL>            return 0;<NL>        }<NL><NL>        let mut i = tbl_data~tbl_data.is_null() || maxlen == 0 || *lenp == 0 {<NL>            *lenp = 0;<NL>            return 0;<NL>        }<NL><NL>        let mut i = tbl_data
+di_vleft~        let mut vleft: c_int = maxlen / 4;~        let mut vleft: c_int = maxlen / 4 + 1;
+di_clamp~                if left > page_size - 1 {<NL>                    left = page_size - 1;<NL>                }<NL>                p = buffer as *mut c_char;~                if left > page_size {<NL>                    left = page_size;<NL>                }<NL>                p = buffer as *mut c_char;
+di_sep~                    err = rust_sysctl_get_long(&mut p, &mut left, &mut lval, &mut neg, WSPACE_SEP.as_ptr(), WSPACE_SEP.len() as c_uint, null_mut());<NL>                    if err != 0 {~                    err = rust_sysctl_get_long(&mut p, &mut left, &mut lval, &mut neg, WSPACE_SEP.as_ptr(), 2, null_mut());<NL>                    if err != 0 {
+di_conv~                    if conv(&mut neg, &mut lval, i, 1, data) != 0 {~                    if conv(&mut neg, &mut lval, i, 1, data) == 0 {
+di_tab~                    if !first {<NL>                        rust_sysctl_put_char(&mut buffer, &mut left, b'\t' as c_char);~                    if first {<NL>                        rust_sysctl_put_char(&mut buffer, &mut left, b'\t' as c_char);
+di_nl2~            if write == 0 && !first && left != 0 && err == 0 {~            if write == 0 && left != 0 && err == 0 {
+di_trail~            if write != 0 && err == 0 && left != 0 {<NL>                rust_sysctl_skip_spaces~            if write != 0 && left != 0 {<NL>                rust_sysctl_skip_spaces
+di_first2~            if write != 0 && first {<NL>                return if err != 0 { err } else { -EINVAL };~            if write != 0 && first {<NL>                return err;
+di_lenp~            *lenp -= left;<NL>        }<NL>        *ppos += *lenp as i64;~        }<NL>        *ppos += *lenp as i64;
+di_ppos~        *ppos += *lenp as i64;<NL>        err~        err
+di_out~            if rust_sysctl_first_pos(ppos, table) {<NL>                out = true;~            if false {<NL>                out = true;
+dw_early~            *ppos += *lenp as i64;<NL>            return 0;~            return 0;
+dw_clamp~        if left > page_size - 1 {<NL>            left = page_size - 1;<NL>        }<NL><NL>        rust_sysctl_skip_spaces~        if left > page_size {<NL>            left = page_size;<NL>        }<NL><NL>        rust_sysctl_skip_spaces
+dw_empty~        if left == 0 {<NL>            return -EINVAL;<NL>        }<NL><NL>        let err~        if left == 0 {<NL>            return 0;<NL>        }<NL><NL>        let err
+dw_neg~        if err != 0 || neg {~        if err != 0 {
+dw_conv~        if conv(&mut lval, tbl_data, 1, data) != 0 {~        if conv(&mut lval, tbl_data, 1, data) == 0 {
+dr_conv~        if conv(&mut lval, tbl_data, 0, data) != 0 {<NL>            err = -EINVAL;~        if conv(&mut lval, tbl_data, 0, data) == 0 {<NL>            err = -EINVAL;
+dr_ppos~        *lenp -= left;<NL>        *ppos += *lenp as i64;<NL>        err~        *lenp -= left;<NL>        err
+dl_mul~                val = convmul.wrapping_mul(val) / convdiv;~                val = convdiv.wrapping_mul(val) / convmul;
+dl_min~                if (min != null() && val < *min) || (max != null() && val > *max) {~                if (min != null() && val <= *min) || (max != null() && val > *max) {
+dl_max~                if (min != null() && val < *min) || (max != null() && val > *max) {~                if (min != null() && val < *min) || (max != null() && val >= *max) {
+dl_rd~                val = convdiv.wrapping_mul(read_volatile(i)) / convmul;~                val = convmul.wrapping_mul(read_volatile(i)) / convdiv;
+dl_neg~                if err != 0 || neg {<NL>                    err = -EINVAL;<NL>                    break;~                if err != 0 {<NL>                    err = -EINVAL;<NL>                    break;
+dl_trail~        if write != 0 && err == 0 {<NL>            rust_sysctl_skip_spaces(&mut p, &mut left);~        if write != 0 {<NL>            rust_sysctl_skip_spaces(&mut p, &mut left);
+dl_out~                *ppos += *lenp as i64;<NL>                return err;~                return err;
+gl_digit~        if !(b'0' as c_char <= *p && *p <= b'9' as c_char) {~        if !((b'0' as c_char) < *p && *p <= b'9' as c_char) {
+im_min~*(*param).min > tmp~*(*param).min >= tmp
+im_max~*(*param).max < tmp~*(*param).max <= tmp
+um_min~*(*param).min > tmp) || (!(*param).max.is_null() && *(*param).max < tmp) {<NL>                return -ERANGE;~*(*param).min >= tmp) || (!(*param).max.is_null() && *(*param).max < tmp) {<NL>                return -ERANGE;
+um_max~*(*param).max < tmp) {<NL>                return -ERANGE;~*(*param).max <= tmp) {<NL>                return -ERANGE;

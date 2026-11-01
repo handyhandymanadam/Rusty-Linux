@@ -15,7 +15,7 @@
 #
 #   The next build was clean, booted, and rig/crc-check.sh reported zero CRC
 #   changes -- truthfully, on a kernel that no longer contained the ported
-#   code paths at all. That is PRIOR-ART.md §2's kernel-that-contained-no-Rust,
+#   code paths at all. That is notes/PRIOR-ART.md §2's kernel-that-contained-no-Rust,
 #   reproduced by our own rig within a day of reading about it.
 #
 #   It was caught because rig/init distinguishes ABSENT from PASS. This script

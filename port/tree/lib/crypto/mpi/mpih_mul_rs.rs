@@ -146,7 +146,7 @@ unsafe fn mpihelp_add_1(
 
     if s2_limb < x0 {
         loop {
-            s1_size -= 1;
+            s1_size = s1_size.wrapping_sub(1);
             if s1_size == 0 {
                 return 1;
             }
@@ -164,7 +164,7 @@ unsafe fn mpihelp_add_1(
     if (res_ptr as *const c_ulong) != s1_ptr {
         // SAFETY: `s1_size - 1` limbs remain readable/writable at these
         // positions -- the same invariant the C's own copy relies on.
-        for i in 0..(s1_size - 1) as usize {
+        for i in 0..(s1_size.wrapping_sub(1)) as usize {
             unsafe { *res_ptr.add(i) = *s1_ptr.add(i) };
         }
     }
@@ -183,7 +183,7 @@ unsafe fn mpn_copy(d: *mut c_ulong, s: *const c_ulong, n: c_int) {
     while i < n {
         // SAFETY: caller guarantees `n` limbs on both sides.
         unsafe { *d.add(i as usize) = *s.add(i as usize) };
-        i += 1;
+        i = i.wrapping_add(1);
     }
 }
 
@@ -196,7 +196,7 @@ unsafe fn mpn_zero(d: *mut c_ulong, n: c_int) {
     while i < n {
         // SAFETY: caller guarantees `n` limbs writable.
         unsafe { *d.add(i as usize) = 0 };
-        i += 1;
+        i = i.wrapping_add(1);
     }
 }
 
@@ -239,7 +239,7 @@ unsafe fn mul_n_basecase(prodp: *mut c_ulong, up: *const c_ulong, vp: *const c_u
         }
         unsafe { *prodp.add(size as usize) = cy };
         prodp = unsafe { prodp.add(1) };
-        i += 1;
+        i = i.wrapping_add(1);
     }
     cy
 }
@@ -266,15 +266,15 @@ unsafe fn mul_n(prodp: *mut c_ulong, up: *const c_ulong, vp: *const c_ulong, siz
     if size & 1 != 0 {
         // The size is odd; multiply the low (size - 1) limbs recursively
         // and handle the top limb of each operand separately.
-        let esize = size - 1;
+        let esize = size.wrapping_sub(1);
         unsafe { mpn_mul_n_recurse(prodp, up, vp, esize, tspace) };
         // SAFETY: `esize < size`, so `vp[esize]`/`up[esize]` are in range.
         let vp_esize = unsafe { *vp.add(esize as usize) };
         let cy_limb = unsafe { mpihelp_addmul_1(prodp.add(esize as usize), up, esize, vp_esize) };
-        unsafe { *prodp.add((esize + esize) as usize) = cy_limb };
+        unsafe { *prodp.add((esize.wrapping_add(esize)) as usize) = cy_limb };
         let up_esize = unsafe { *up.add(esize as usize) };
         let cy_limb = unsafe { mpihelp_addmul_1(prodp.add(esize as usize), vp, size, up_esize) };
-        unsafe { *prodp.add((esize + size) as usize) = cy_limb };
+        unsafe { *prodp.add((esize.wrapping_add(size)) as usize) = cy_limb };
         return;
     }
 
@@ -309,7 +309,7 @@ unsafe fn mul_n(prodp: *mut c_ulong, up: *const c_ulong, vp: *const c_ulong, siz
 
     // Add/copy product H.
     unsafe { mpn_copy(prodp.add(hsize as usize), prodp.add(size as usize), hsize) };
-    cy = unsafe { mpihelp_add_n(prodp.add(size as usize), prodp.add(size as usize), prodp.add((size + hsize) as usize), hsize) };
+    cy = unsafe { mpihelp_add_n(prodp.add(size as usize), prodp.add(size as usize), prodp.add((size.wrapping_add(hsize)) as usize), hsize) };
 
     // Add product M (subtract if it was negative).
     if negflg {
@@ -324,7 +324,7 @@ unsafe fn mul_n(prodp: *mut c_ulong, up: *const c_ulong, vp: *const c_ulong, siz
     // Add/copy product L (twice, per the identity's "+1" term).
     cy = cy.wrapping_add(unsafe { mpihelp_add_n(prodp.add(hsize as usize), prodp.add(hsize as usize), tspace, size) });
     if cy != 0 {
-        unsafe { mpihelp_add_1(prodp.add((hsize + size) as usize), prodp.add((hsize + size) as usize), hsize, cy) };
+        unsafe { mpihelp_add_1(prodp.add((hsize.wrapping_add(size)) as usize), prodp.add((hsize.wrapping_add(size)) as usize), hsize, cy) };
     }
 
     unsafe { mpn_copy(prodp, tspace, hsize) };
@@ -373,7 +373,7 @@ pub unsafe extern "C" fn mpih_sqr_n_basecase(prodp: *mut c_ulong, up: *const c_u
         }
         unsafe { *prodp.add(size as usize) = cy_limb };
         prodp = unsafe { prodp.add(1) };
-        i += 1;
+        i = i.wrapping_add(1);
     }
 }
 
@@ -397,16 +397,16 @@ unsafe fn mpn_sqr_n_recurse(prodp: *mut c_ulong, up: *const c_ulong, size: c_int
 #[no_mangle]
 pub unsafe extern "C" fn mpih_sqr_n(prodp: *mut c_ulong, up: *const c_ulong, size: c_int, tspace: *mut c_ulong) {
     if size & 1 != 0 {
-        let esize = size - 1;
+        let esize = size.wrapping_sub(1);
         let mut cy_limb: c_ulong;
 
         unsafe { mpn_sqr_n_recurse(prodp, up, esize, tspace) };
         // SAFETY: `esize < size`, so `up[esize]` is in range.
         let up_esize = unsafe { *up.add(esize as usize) };
         cy_limb = unsafe { mpihelp_addmul_1(prodp.add(esize as usize), up, esize, up_esize) };
-        unsafe { *prodp.add((esize + esize) as usize) = cy_limb };
+        unsafe { *prodp.add((esize.wrapping_add(esize)) as usize) = cy_limb };
         cy_limb = unsafe { mpihelp_addmul_1(prodp.add(esize as usize), up, size, up_esize) };
-        unsafe { *prodp.add((esize + size) as usize) = cy_limb };
+        unsafe { *prodp.add((esize.wrapping_add(size)) as usize) = cy_limb };
         return;
     }
 
@@ -429,7 +429,7 @@ pub unsafe extern "C" fn mpih_sqr_n(prodp: *mut c_ulong, up: *const c_ulong, siz
     unsafe { mpn_sqr_n_recurse(tspace, prodp, hsize, tspace.add(size as usize)) };
 
     unsafe { mpn_copy(prodp.add(hsize as usize), prodp.add(size as usize), hsize) };
-    cy = unsafe { mpihelp_add_n(prodp.add(size as usize), prodp.add(size as usize), prodp.add((size + hsize) as usize), hsize) };
+    cy = unsafe { mpihelp_add_n(prodp.add(size as usize), prodp.add(size as usize), prodp.add((size.wrapping_add(hsize)) as usize), hsize) };
 
     cy = cy.wrapping_sub(unsafe { mpihelp_sub_n(prodp.add(hsize as usize), prodp.add(hsize as usize), tspace, size) });
 
@@ -438,7 +438,7 @@ pub unsafe extern "C" fn mpih_sqr_n(prodp: *mut c_ulong, up: *const c_ulong, siz
 
     cy = cy.wrapping_add(unsafe { mpihelp_add_n(prodp.add(hsize as usize), prodp.add(hsize as usize), tspace, size) });
     if cy != 0 {
-        unsafe { mpihelp_add_1(prodp.add((hsize + size) as usize), prodp.add((hsize + size) as usize), hsize, cy) };
+        unsafe { mpihelp_add_1(prodp.add((hsize.wrapping_add(size)) as usize), prodp.add((hsize.wrapping_add(size)) as usize), hsize, cy) };
     }
 
     unsafe { mpn_copy(prodp, tspace, hsize) };
@@ -484,7 +484,7 @@ pub unsafe extern "C" fn mpihelp_mul_karatsuba_case(
         // `ctx->tspace = mpi_alloc_limb_space(...)` -- the freed pointer
         // above must never be left in `ctx->tspace` on failure, or a
         // later `mpihelp_release_karatsuba_ctx()` double-frees it.
-        unsafe { (*ctx).tspace = mpi_alloc_limb_space((2 * vsize) as c_uint) };
+        unsafe { (*ctx).tspace = mpi_alloc_limb_space((2_i32.wrapping_mul(vsize)) as c_uint) };
         if unsafe { (*ctx).tspace }.is_null() {
             return -ENOMEM;
         }
@@ -496,7 +496,7 @@ pub unsafe extern "C" fn mpihelp_mul_karatsuba_case(
 
     prodp = unsafe { prodp.add(vsize as usize) };
     up = unsafe { up.add(vsize as usize) };
-    usize_ -= vsize;
+    usize_ = usize_.wrapping_sub(vsize);
 
     if usize_ >= vsize {
         let need_tp = unsafe { (*ctx).tp.is_null() || (*ctx).tp_size < vsize };
@@ -505,7 +505,7 @@ pub unsafe extern "C" fn mpihelp_mul_karatsuba_case(
                 unsafe { mpi_free_limb_space((*ctx).tp) };
             }
             // Assign unconditionally -- same reasoning as `tspace` above.
-            unsafe { (*ctx).tp = mpi_alloc_limb_space((2 * vsize) as c_uint) };
+            unsafe { (*ctx).tp = mpi_alloc_limb_space((2_i32.wrapping_mul(vsize)) as c_uint) };
             if unsafe { (*ctx).tp }.is_null() {
                 if !unsafe { (*ctx).tspace }.is_null() {
                     unsafe { mpi_free_limb_space((*ctx).tspace) };
@@ -522,7 +522,7 @@ pub unsafe extern "C" fn mpihelp_mul_karatsuba_case(
             unsafe { mpihelp_add_1(prodp.add(vsize as usize), (*ctx).tp.add(vsize as usize), vsize, cy) };
             prodp = unsafe { prodp.add(vsize as usize) };
             up = unsafe { up.add(vsize as usize) };
-            usize_ -= vsize;
+            usize_ = usize_.wrapping_sub(vsize);
             if usize_ < vsize {
                 break;
             }
@@ -622,7 +622,7 @@ pub unsafe extern "C" fn mpihelp_mul(
     result: *mut c_ulong,
 ) -> c_int {
     // SAFETY: `usize_ + vsize` limbs writable at `prodp` (caller contract).
-    let prod_endp = unsafe { prodp.add((usize_ + vsize - 1) as usize) };
+    let prod_endp = unsafe { prodp.add((usize_.wrapping_add(vsize).wrapping_sub(1)) as usize) };
 
     if vsize < KARATSUBA_THRESHOLD {
         if vsize == 0 {
@@ -661,7 +661,7 @@ pub unsafe extern "C" fn mpihelp_mul(
             }
             unsafe { *prodp.add(usize_ as usize) = cy };
             prodp = unsafe { prodp.add(1) };
-            i += 1;
+            i = i.wrapping_add(1);
         }
 
         unsafe { *result = cy };

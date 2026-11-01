@@ -3,7 +3,7 @@
 #
 # Compiles the SAME .rs files the kernel build compiles, out of port/tree/.
 # Not copies: a stale copy tested here while the kernel built something else
-# is the failure PRIOR-ART.md §2 records four times.
+# is the failure notes/PRIOR-ART.md §2 records four times.
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)

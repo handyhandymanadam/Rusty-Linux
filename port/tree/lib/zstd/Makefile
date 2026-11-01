@@ -68,7 +68,7 @@ zstd_compress-y := \
 # a thunk. decompress/zstd_decompress_block_rs.rs defines all five under their
 # own names (ZSTD_decompressBlock_internal, ZSTD_checkContinuity,
 # ZSTD_buildFSETable, ZSTD_getcBlockSize, ZSTD_decodeSeqHeaders <- all called
-# from zstd_decompress.o), and calls back into huf_decompress_rs.rs's own
+# from zstd_decompress_rs.o), and calls back into huf_decompress_rs.rs's own
 # HUF_decompress1X1_DCtx_wksp/HUF_decompress1X_usingDTable/
 # HUF_decompress4X_hufOnly_wksp/HUF_decompress4X_usingDTable directly -- one
 # more internal FFI wall erased, per the zstd Makefile's own convention above.
@@ -80,22 +80,43 @@ zstd_compress-y := \
 # ZSTD_copyDDictParameters, ZSTD_createDDict[_advanced/_byReference],
 # ZSTD_initStaticDDict, ZSTD_freeDDict, ZSTD_estimateDDictSize,
 # ZSTD_sizeof_DDict, ZSTD_getDictID_fromDDict), all called from
-# zstd_decompress.o (ZSTD_createDDict_advanced/ZSTD_freeDDict also directly
-# from zstd_decompress_module.o), and calls back the other way into
-# ZSTD_loadDEntropy -- currently zstd_decompress.c's, C either way for now,
-# resolving to its Rust body with no thunk whenever that file's own port
-# lands, same as every other cross-file call in this subsystem.
+# zstd_decompress_rs.o (ZSTD_createDDict_advanced/ZSTD_freeDDict also
+# directly from zstd_decompress_module.o), and calls back the other way into
+# ZSTD_loadDEntropy -- zstd_decompress_rs.rs's own, resolved with no thunk,
+# same as every other cross-file call in this subsystem.
 #
-# zstd_decompress.c is still C and unported (in progress elsewhere).
-# CONFIG_RUST=n falls back to the pristine decompress/huf_decompress.c,
+# decompress/zstd_decompress.o IS GONE, not renamed -- same lib/union_find
+# shape as the other three files in this directory: nm on the pristine .c
+# says zero EXPORT_SYMBOL, every real export a caller can see is a
+# snake_case wrapper in zstd_decompress_module.c that calls straight through
+# to these ZSTD_* names, so none of them carries a MODVERSIONS CRC and none
+# needs a thunk. decompress/zstd_decompress_rs.rs defines all of them under
+# their own names, and calls back into zstd_decompress_block_rs.rs's
+# ZSTD_getcBlockSize/ZSTD_checkContinuity/ZSTD_decompressBlock_internal/
+# ZSTD_buildFSETable and zstd_ddict_rs.rs's DDict accessors directly -- two
+# more internal FFI walls erased, closing the loop this Makefile's own
+# comments on those two files left open ("resolving to its Rust body with no
+# thunk whenever that file's own port lands").
+#
+# CONFIG_RUST=n falls back to the pristine zstd_decompress_module.c,
+# decompress/huf_decompress.c, decompress/zstd_decompress.c,
 # decompress/zstd_decompress_block.c and decompress/zstd_ddict.c, all
 # byte-identical to the tarball -- see the note on RAISE 2 below.
+#
+# zstd_decompress_module.o IS GONE under CONFIG_RUST, not renamed -- same
+# shape as the four files above it. nm on the pristine .c says its 17
+# functions ARE all EXPORT_SYMBOL, unlike its siblings here, so unlike them
+# it needs a real kabi_export! pin per symbol (captured via
+# `rig/kabi-pin.sh --capture` before this port replaced it -- see
+# zstd_decompress_module_rs.rs's own header). zstd_decompress_module_rs.rs
+# calls straight through to the ZSTD_* names the other four files in this
+# list already define, one more internal FFI wall erased.
 ifdef CONFIG_RUST
 zstd_decompress-y := \
-		zstd_decompress_module.o \
+		zstd_decompress_module_rs.o \
 		decompress/huf_decompress_rs.o \
 		decompress/zstd_ddict_rs.o \
-		decompress/zstd_decompress.o \
+		decompress/zstd_decompress_rs.o \
 		decompress/zstd_decompress_block_rs.o \
 
 else

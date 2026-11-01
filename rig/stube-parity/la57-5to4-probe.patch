@@ -1,0 +1,39 @@
+diff --git a/port/tree/arch/x86/boot/compressed/misc.c b/port/tree/arch/x86/boot/compressed/misc.c
+index 71acbc3..18fac46 100644
+--- a/port/tree/arch/x86/boot/compressed/misc.c
++++ b/port/tree/arch/x86/boot/compressed/misc.c
+@@ -464,6 +464,34 @@ asmlinkage __visible void *extract_kernel(void *rmode, unsigned char *output)
+ 	boot_params_ptr->acpi_rsdp_addr = get_rsdp_addr();
+ 
+ 	debug_putstr("early console in extract_kernel\n");
++	/* STUBE-PROBE-5TO4 (scratch, never committed): the stub has just done 4- to 5-level (TCG, LA57 CPU).
++	 * Put the variables back to their start values, make the command line say "no5lvl", and call
++	 * configure_5level_paging() again: CR4.LA57 is now set but not wanted -> the 5- to 4-level path. */
++	{
++		extern void configure_5level_paging(struct boot_params *bp, void *pgtable);
++		static char scratch_pgt[4096] __attribute__((aligned(4096)));
++		static const char no5[] = "no5lvl";
++		unsigned long cr4a, cr4b;
++		u32 save_lo = boot_params_ptr->hdr.cmd_line_ptr, save_hi = boot_params_ptr->ext_cmd_line_ptr;
++
++		asm volatile("mov %%cr4, %0" : "=r" (cr4a));
++		boot_params_ptr->hdr.cmd_line_ptr = (u32)(unsigned long)no5;
++		boot_params_ptr->ext_cmd_line_ptr = 0;
++		__pgtable_l5_enabled = 0; pgdir_shift = 39; ptrs_per_p4d = 1;
++		configure_5level_paging(boot_params_ptr, scratch_pgt);
++		boot_params_ptr->hdr.cmd_line_ptr = save_lo;
++		boot_params_ptr->ext_cmd_line_ptr = save_hi;
++		asm volatile("mov %%cr4, %0" : "=r" (cr4b));
++		__putstr("STUBE-PROBE cr4.la57 before=");
++		__puthex(!!(cr4a & (1UL << 12)));
++		__putstr(" after=");
++		__puthex(!!(cr4b & (1UL << 12)));
++		__putstr(" l5_enabled=");
++		__puthex(__pgtable_l5_enabled);
++		__putstr(" trampoline=");
++		{ extern unsigned long *trampoline_32bit; __puthex((unsigned long)trampoline_32bit); }
++		__putstr("\n");
++	}
+ 
+ 	/* Pre-boot Rust probe -- logs/preboot-experiment.md.
+ 	 *

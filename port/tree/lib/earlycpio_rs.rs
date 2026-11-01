@@ -24,6 +24,23 @@
 //! bounded slice makes the same three tests checked arithmetic on integers,
 //! and every read is then in range by construction.
 //!
+//! # `rig/uaccess-panic-check.sh`: bounds checks kept, arithmetic wrapped
+//!
+//! Every `buf[...]` index here relies on an invariant already argued in
+//! prose above (`off + avail == len` throughout the main loop; `cur` is
+//! checked against `buf.len()` immediately before each use; `start + i`
+//! is bounded by the same `while` condition that reads it) -- provably
+//! in range by construction, the same category as this project's other
+//! "the compiler can't see the invariant, but the invariant holds"
+//! bounds checks (`generic_mpih_rs.rs`'s `mpihelp_cmp`,
+//! `asn1_decoder_rs.rs`'s/`oid_registry_rs.rs`'s binary-search indices).
+//! Left checked rather than silenced, since this parser's whole point is
+//! rejecting a malformed archive rather than assuming one: an unchecked
+//! index would turn "the invariant doesn't hold" into a silent
+//! out-of-bounds read instead of a panic. Every plain `+`/`-` feeding
+//! those bounds is `wrapping_*` for the usual reason -- it is bounded by
+//! the same invariants, but the compiler cannot see that either.
+//!
 //! Replaces: lib/earlycpio.c
 
 use core::ffi::{c_char, c_long, c_void};
@@ -95,7 +112,7 @@ pub unsafe extern "C" fn find_cpio_data(
         let mut n = 0usize;
 
         while *(path as *const u8).add(n) != 0 {
-            n += 1;
+            n = n.wrapping_add(1);
         }
         (
             if len == 0 {
@@ -119,8 +136,8 @@ pub unsafe extern "C" fn find_cpio_data(
             if avail < 4 {
                 break;
             }
-            off += 4;
-            avail -= 4;
+            off = off.wrapping_add(4);
+            avail = avail.wrapping_sub(4);
             continue;
         }
 
@@ -137,18 +154,18 @@ pub unsafe extern "C" fn find_cpio_data(
                 }
                 let c = buf[cur];
 
-                cur += 1;
+                cur = cur.wrapping_add(1);
                 v <<= 4;
                 let x = c.wrapping_sub(b'0');
 
                 if x < 10 {
-                    v += x as u32;
+                    v = v.wrapping_add(x as u32);
                     continue;
                 }
                 let x = (c | 0x20).wrapping_sub(b'a');
 
                 if x < 6 {
-                    v += x as u32 + 10;
+                    v = v.wrapping_add(x as u32).wrapping_add(10);
                     continue;
                 }
                 return cd; // invalid hexadecimal
@@ -162,7 +179,7 @@ pub unsafe extern "C" fn find_cpio_data(
             return cd; // invalid magic
         }
 
-        avail -= HEADER_LEN;
+        avail = avail.wrapping_sub(HEADER_LEN);
 
         // The C computes these as pointers and then checks them for
         // overrun; here the same three tests are checked integer
@@ -175,22 +192,22 @@ pub unsafe extern "C" fn find_cpio_data(
             return cd;
         };
 
-        if nptr > off + avail || dptr < off || nptr < dptr {
+        if nptr > off.wrapping_add(avail) || dptr < off || nptr < dptr {
             return cd; // buffer overrun
         }
 
         // A regular file (S_IFREG) whose name starts with the path we want.
         if ch[C_MODE] & 0o170000 == 0o100000
             && ch[C_NAMESIZE] as usize >= mypathsize
-            && off + mypathsize <= buf.len()
-            && &buf[off..off + mypathsize] == path_bytes
+            && off.wrapping_add(mypathsize) <= buf.len()
+            && &buf[off..off.wrapping_add(mypathsize)] == path_bytes
         {
             if !nextoff.is_null() {
                 // SAFETY: the caller guarantees `nextoff` is writable.
                 unsafe { *nextoff = nptr as c_long };
             }
 
-            if ch[C_NAMESIZE] as usize - mypathsize >= MAX_CPIO_FILE_NAME {
+            if (ch[C_NAMESIZE] as usize).wrapping_sub(mypathsize) >= MAX_CPIO_FILE_NAME {
                 // SAFETY: `off` is inside `buf`, and the name in a valid
                 // archive is NUL-terminated within it -- the same string
                 // the C hands to pr_warn.
@@ -201,17 +218,17 @@ pub unsafe extern "C" fn find_cpio_data(
             // to 17 bytes and always NUL-terminate. Bounded by the buffer
             // as well as by the field, which the C's strscpy is not --
             // see DIVERGENCES.
-            let start = off + mypathsize;
+            let start = off.wrapping_add(mypathsize);
             let mut i = 0;
 
-            while i < MAX_CPIO_FILE_NAME - 1 && start + i < buf.len() {
-                let b = buf[start + i];
+            while i < MAX_CPIO_FILE_NAME - 1 && start.wrapping_add(i) < buf.len() {
+                let b = buf[start.wrapping_add(i)];
 
                 if b == 0 {
                     break;
                 }
                 cd.name[i] = b as c_char;
-                i += 1;
+                i = i.wrapping_add(1);
             }
             cd.name[i] = 0;
 
@@ -222,7 +239,7 @@ pub unsafe extern "C" fn find_cpio_data(
             return cd; // found it
         }
 
-        avail -= nptr - off;
+        avail = avail.wrapping_sub(nptr.wrapping_sub(off));
         off = nptr;
     }
 

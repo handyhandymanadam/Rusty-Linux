@@ -1,0 +1,162 @@
+# config-efi -- config-fast plus an EFI-stub kernel (boots under QEMU + OVMF).
+#
+# WHY (logs/test-gaps.md, Adam 2026-10-02 "EFI under QEMU first"). The Rust boot
+# engines are switched OFF when CONFIG_EFI_STUB/EFI_SBAT is set, because no EFI boot
+# was tested. This config is how that gap gets tested. It is configs/fast.fragment
+# plus the lines at the bottom; nothing else differs.
+#
+# config-fast -- the ITERATION instrument (notes/SCOPE.md §3).
+# Base: allnoconfig. Every line below is something a boot, a module load, or a
+# ported lib/ function actually needs. Nothing is here "in case".
+#
+# Its stated limits live in logs/build-limits.md and were written while this
+# file was, not afterwards.
+
+# --- Machine.
+CONFIG_64BIT=y
+CONFIG_SMP=y
+CONFIG_NR_CPUS=4
+CONFIG_PRINTK=y
+CONFIG_PRINTK_TIME=y
+CONFIG_BUG=y
+CONFIG_MULTIUSER=y
+CONFIG_JUMP_LABEL=y
+
+# --- Console: qemu -nographic talks to the 8250.
+CONFIG_TTY=y
+CONFIG_SERIAL_8250=y
+CONFIG_SERIAL_8250_CONSOLE=y
+# CONFIG_SERIAL_8250_PCI was here and NEVER TOOK EFFECT: it depends on PCI,
+# which allnoconfig does not enable, so olddefconfig discarded it silently
+# every time. Found by rig/config.sh on its first run. The console has always
+# come up on the legacy 8250 port, which is why nobody noticed. Removed
+# rather than fixed -- config-fast does not want PCI.
+
+# --- Userspace: run an init, run a script, see /proc and /sys.
+CONFIG_BINFMT_ELF=y
+CONFIG_BINFMT_SCRIPT=y
+CONFIG_PROC_FS=y
+CONFIG_PROC_SYSCTL=y
+CONFIG_SYSFS=y
+CONFIG_DEVTMPFS=y
+CONFIG_DEVTMPFS_MOUNT=y
+CONFIG_TMPFS=y
+CONFIG_SHMEM=y
+
+# --- Root: an initramfs, nothing else. No disk, no net, no PCI storage.
+CONFIG_BLK_DEV_INITRD=y
+CONFIG_RD_GZIP=y
+
+# --- Criterion 4 is unmeasurable without these (notes/SCOPE.md §3), and the
+# --- MODVERSIONS/GENDWARFKSYMS pair is what keeps CONFIG_RUST from being
+# --- silently dropped (notes/PRIOR-ART.md §2).
+CONFIG_MODULES=y
+CONFIG_MODULE_UNLOAD=y
+CONFIG_MODVERSIONS=y
+CONFIG_GENDWARFKSYMS=y
+CONFIG_DEBUG_KERNEL=y
+CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT=y
+# CONFIG_DEBUG_INFO_REDUCED is not set
+# CONFIG_DEBUG_INFO_SPLIT is not set
+# CONFIG_DEBUG_INFO_BTF is not set
+CONFIG_LTO_NONE=y
+
+# --- Rust, and a built-in Rust module that prints during boot. Without the
+# --- last line this config can tell you the kernel booted but not that any
+# --- Rust ran -- which is precisely the failure this project exists to avoid.
+CONFIG_RUST=y
+CONFIG_SAMPLES=y
+CONFIG_SAMPLES_RUST=y
+CONFIG_SAMPLE_RUST_PRINT=y
+
+# --- lib/glob: the first ported module. GLOB has no prompt upstream (it is
+# --- select-only), so port/tree/lib/Kconfig uncomments upstream's own commented
+# --- prompt; see the note there. GLOB_SELFTEST is the notes/SCOPE.md §4 class-A proof
+# --- caller and is not ours -- it ships in lib/globtest.c with a 63-case
+# --- corpus, and it is the reason this port needs no proof caller written for
+# --- it. It prints "glob: N self-tests passed, M failed" at boot.
+CONFIG_GLOB=y
+CONFIG_GLOB_SELFTEST=y
+
+# --- lib/math: int_pow, int_sqrt. The proof caller is lib/math/mathtest.c,
+# --- ours, because lib/math had no non-KUnit self-test to borrow.
+CONFIG_MATH_SELFTEST=y
+
+# --- lib/math/rational. Select-only upstream; port/tree/lib/math/Kconfig
+# --- gives it a prompt, for the same reason CONFIG_GLOB has one.
+CONFIG_RATIONAL=y
+
+# --- lib/{base64,memweight,net_utils,union_find}: the next ported batch, and
+# --- lib/libtest.c, their proof caller. GENERIC_NET_UTILS and UNION_FIND are
+# --- select-only upstream; port/tree/lib/Kconfig gives them prompts, for the
+# --- same reason CONFIG_GLOB has one.
+CONFIG_GENERIC_NET_UTILS=y
+CONFIG_UNION_FIND=y
+CONFIG_LIB_SELFTEST=y
+
+# --- lib/crc/crc16: select-only upstream, prompt added in
+# --- port/tree/lib/crc/Kconfig for the same reason as CONFIG_GLOB.
+CONFIG_CRC16=y
+
+# --- lib/{clz_ctz,crc/crc-ccitt,crypto/arc4}: the next ported batch.
+CONFIG_CRC_CCITT=y
+CONFIG_CRYPTO_LIB_ARC4=y
+
+# --- lib/crypto/{utils,chacha-block-generic}: __crypto_xor and the ChaCha core.
+CONFIG_CRYPTO_LIB_UTILS=y
+
+# --- lib/ucs2_string: UTF-16 to UTF-8, seven functions.
+CONFIG_UCS2_STRING=y
+
+# --- lib/hexdump: UPSTREAM'S OWN TEST, not one of ours. lib/test_hexdump.c is
+# --- a plain module_init (no KUnit dependency), and its corpus is every
+# --- rowsize x groupsize x ascii combination plus every buffer length from 0
+# --- to the full line, driven through hex_dump_to_buffer() -- which is
+# --- precisely the fiddly part of that port and far better than vectors we
+# --- would have written. Same reasoning as CONFIG_GLOB_SELFTEST; notes/SCOPE.md §4
+# --- asks for the cheapest thing that satisfies criterion 5, and here the
+# --- cheapest thing already existed.
+# RUNTIME_TESTING_MENU is a menuconfig gate, `default y`, and allnoconfig
+# turns it off; without it TEST_HEXDUMP has no prompt and olddefconfig drops
+# it silently -- which rig/config.sh caught by reading the built .config back.
+CONFIG_RUNTIME_TESTING_MENU=y
+CONFIG_TEST_HEXDUMP=y
+
+# --- lib/xarray: upstream's own test (lib/test_xarray.c). It caught six real
+# --- lost-WARN/behaviour bugs in the xarray port (notes/STATUS.md, 2026-09-06), so the
+# --- ratchet (notes/GOALS.md §6) is satisfied: a defect earned it. Built in (=y), so
+# --- it runs at boot and prints "XArray: N of N tests passed".
+CONFIG_TEST_XARRAY=y
+
+# --- KUNIT, and it is here for a reason that outlives any one port.
+# --- lib/tests/ carries upstream's own corpora for siphash, cmdline, seq_buf,
+# --- string, checksum, usercopy, iov_iter and xarray -- eight of the modules
+# --- still to port, including the two largest -- and all of them are KUnit.
+# --- CONFIG_GLOB_SELFTEST and CONFIG_TEST_HEXDUMP already showed what
+# --- upstream's own test corpus is worth against a port: 1,184 tests for
+# --- hex_dump_to_buffer, and a sabotage caught that our vectors missed.
+# --- KUNIT selects GLOB, which this config already has.
+CONFIG_KUNIT=y
+CONFIG_SIPHASH_KUNIT_TEST=y
+CONFIG_CMDLINE_KUNIT_TEST=y
+CONFIG_CRYPTO_LIB_BLAKE2S_KUNIT_TEST=y
+
+# --- lib/usercopy: check_zeroed_user()'s only in-tree callers (sockptr.h's
+# --- check_zeroed_sockptr(), from net/ipv4/tcp.c's TCP zerocopy receive and
+# --- net/tls/tls_main.c's TLS ULP setsockopt path; kernel/seccomp.c's
+# --- notify-addfd ioctl; kernel/bpf/syscall.c's BPF_PROG_LOAD padding check)
+# --- are not reached by this project's minimal boot + busybox userspace --
+# --- none of TCP zerocopy, TLS, seccomp or bpf() get exercised. Same
+# --- "upstream's own test does the hard part" reasoning as siphash/cmdline:
+# --- lib/tests/usercopy_kunit.c already builds a real userspace mapping
+# --- (kunit_vm_mmap()) and drives check_zeroed_user() against every
+# --- [start,end] pair over a 1024-byte, page-boundary-crossing region,
+# --- checked against memchr_inv() as the independent oracle -- exactly the
+# --- corpus this port would otherwise have to hand-write, and better.
+CONFIG_USERCOPY_KUNIT_TEST=y
+
+# --- The only differences from fast: an EFI stub kernel (needs PCI-free QEMU+OVMF boot).
+CONFIG_EFI=y
+CONFIG_EFI_STUB=y
+# CONFIG_EFI_HANDOVER_PROTOCOL is not set
+CONFIG_ACPI=y

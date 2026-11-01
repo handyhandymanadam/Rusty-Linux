@@ -1,0 +1,25 @@
+/* Preprocessed by the Makefile (CC -E -P; only the `pub const` lines are kept, C integer suffixes stripped) into
+ * main_gen.rs, which main_rs.rs include!s. Every number and configuration switch comes from the same headers and
+ * autoconf.h that main.c sees (uapi/asm/bootparam.h CAN_USE_HEAP, asm/setup.h OLD_CL_*, CONFIG_X86_64 / CONFIG_APM[_MODULE] /
+ * CONFIG_EDD[_MODULE]), so the Rust cannot drift from the build configuration. */
+#include <asm/bootparam.h>
+#include <asm/setup.h>
+
+pub const RM_CAN_USE_HEAP: u8 = CAN_USE_HEAP;
+pub const RM_OLD_CL_MAGIC: u16 = OLD_CL_MAGIC;
+pub const RM_OLD_CL_ADDRESS: usize = OLD_CL_ADDRESS;
+#ifdef CONFIG_X86_64
+pub const RM_MAIN_X86_64: bool = true;
+#else
+pub const RM_MAIN_X86_64: bool = false;
+#endif
+#if defined(CONFIG_APM) || defined(CONFIG_APM_MODULE)
+pub const RM_MAIN_APM: bool = true;
+#else
+pub const RM_MAIN_APM: bool = false;
+#endif
+#if defined(CONFIG_EDD) || defined(CONFIG_EDD_MODULE)
+pub const RM_MAIN_EDD: bool = true;
+#else
+pub const RM_MAIN_EDD: bool = false;
+#endif

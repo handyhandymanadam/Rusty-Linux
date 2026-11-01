@@ -5,7 +5,7 @@
  * <linux/decompress/mm.h>'s shim) -- same reasoning
  * port/test/decompress_unlz4's and decompress_unlzo's shim/linux/lz4.h and
  * lzo.h give for not using the real headers. struct xz_buf's field order
- * and types are copied exactly from the real header (GOALS.md §5: it's the
+ * and types are copied exactly from the real header (notes/GOALS.md §5: it's the
  * caller's ABI, not ours to drift on) -- both arms link against the SAME
  * pristine xz_dec_{stream,lzma2,bcj}.c backend, compiled against the REAL
  * header (port/test/xz_stream/'s own shim, unaffected by this one), so a

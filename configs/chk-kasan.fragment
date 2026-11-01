@@ -1,0 +1,11 @@
+# chk-kasan: KASAN + PREEMPT + the stress harness, WITHOUT lockdep/PROVE_LOCKING: with DEBUG_LOCK_ALLOC the spinlock is no longer one word, so USE_CMPXCHG_LOCKREF is false and the Rust lockref fast path is not even compiled (the C one is not either). 2026-10-24
+# chk-ka -- lockdep + atomic-sleep + PROVE_RCU + KASAN (generic, clang, outline). See logs/concurrency-tooling.md.
+CONFIG_LIB_STRESS=y
+CONFIG_DEBUG_ATOMIC_SLEEP=y
+CONFIG_PREEMPT=y
+CONFIG_KASAN=y
+CONFIG_KASAN_GENERIC=y
+CONFIG_KASAN_OUTLINE=y
+# SMP: build-fast has no ACPI, and then QEMU -smp N still brings up ONE cpu (even the pristine C kernel: logs/concurrency-tooling.md)
+CONFIG_ACPI=y
+CONFIG_PCI=y

@@ -1,0 +1,47 @@
+bits_per_value~const BITS_PER_XA_VALUE: u32 = 63;~const BITS_PER_XA_VALUE: u32 = 62;
+bitmap_bits~(IDA_BITMAP_LONGS * 64) as u32~(IDA_BITMAP_LONGS * 63) as u32
+free_mark~const XA_FREE_MARK: u32 = 0;~const XA_FREE_MARK: u32 = 1;
+present~const XA_PRESENT: u32 = 8;~const XA_PRESENT: u32 = 0;
+value_tag~((v << 1) | 1) as *mut c_void~((v << 1) | 3) as *mut c_void
+value_shift~(entry as c_ulong) >> 1~(entry as c_ulong) >> 2
+errno_sign~((entry as i64) >> 2) as c_int~((entry as i64) >> 1) as c_int
+err_cmp~entry >= ((0 as c_ulong)~entry > ((0 as c_ulong)
+zero_start~let mut i = start;<NL>    while i < size {<NL>        if (words[(i / 64) as usize] >> (i % 64)) & 1 == 0~let mut i = start + 1;<NL>    while i < size {<NL>        if (words[(i / 64) as usize] >> (i % 64)) & 1 == 0
+zero_bit~>> (i % 64)) & 1 == 0 {~>> (i % 64)) & 1 != 0 {
+nextbit~>> (i % 64)) & 1 != 0 {<NL>            return i;~>> (i % 64)) & 1 == 0 {<NL>            return i;
+full~b.bitmap.iter().all(|w| *w == !0)~b.bitmap.iter().any(|w| *w == !0)
+empty~b.bitmap.iter().all(|w| *w == 0)~b.bitmap.iter().any(|w| *w == 0)
+neg_min~if (min as i32) < 0 {<NL>            return -ENOSPC;~if (min as i32) <= 0 {<NL>            return -ENOSPC;
+neg_max~if (max as i32) < 0 {<NL>            max = INT_MAX;<NL>        }<NL><NL>        'retry~if (max as i32) <= 0 {<NL>            max = INT_MAX;<NL>        }<NL><NL>        'retry
+bit_reset~if xas.xa_index > (min / IDA_BITMAP_BITS) as c_ulong {<NL>                    bit = 0;~if xas.xa_index >= (min / IDA_BITMAP_BITS) as c_ulong {<NL>                    bit = 0;
+valmax~let v = tmp[0] | (1 as c_ulong) << bit;~let v = tmp[0] | (1 as c_ulong) << (bit + 1);
+valbit~if bit < BITS_PER_XA_VALUE {<NL>                            let v~if bit <= BITS_PER_XA_VALUE {<NL>                            let v
+nospc2~find_next_zero_bit(&tmp, BITS_PER_XA_VALUE, bit);<NL>                        if id_of(xas.xa_index, bit) > max~find_next_zero_bit(&tmp, BITS_PER_XA_VALUE, bit);<NL>                        if id_of(xas.xa_index, bit) >= max
+copy_word~(*b).bitmap[0] = tmp[0];~(*b).bitmap[0] = 0;
+err_clear~(*b).bitmap[0] = 0;<NL>                        break~(*b).bitmap[0] = 1;<NL>                        break
+bitfull_cont~if bit == IDA_BITMAP_BITS {<NL>                        continue 'next;~if bit == IDA_BITMAP_BITS {<NL>                        break 'next Exit::NoSpc;
+setbit_word~(*b).bitmap[(bit / 64) as usize] |= (1 as c_ulong) << (bit % 64);<NL>                    if bitmap_full~(*b).bitmap[(bit / 64) as usize] |= (1 as c_ulong) << (bit % 63);<NL>                    if bitmap_full
+newval~bitmap = xa_mk_value((1 as c_ulong) << bit);~bitmap = xa_mk_value((1 as c_ulong) << (bit + 1));
+newbm_set~(*b).bitmap[(bit / 64) as usize] |= (1 as c_ulong) << (bit % 64);<NL>                        bitmap = b~(*b).bitmap[(bit / 64) as usize] |= (1 as c_ulong) << (bit % 64) << 1;<NL>                        bitmap = b
+nomem_retry~xas.xa_index = (min / IDA_BITMAP_BITS) as c_ulong;<NL>                        bit = min % IDA_BITMAP_BITS;~bit = min % IDA_BITMAP_BITS;
+free_alloc~if bitmap != alloc as *mut c_void {~if bitmap == alloc as *mut c_void {
+ret_id~return (id_of(xas.xa_index, bit)) as c_int;~return (id_of(xas.xa_index, bit + 1)) as c_int;
+alloc_enomem~return -ENOMEM;~return -ENOMEM + 1;
+alloc_bit~xas_set(&mut xas, (min / IDA_BITMAP_BITS) as c_ulong);<NL>                    bit = min % IDA_BITMAP_BITS;~xas_set(&mut xas, (min / IDA_BITMAP_BITS) as c_ulong);
+nospc_free~rust_ida_kfree(alloc as *mut c_void);<NL>                    return -ENOSPC;~return -ENOSPC;
+ff_neg~return -EINVAL;~return -EINVAL + 1;
+ff_offset~if index > (min / IDA_BITMAP_BITS) as c_ulong {<NL>            offset = 0;~if index >= (min / IDA_BITMAP_BITS) as c_ulong {<NL>            offset = 0;
+ff_max~if id_of(index, offset) > max as c_ulong {~if id_of(index, offset) >= max as c_ulong {
+ff_size~(&tmp, BITS_PER_XA_VALUE)~(&tmp, BITS_PER_XA_VALUE + 1)
+ff_end~if bit == size || id_of(index, bit) > max as c_ulong~if bit == size || id_of(index, bit) >= max as c_ulong
+free_neg~if (id as i32) < 0 {<NL>            return;~if (id as i32) <= 0 {<NL>            return;
+free_vbit~if bit >= BITS_PER_XA_VALUE {<NL>                ok = false;~if bit > BITS_PER_XA_VALUE {<NL>                ok = false;
+free_vtest~} else if v & ((1 as c_ulong) << bit) == 0 {~} else if v & ((1 as c_ulong) << bit) != 0 {
+free_vzero~if v == 0 {<NL>                    xas_store~if v == 1 {<NL>                    xas_store
+free_empty~if bitmap_empty(&*b) {~if bitmap_empty(&*b) && false {
+free_kfree~rust_ida_kfree(b as *mut c_void);<NL>                    xas_store(&mut xas, null_mut());~xas_store(&mut xas, null_mut());
+free_warn~if !ok {~if ok {
+free_clear~&= !((1 as c_ulong) << (bit % 64));~|= (1 as c_ulong) << (bit % 64);
+destroy_next~bitmap = rust_ida_xas_next_entry(&mut xas, c_ulong::MAX);~bitmap = rust_ida_xas_next_entry(&mut xas, 0);
+destroy_free~if !xa_is_value(bitmap) {<NL>                rust_ida_kfree(bitmap);~if !xa_is_value(bitmap) {
+destroy_store~xas_store(&mut xas, null_mut());<NL>            bitmap = rust_ida_xas_next_entry~bitmap = rust_ida_xas_next_entry

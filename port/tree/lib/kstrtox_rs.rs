@@ -167,7 +167,7 @@ pub unsafe extern "C" fn _parse_integer_limit(
     let mut i = 0usize;
 
     while max_chars > 0 {
-        max_chars -= 1;
+        max_chars = max_chars.wrapping_sub(1);
         // SAFETY: the loop only continues past a byte that was itself a
         // valid digit, which guarantees it was not the NUL terminator, so
         // the next byte is in bounds of the caller's NUL-terminated string.
@@ -175,9 +175,9 @@ pub unsafe extern "C" fn _parse_integer_limit(
         let lc = ascii_tolower(c);
 
         let val: u32 = if c.is_ascii_digit() {
-            (c - b'0') as u32
+            (c.wrapping_sub(b'0')) as u32
         } else if (b'a'..=b'f').contains(&lc) {
-            (lc - b'a') as u32 + 10
+            ((lc.wrapping_sub(b'a')) as u32).wrapping_add(10)
         } else {
             break;
         };
@@ -189,13 +189,13 @@ pub unsafe extern "C" fn _parse_integer_limit(
         if res & (!0u64 << 60) != 0 {
             // div_u64(u64, u32) is plain division at BITS_PER_LONG == 64;
             // see the module doc comment.
-            if res > (u64::MAX - val as u64) / base as u64 {
+            if res > (u64::MAX.wrapping_sub(val as u64)) / base as u64 {
                 rv |= KSTRTOX_OVERFLOW;
             }
         }
         res = res.wrapping_mul(base as u64).wrapping_add(val as u64);
-        rv += 1;
-        i += 1;
+        rv = rv.wrapping_add(1);
+        i = i.wrapping_add(1);
     }
 
     // SAFETY: caller guarantees `p` is valid.

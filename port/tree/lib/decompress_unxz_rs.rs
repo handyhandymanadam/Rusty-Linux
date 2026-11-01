@@ -119,7 +119,8 @@ extern "C" {
 /// `unxz()`, `lib/decompress_unxz.c`. The dispatcher's `.decompressor`
 /// entry for the `"xz"` magic (`\xfd7zXZ`).
 #[no_mangle]
-#[link_section = ".init.text"]
+// `boot_stub`: the x86 boot stub's linker script has no .init.text (arch/x86/boot/compressed/Makefile).
+#[cfg_attr(not(boot_stub), link_section = ".init.text")]
 pub unsafe extern "C" fn unxz(
     in_: *mut u8,
     in_size_param: c_long,

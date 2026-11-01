@@ -61,7 +61,7 @@ cc -o "$out/t" "$out/drv.o" "$out/c_oracle.o" "$out"/entropy_common.o \
 # review (finding B): an earlier version had an absolute path into this
 # worktree specifically, guarded by a bare `except OSError: pass`, so on any
 # other machine the corpus silently shrank from 7 plaintexts to 6 and the
-# harness reported success anyway (PRIOR-ART.md §3's stale-input-set class,
+# harness reported success anyway (notes/PRIOR-ART.md §3's stale-input-set class,
 # self-inflicted). A corpus that quietly gets smaller must fail loudly
 # instead, the way rig/init distinguishes ABSENT from PASS.
 gen="$out/gen"; mkdir -p "$gen"

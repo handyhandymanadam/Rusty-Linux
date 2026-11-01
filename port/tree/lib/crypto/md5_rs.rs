@@ -252,7 +252,7 @@ unsafe fn md5_blocks(state: &mut Md5BlockState, data: *const u8, nblocks: usize)
         md5_block_generic(state, block);
         // SAFETY: one block consumed; still within the caller's bound.
         data = unsafe { data.add(BLOCK_SIZE) };
-        nblocks -= 1;
+        nblocks = nblocks.wrapping_sub(1);
         if nblocks == 0 {
             break;
         }
@@ -332,9 +332,9 @@ pub unsafe extern "C" fn md5_update(ctx: *mut Md5Ctx, data: *const u8, len: usiz
     let mut data = data;
     let mut len = len;
 
-    if partial + len >= BLOCK_SIZE {
+    if partial.wrapping_add(len) >= BLOCK_SIZE {
         if partial != 0 {
-            let l = BLOCK_SIZE - partial;
+            let l = BLOCK_SIZE.wrapping_sub(partial);
             // SAFETY: `partial + len >= BLOCK_SIZE` so `l <= len`, and the
             // caller guarantees `len` readable bytes at `data`. `buf` has
             // room for `l` bytes starting at `partial` (`partial + l ==
@@ -347,7 +347,7 @@ pub unsafe extern "C" fn md5_update(ctx: *mut Md5Ctx, data: *const u8, len: usiz
                 )
             };
             data = unsafe { data.add(l) };
-            len -= l;
+            len = len.wrapping_sub(l);
             // SAFETY: `(*ctx).buf` holds one full, just-completed block.
             unsafe { md5_blocks(&mut (*ctx).state, (*ctx).buf.as_ptr(), 1) };
         }
@@ -397,7 +397,7 @@ unsafe fn md5_final_internal(ctx: *mut Md5Ctx, out: *mut u8) {
     // SAFETY: `partial < BLOCK_SIZE`, so this index and the ranges below are
     // in bounds.
     unsafe { (*ctx).buf[partial] = 0x80 };
-    partial += 1;
+    partial = partial.wrapping_add(1);
     if partial > BLOCK_SIZE - 8 {
         // SAFETY: `(*ctx).buf` is a disjoint field of `*ctx`; this reference
         // is dropped at the end of the statement, before `out` (which may
@@ -752,9 +752,22 @@ pub unsafe extern "C" fn hmac_md5_usingrawkey(
     }
 }
 
+// Built-in: `<modname>.<tag>=<value>` (kernel::kabi_modinfo). As a module
+// (CRYPTO_LIB_MD5=m, e.g. arm64 defconfig; never the case on x86-64 where it
+// is =y) modpost wants the UNPREFIXED `license=`/`description=` of the C's
+// MODULE_LICENSE()/MODULE_DESCRIPTION(), else "missing MODULE_LICENSE()".
+#[cfg(not(MODULE))]
 kernel::kabi_modinfo! {
     "md5",
     file = "lib/crypto/md5",
     description = "MD5 and HMAC-MD5 library functions",
     license = "GPL",
 }
+
+#[cfg(MODULE)]
+core::arch::global_asm!(
+    ".section \".modinfo\",\"a\"",
+    ".asciz \"description=MD5 and HMAC-MD5 library functions\"",
+    ".asciz \"license=GPL\"",
+    ".previous",
+);

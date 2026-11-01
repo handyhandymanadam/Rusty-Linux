@@ -1,0 +1,37 @@
+size_limit~if size > 0xffff {~if size >= 0xffff {
+size_limit2~if size > 0xffff {~if size > 0xfffe {
+obj_offset_align~(OFF_NEAR + core::mem::size_of::<Near>() * rust_cr_nr_cpu_ids() as usize + 7) & !7~(OFF_NEAR + core::mem::size_of::<Near>() * rust_cr_nr_cpu_ids() as usize) & !7
+obj_offset_near~(OFF_NEAR + core::mem::size_of::<Near>() * rust_cr_nr_cpu_ids() as usize + 7)~(OFF_NEAR + core::mem::size_of::<Near>() * 2 + 7)
+alloc_size~obj_offset + size as usize * core::mem::size_of::<*mut c_void>()~obj_offset + size as usize
+alloc_null~        if rmap.is_null() {<NL>            return null_mut();~        if false {<NL>            return null_mut();
+alloc_kref~        rust_cr_kref_init(rmap);~
+alloc_obj~(*rmap).obj = (rmap as *mut u8).add(obj_offset) as *mut *mut c_void;~(*rmap).obj = (rmap as *mut u8).add(obj_offset + 8) as *mut *mut c_void;
+alloc_rota~(*near(rmap, cpu)).index = (cpu % size) as u16;~(*near(rmap, cpu)).index = (cpu % (size + 1)) as u16;
+alloc_dist~(*near(rmap, cpu)).dist = CPU_RMAP_DIST_INF;<NL>            cpu = rust_cr_next_possible~(*near(rmap, cpu)).dist = 0;<NL>            cpu = rust_cr_next_possible
+alloc_possible~let mut cpu = rust_cr_next_possible(-1);~let mut cpu = rust_cr_next_online(-1);
+alloc_size_set~(*rmap).size = size as u16;~(*rmap).size = (size as u16).wrapping_sub(1);
+free_idx~        while i < (*rmap).size as c_int {~        while i + 1 < (*rmap).size as c_int {
+free_null~if (*(*rmap).obj.add(i as usize)).is_null() {~if !(*(*rmap).obj.add(i as usize)).is_null() {
+free_ret~        -ENOSPC~        -22
+add_neg~        if index < 0 {<NL>            return index;~        if index < -1 {<NL>            return index;
+add_store~*(*rmap).obj.add(index as usize) = obj;~*(*rmap).obj.add(0) = obj;
+copy_gt~if (*near(rmap, cpu)).dist > dist && (*near(rmap, neigh)).dist <= dist {~if (*near(rmap, cpu)).dist >= dist && (*near(rmap, neigh)).dist <= dist {
+copy_le~if (*near(rmap, cpu)).dist > dist && (*near(rmap, neigh)).dist <= dist {~if (*near(rmap, cpu)).dist > dist && (*near(rmap, neigh)).dist < dist {
+copy_index~(*near(rmap, cpu)).index = (*near(rmap, neigh)).index;~(*near(rmap, cpu)).index = (*near(rmap, cpu)).index;
+copy_dist~                (*near(rmap, cpu)).dist = dist;<NL>                return true;~                return true;
+copy_ret~                return true;~                return false;
+upd_online~let mut cpu = rust_cr_next_online(-1);<NL>        while cpu < nr {~let mut cpu = rust_cr_next_possible(-1);<NL>        while cpu < nr {
+upd_invalidate~            if (*near(rmap, cpu)).index == index {<NL>                (*near(rmap, cpu)).dist = CPU_RMAP_DIST_INF;~            if (*near(rmap, cpu)).index == index {<NL>                (*near(rmap, cpu)).dist = 0;
+upd_index_eq~            if (*near(rmap, cpu)).index == index {~            if (*near(rmap, cpu)).index != index {
+upd_mark~                rust_cr_set_cpu(cpu, update_mask);~
+upd_aff_index~            (*near(rmap, cpu)).index = index;<NL>            (*near(rmap, cpu)).dist = 0;~            (*near(rmap, cpu)).dist = 0;
+upd_aff_dist~            (*near(rmap, cpu)).index = index;<NL>            (*near(rmap, cpu)).dist = 0;~            (*near(rmap, cpu)).index = index;
+upd_node~            rust_cr_or_node(update_mask, cpu);~
+upd_sib~if !cpu_rmap_copy_neigh(rmap, cpu, rust_cr_sibling_mask(cpu), 1)~if !cpu_rmap_copy_neigh(rmap, cpu, rust_cr_sibling_mask(cpu), 2)
+upd_core~&& !cpu_rmap_copy_neigh(rmap, cpu, rust_cr_core_mask(cpu), 2)~&& !cpu_rmap_copy_neigh(rmap, cpu, rust_cr_core_mask(cpu), 1)
+upd_node_dist~cpu_rmap_copy_neigh(rmap, cpu, rust_cr_node_mask(cpu), 3);~cpu_rmap_copy_neigh(rmap, cpu, rust_cr_node_mask(cpu), 2);
+upd_node_skip~                cpu_rmap_copy_neigh(rmap, cpu, rust_cr_node_mask(cpu), 3);~
+upd_chain_and~&& !cpu_rmap_copy_neigh(rmap, cpu, rust_cr_core_mask(cpu), 2)~|| !cpu_rmap_copy_neigh(rmap, cpu, rust_cr_core_mask(cpu), 2)
+upd_loop_mask~        cpu = rust_cr_next(-1, update_mask);~        cpu = rust_cr_next(-1, affinity);
+near_off~const OFF_NEAR: usize = 16;~const OFF_NEAR: usize = 12;
+near_sz~(rmap as *mut u8).add(OFF_NEAR) as *mut Near).add(cpu as usize)~(rmap as *mut u8).add(OFF_NEAR) as *mut Near).add(cpu as usize / 2)

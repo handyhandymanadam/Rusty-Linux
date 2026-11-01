@@ -159,7 +159,12 @@ static CRC32CTABLE_LE: CacheAlignedTable = CacheAlignedTable(build_table_le(CRC3
 #[no_mangle]
 pub unsafe extern "C" fn crc32_le_base(crc: u32, p: *const u8, len: usize) -> u32 {
     // SAFETY: the caller guarantees `len` readable bytes at `p`.
-    let buf = unsafe { core::slice::from_raw_parts(p, len) };
+    // `(NULL, 0)` is legal C and `from_raw_parts` forbids a null pointer.
+    let buf: &[u8] = if len == 0 {
+        &[]
+    } else {
+        unsafe { core::slice::from_raw_parts(p, len) }
+    };
     let mut crc = crc;
     for &b in buf {
         crc = (crc >> 8) ^ CRC32TABLE_LE.0[((crc & 255) ^ b as u32) as usize];
@@ -174,7 +179,12 @@ pub unsafe extern "C" fn crc32_le_base(crc: u32, p: *const u8, len: usize) -> u3
 #[no_mangle]
 pub unsafe extern "C" fn crc32_be_base(crc: u32, p: *const u8, len: usize) -> u32 {
     // SAFETY: the caller guarantees `len` readable bytes at `p`.
-    let buf = unsafe { core::slice::from_raw_parts(p, len) };
+    // `(NULL, 0)` is legal C and `from_raw_parts` forbids a null pointer.
+    let buf: &[u8] = if len == 0 {
+        &[]
+    } else {
+        unsafe { core::slice::from_raw_parts(p, len) }
+    };
     let mut crc = crc;
     for &b in buf {
         crc = (crc << 8) ^ CRC32TABLE_BE.0[((crc >> 24) ^ b as u32) as usize];
@@ -189,7 +199,12 @@ pub unsafe extern "C" fn crc32_be_base(crc: u32, p: *const u8, len: usize) -> u3
 #[no_mangle]
 pub unsafe extern "C" fn crc32c_base(crc: u32, p: *const u8, len: usize) -> u32 {
     // SAFETY: the caller guarantees `len` readable bytes at `p`.
-    let buf = unsafe { core::slice::from_raw_parts(p, len) };
+    // `(NULL, 0)` is legal C and `from_raw_parts` forbids a null pointer.
+    let buf: &[u8] = if len == 0 {
+        &[]
+    } else {
+        unsafe { core::slice::from_raw_parts(p, len) }
+    };
     let mut crc = crc;
     for &b in buf {
         crc = (crc >> 8) ^ CRC32CTABLE_LE.0[((crc & 255) ^ b as u32) as usize];

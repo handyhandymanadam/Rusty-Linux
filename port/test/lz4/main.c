@@ -395,7 +395,7 @@ int main(int argc, char **argv)
 		 * the kernel -- the only in-tree caller,
 		 * drivers/block/zram/backend_lz4.c:82, calls LZ4_loadDict()
 		 * first -- and not this port's problem either way, since
-		 * lz4_compress.c is not ported. Noted in STATUS.md.
+		 * lz4_compress.c is not ported. Noted in notes/STATUS.md.
 		 */
 		{
 			LZ4_streamDecode_t sda, sdb;

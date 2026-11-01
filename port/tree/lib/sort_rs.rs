@@ -65,7 +65,7 @@ unsafe fn swap_words_64(a: *mut u8, b: *mut u8, n: usize) {
     // range, and the loop stops at zero.
     unsafe {
         loop {
-            n -= 8;
+            n = n.wrapping_sub(8);
             let pa = a.add(n) as *mut u64;
             let pb = b.add(n) as *mut u64;
             let t = pa.read_unaligned();
@@ -89,7 +89,7 @@ unsafe fn swap_words_32(a: *mut u8, b: *mut u8, n: usize) {
     // SAFETY: as above, in 4-byte steps.
     unsafe {
         loop {
-            n -= 4;
+            n = n.wrapping_sub(4);
             let pa = a.add(n) as *mut u32;
             let pb = b.add(n) as *mut u32;
             let t = pa.read_unaligned();
@@ -113,7 +113,7 @@ unsafe fn swap_bytes(a: *mut u8, b: *mut u8, n: usize) {
     // SAFETY: as above, one byte at a time.
     unsafe {
         loop {
-            n -= 1;
+            n = n.wrapping_sub(1);
             let t = a.add(n).read();
 
             a.add(n).write(b.add(n).read());
@@ -195,9 +195,9 @@ unsafe fn do_cmp(a: *const u8, b: *const u8, cmp_func: *const c_void, priv_: *co
 /// unpredictable.
 #[inline]
 fn parent(i: usize, lsbit: usize, size: usize) -> usize {
-    let mut i = i - size;
+    let mut i = i.wrapping_sub(size);
 
-    i -= size & (i & lsbit).wrapping_neg();
+    i = i.wrapping_sub(size & (i & lsbit).wrapping_neg());
     i / 2
 }
 
@@ -216,7 +216,7 @@ fn is_aligned(base: *const u8, size: usize, align: usize, efficient_unaligned: b
     if !efficient_unaligned {
         lsbits |= base as usize as u8;
     }
-    (lsbits as usize & (align - 1)) == 0
+    (lsbits as usize & (align.wrapping_sub(1))) == 0
 }
 
 extern "C" {
@@ -246,8 +246,8 @@ pub unsafe extern "C" fn rust_sort_r(
     let base = base as *mut u8;
 
     // Pre-scaled byte counters, as in the C.
-    let mut n = num * size;
-    let mut a = (num / 2) * size;
+    let mut n = num.wrapping_mul(size);
+    let mut a = (num / 2).wrapping_mul(size);
     let lsbit = size & size.wrapping_neg();
     let mut shift = 0usize;
 
@@ -291,14 +291,14 @@ pub unsafe extern "C" fn rust_sort_r(
         loop {
             if a != 0 {
                 // Building the heap: sift down a.
-                a -= size << shift;
-            } else if n > 3 * size {
+                a = a.wrapping_sub(size.wrapping_shl(shift as u32));
+            } else if n > 3usize.wrapping_mul(size) {
                 // Sorting: extract the two largest elements.
-                n -= size;
+                n = n.wrapping_sub(size);
                 do_swap(base, base.add(n), size, swap_func, priv_);
-                shift = (do_cmp(base.add(size), base.add(2 * size), cmp_func, priv_) <= 0) as usize;
-                a = size << shift;
-                n -= size;
+                shift = (do_cmp(base.add(size), base.add(2usize.wrapping_mul(size)), cmp_func, priv_) <= 0) as usize;
+                a = size.wrapping_shl(shift as u32);
+                n = n.wrapping_sub(size);
                 do_swap(base.add(a), base.add(n), size, swap_func, priv_);
             } else {
                 // Sort complete.
@@ -315,8 +315,8 @@ pub unsafe extern "C" fn rust_sort_r(
             let d;
 
             loop {
-                let cc = 2 * b + size;
-                let dd = cc + size;
+                let cc = (2usize.wrapping_mul(b)).wrapping_add(size);
+                let dd = cc.wrapping_add(size);
 
                 if dd >= n {
                     c = cc;
@@ -346,9 +346,9 @@ pub unsafe extern "C" fn rust_sort_r(
             }
         }
 
-        n -= size;
+        n = n.wrapping_sub(size);
         do_swap(base, base.add(n), size, swap_func, priv_);
-        if n == size * 2 && do_cmp(base, base.add(size), cmp_func, priv_) > 0 {
+        if n == size.wrapping_mul(2) && do_cmp(base, base.add(size), cmp_func, priv_) > 0 {
             do_swap(base, base.add(size), size, swap_func, priv_);
         }
     }

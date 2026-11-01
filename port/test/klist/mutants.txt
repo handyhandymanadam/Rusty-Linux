@@ -1,0 +1,38 @@
+dead_mask~const KNODE_KLIST_MASK: c_ulong = !KNODE_DEAD;~const KNODE_KLIST_MASK: c_ulong = !0;
+dead_bit~const KNODE_DEAD: c_ulong = 1;~const KNODE_DEAD: c_ulong = 2;
+node_off~const OFF_N_NODE: usize = 8;~const OFF_N_NODE: usize = 16;
+dead_test~unsafe { *n_klist(n) & KNODE_DEAD != 0 }~unsafe { *n_klist(n) & KNODE_DEAD == 0 }
+kill~*n_klist(n) |= KNODE_DEAD;~*n_klist(n) |= 0;
+set_klist~*n_klist(n) = k as c_ulong;~*n_klist(n) = (k as c_ulong).wrapping_add(8);
+init_get~if let Some(get) = k_get(k) {<NL>            get(n);~if let Some(get) = k_get(k) {<NL>            let _ = get;
+init_list~rust_kl_init_list_head(n_node(n));~if false { rust_kl_init_list_head(n_node(n)); }
+head_list~rust_kl_list_add(n_node(n), k_list(k));<NL>        rust_kl_unlock(k);<NL>    }<NL>}<NL><NL>/// `klist_add_tail()`.~rust_kl_list_add_tail(n_node(n), k_list(k));<NL>        rust_kl_unlock(k);<NL>    }<NL>}<NL><NL>/// `klist_add_tail()`.
+tail_list~rust_kl_list_add_tail(n_node(n), k_list(k));<NL>        rust_kl_unlock(k);<NL>    }<NL>}<NL><NL>/// `klist_add_behind()`.~rust_kl_list_add(n_node(n), k_list(k));<NL>        rust_kl_unlock(k);<NL>    }<NL>}<NL><NL>/// `klist_add_behind()`.
+behind_list~rust_kl_list_add(n_node(n), n_node(pos));~rust_kl_list_add_tail(n_node(n), n_node(pos));
+before_list~rust_kl_list_add_tail(n_node(n), n_node(pos));~rust_kl_list_add(n_node(n), n_node(pos));
+behind_klist~let k = knode_klist(pos);<NL>        klist_node_init(k, n);<NL>        rust_kl_lock(k);<NL>        rust_kl_list_add(~let k = knode_klist(n);<NL>        klist_node_init(k, n);<NL>        rust_kl_lock(k);<NL>        rust_kl_list_add(
+release_del~rust_kl_list_del(n_node(n));<NL>        rust_kl_remove_lock();~rust_kl_remove_lock();
+release_match~if (*waiter).node == n {~if (*waiter).node != n {
+release_woken~(*waiter).woken = 1;~(*waiter).woken = 0;
+release_wake~rust_kl_wake_up_process((*waiter).process);~if false { rust_kl_wake_up_process((*waiter).process); }
+release_waiter_del~rust_kl_list_del(pos);<NL>                (*waiter).woken~(*waiter).woken
+release_clear~knode_set_klist(n, null_mut());<NL>    }<NL>}<NL><NL>/// `klist_dec_and_del~knode_set_klist(n, n);<NL>    }<NL>}<NL><NL>/// `klist_dec_and_del
+dec_ret~            klist_release(n);<NL>            return true;~            klist_release(n);<NL>            return false;
+put_kill~if kill {<NL>            knode_kill(n);~if !kill {<NL>            knode_kill(n);
+put_put~if !klist_dec_and_del(n) {<NL>            put = None;~if klist_dec_and_del(n) {<NL>            put = None;
+put_call~if let Some(put) = put {<NL>            put(n);~if let Some(put) = put {<NL>            let _ = put;
+del_kill~unsafe { klist_put(n, true) }~unsafe { klist_put(n, false) }
+attached~(*n_klist(n) != 0) as c_int~(*n_klist(n) & KNODE_KLIST_MASK != 0) as c_int
+iter_getz~rust_kl_kref_get_unless_zero(n) {~(rust_kl_kref_get_unless_zero(n) || true) {
+iter_exit_kill~klist_put(*i_cur, false);~klist_put(*i_cur, true);
+iter_exit_clear~*i_cur = null_mut();<NL>        }<NL>    }<NL>}<NL><NL>/// `klist_prev~}<NL>    }<NL>}<NL><NL>/// `klist_prev
+step_dead~if !knode_dead(step) {~if knode_dead(step) {
+step_get~rust_kl_kref_get(step);~if false { rust_kl_kref_get(step); }
+step_dir_last~step = to_klist_node(if forward { (*l).next } else { (*l).prev });<NL>            if !klist_dec_and_del(last)~step = to_klist_node(if forward { (*l).prev } else { (*l).next });<NL>            if !klist_dec_and_del(last)
+step_dir_head~step = to_klist_node(if forward { (*head).next } else { (*head).prev });~step = to_klist_node(if forward { (*head).prev } else { (*head).next });
+step_dir_skip~let l = n_node(step);<NL>            step = to_klist_node(if forward { (*l).next } else { (*l).prev });<NL>        }~let l = n_node(step);<NL>            step = to_klist_node(if forward { (*l).prev } else { (*l).next });<NL>        }
+step_put_none~            if !klist_dec_and_del(last) {<NL>                put = None;~            if klist_dec_and_del(last) {<NL>                put = None;
+step_put_call~if let Some(put) = put {<NL>            if !last.is_null() {<NL>                put(last);~if let Some(put) = put {<NL>            if last.is_null() {<NL>                put(last);
+step_head_cmp~while n_node(step) != head {~while n_node(step) == head {
+next_fwd~unsafe { klist_step(i, true) }~unsafe { klist_step(i, false) }
+prev_fwd~unsafe { klist_step(i, false) }~unsafe { klist_step(i, true) }

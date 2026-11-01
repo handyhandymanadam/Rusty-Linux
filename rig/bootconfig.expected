@@ -1,0 +1,12 @@
+kernel.rusty_bc_probe = "1"
+kernel.rusty_bc_two = "a b"
+kernel.rusty_bc_three = "x", "y z", "w"
+init.rusty_init_arg = "on"
+feature.alpha.beta = "1"
+feature.alpha.gamma = "3"
+feature.list = "a", "b", "c"
+feature.delta = "d"
+feature.epsilon = ""
+feature.zeta.eta = "quoted ; value"
+# Parameters from bootloader:
+# console=ttyS0 panic=-1 loglevel=7 bootconfig

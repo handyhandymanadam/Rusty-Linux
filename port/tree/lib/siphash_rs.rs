@@ -246,11 +246,16 @@ pub unsafe extern "C" fn __siphash_unaligned(data: *const c_void, len: usize, ke
 
 // `__siphash_aligned` and `__hsiphash_aligned` exist only where an unaligned
 // word load is expensive; x86-64 sets CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS
-// and so has neither symbol. Carried so the file is complete, and NOT BUILT
-// OR TESTED HERE -- see logs/build-limits.md and SCOPE.md §3a.
+// and so has neither symbol. Built and booted on riscv64 (no efficient unaligned
+// access in that config; logs/riscv64.md). It was a kabi_rule! placeholder with no
+// EXPORT before that: the symbols were missing from the ported build.
 #[cfg(not(CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS))]
-kernel::kabi_rule!("type_string", "__siphash_aligned",
-    "subprogram ( formal_parameter pointer_type { const_type { base_type void } } data , formal_parameter t#size_t len , formal_parameter pointer_type { const_type { t#siphash_key_t } } key ) -> t#u64");
+kernel::kabi_export! {
+    __siphash_aligned,
+    license = "",
+    namespace = "",
+    contract = "subprogram ( formal_parameter pointer_type { const_type { base_type void } } data , formal_parameter t#size_t len , formal_parameter pointer_type { const_type { t#siphash_key_t } } key ) -> t#u64",
+}
 
 /// Body of `__siphash_aligned()`. The C's aligned arm differs only in using
 /// an aligned load; an unaligned load is correct for an aligned pointer, so
@@ -296,8 +301,12 @@ pub unsafe extern "C" fn __hsiphash_unaligned(data: *const c_void, len: usize, k
 }
 
 #[cfg(not(CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS))]
-kernel::kabi_rule!("type_string", "__hsiphash_aligned",
-    "subprogram ( formal_parameter pointer_type { const_type { base_type void } } data , formal_parameter t#size_t len , formal_parameter pointer_type { const_type { t#hsiphash_key_t } } key ) -> t#u32");
+kernel::kabi_export! {
+    __hsiphash_aligned,
+    license = "",
+    namespace = "",
+    contract = "subprogram ( formal_parameter pointer_type { const_type { base_type void } } data , formal_parameter t#size_t len , formal_parameter pointer_type { const_type { t#hsiphash_key_t } } key ) -> t#u32",
+}
 
 /// Body of `__hsiphash_aligned()`. See [`__siphash_aligned`] for why it
 /// shares the unaligned body.

@@ -14,7 +14,7 @@
  * decoder, which is what this project is porting, agrees with an independent
  * implementation and the encoder is the odd one out. The cause is NOT
  * ESTABLISHED; it is a userspace-build question about lz4_compress.c, which
- * this project does not port. Recorded in STATUS.md rather than guessed at.
+ * this project does not port. Recorded in notes/STATUS.md rather than guessed at.
  *
  * Using liblz4 instead is not a compromise for a DECODER differential: the
  * streams now come from outside the tree entirely, which is the same property

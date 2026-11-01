@@ -452,6 +452,7 @@ config GLOB
 
 config LIB_SELFTEST
 	tristate "lib/ self-test on init"
+	select BCH
 	help
 	  A handful of vectors for the top-level lib/ functions that have
 	  been ported to Rust, run from an initcall. It prints
@@ -462,6 +463,19 @@ config LIB_SELFTEST
 	  tens of millions of cases. This answers the one question a
 	  userspace test cannot: whether the Rust ran, in the kernel.
 
+	  Say N unless you are working on the Rust port.
+
+config LIB_STRESS
+	bool "lib/ concurrency stress harness (command-line controlled)"
+	depends on DEBUG_KERNEL && SMP
+	select GENERIC_ALLOCATOR
+	select ASSOCIATIVE_ARRAY
+	select STACKDEPOT
+	select SBITMAP
+	help
+	  kthread-per-CPU stress harness (lib/libstress.c). Does nothing
+	  unless the kernel command line sets libstress.run=<seconds>.
+	  Used with lockdep/KASAN/KCSAN builds (logs/concurrency-tooling.md).
 	  Say N unless you are working on the Rust port.
 
 config GLOB_SELFTEST

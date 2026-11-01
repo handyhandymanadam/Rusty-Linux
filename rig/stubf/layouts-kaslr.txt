@@ -1,0 +1,53 @@
+size struct boot_params | BOOT_PARAMS_SIZE
+const struct boot_params hdr.loadflags | BP_HDR_LOADFLAGS
+const struct boot_params hdr.ramdisk_image | BP_HDR_RAMDISK_IMAGE
+const struct boot_params hdr.ramdisk_size | BP_HDR_RAMDISK_SIZE
+const struct boot_params hdr.setup_data | BP_HDR_SETUP_DATA
+const struct boot_params hdr.init_size | BP_HDR_INIT_SIZE
+const struct boot_params ext_ramdisk_image | BP_EXT_RAMDISK_IMAGE
+const struct boot_params ext_ramdisk_size | BP_EXT_RAMDISK_SIZE
+const struct boot_params efi_info | BP_EFI_INFO
+const struct boot_params e820_entries | BP_E820_ENTRIES
+const struct boot_params e820_table | BP_E820_TABLE
+const struct efi_info efi_loader_signature | EI_LOADER_SIGNATURE
+const struct efi_info efi_memdesc_size | EI_MEMDESC_SIZE
+const struct efi_info efi_memmap | EI_MEMMAP
+const struct efi_info efi_memmap_size | EI_MEMMAP_SIZE
+const struct efi_info efi_memmap_hi | EI_MEMMAP_HI
+size struct boot_e820_entry | E820_ENTRY_SIZE
+const struct boot_e820_entry addr | E820_ADDR
+const struct boot_e820_entry size | E820_SIZE
+const struct boot_e820_entry type | E820_TYPE
+size struct setup_data | SETUP_DATA_SIZE
+const struct setup_data next | SD_NEXT
+const struct setup_data type | SD_TYPE
+const struct setup_data len | SD_LEN
+const struct setup_data data | SD_DATA
+const struct setup_indirect type | SI_TYPE
+const struct setup_indirect len | SI_LEN
+const struct setup_indirect addr | SI_ADDR
+const struct kho_data scratch_addr | KHO_SCRATCH_ADDR
+const struct kho_data scratch_size | KHO_SCRATCH_SIZE
+size struct kho_scratch | KHO_SCRATCH_STRUCT_SIZE
+const struct kho_scratch size | KS_SIZE
+size efi_memory_desc_t | EFI_MD_SIZE
+const efi_memory_desc_t type | EFI_MD_TYPE
+const efi_memory_desc_t phys_addr | EFI_MD_PHYS_ADDR
+const efi_memory_desc_t num_pages | EFI_MD_NUM_PAGES
+const efi_memory_desc_t attribute | EFI_MD_ATTRIBUTE
+val PUD_SHIFT | PUD_SHIFT
+val PUD_SIZE | PUD_SIZE
+val KASLR_FLAG | KASLR_FLAG
+val (unsigned)SETUP_INDIRECT | SETUP_INDIRECT
+val SETUP_KEXEC_KHO | SETUP_KEXEC_KHO
+val E820_TYPE_RAM | E820_TYPE_RAM
+val EFI_CONVENTIONAL_MEMORY | EFI_CONVENTIONAL_MEMORY
+val EFI_UNACCEPTED_MEMORY | EFI_UNACCEPTED_MEMORY
+val EFI_MEMORY_MORE_RELIABLE | EFI_MEMORY_MORE_RELIABLE
+val EFI_MEMORY_SP | EFI_MEMORY_SP
+val EFI_PAGE_SHIFT | EFI_PAGE_SHIFT
+val X86_FEATURE_TSC | X86_FEATURE_TSC as u64
+val X86_FEATURE_RDRAND | X86_FEATURE_RDRAND as u64
+val RDRAND_RETRY_LOOPS | RDRAND_RETRY_LOOPS as u64
+val EINVAL | EINVAL as u64
+val sizeof(struct boot_params) == 4096 | 1

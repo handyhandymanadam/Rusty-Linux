@@ -1,0 +1,749 @@
+// SPDX-License-Identifier: GPL-2.0
+//! Rust replacement for parse_elf() and handle_relocations() of arch/x86/boot/compressed/misc.c
+//! (both `static` there, exported here under the same names so the C caller, decompress_kernel(),
+//! is unchanged). The rest of misc.c stays C.
+//!
+//! Built only for the 64-bit stub: the Elf64 arms are ported; the Elf32 / 32-bit arms (Elf32_Ehdr,
+//! the 32-bit-only relocation behaviour of `delta`) are not ported (the 32-bit stub stays C).
+//! Text of every message is the C's. Preprocessor switches arrive as cfgs: `need_relocs`
+//! (CONFIG_X86_NEED_RELOCS), `relocatable` (CONFIG_RELOCATABLE), `verbose_bootup` (debug_putstr()
+//! prints only then). Preprocessor values come from misc_cfg.c as exported consts.
+
+use core::ffi::{c_char, c_int, c_long, c_uint, c_ulong, c_void};
+use core::mem::{offset_of, size_of, MaybeUninit};
+
+/// `Elf64_Ehdr` (include/uapi/linux/elf.h).
+#[repr(C)]
+struct Elf64Ehdr {
+    e_ident: [u8; 16],
+    e_type: u16,
+    e_machine: u16,
+    e_version: u32,
+    e_entry: u64,
+    e_phoff: u64,
+    e_shoff: u64,
+    e_flags: u32,
+    e_ehsize: u16,
+    e_phentsize: u16,
+    e_phnum: u16,
+    e_shentsize: u16,
+    e_shnum: u16,
+    e_shstrndx: u16,
+}
+
+/// `Elf64_Phdr` (include/uapi/linux/elf.h).
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct Elf64Phdr {
+    p_type: u32,
+    p_flags: u32,
+    p_offset: u64,
+    p_vaddr: u64,
+    p_paddr: u64,
+    p_filesz: u64,
+    p_memsz: u64,
+    p_align: u64,
+}
+
+const _: () = assert!(size_of::<Elf64Ehdr>() == 64);
+const _: () = assert!(offset_of!(Elf64Ehdr, e_ident) == 0);
+const _: () = assert!(offset_of!(Elf64Ehdr, e_type) == 16);
+const _: () = assert!(offset_of!(Elf64Ehdr, e_machine) == 18);
+const _: () = assert!(offset_of!(Elf64Ehdr, e_version) == 20);
+const _: () = assert!(offset_of!(Elf64Ehdr, e_entry) == 24);
+const _: () = assert!(offset_of!(Elf64Ehdr, e_phoff) == 32);
+const _: () = assert!(offset_of!(Elf64Ehdr, e_shoff) == 40);
+const _: () = assert!(offset_of!(Elf64Ehdr, e_flags) == 48);
+const _: () = assert!(offset_of!(Elf64Ehdr, e_ehsize) == 52);
+const _: () = assert!(offset_of!(Elf64Ehdr, e_phentsize) == 54);
+const _: () = assert!(offset_of!(Elf64Ehdr, e_phnum) == 56);
+const _: () = assert!(offset_of!(Elf64Ehdr, e_shentsize) == 58);
+const _: () = assert!(offset_of!(Elf64Ehdr, e_shnum) == 60);
+const _: () = assert!(offset_of!(Elf64Ehdr, e_shstrndx) == 62);
+const _: () = assert!(size_of::<Elf64Phdr>() == 56);
+const _: () = assert!(offset_of!(Elf64Phdr, p_type) == 0);
+const _: () = assert!(offset_of!(Elf64Phdr, p_flags) == 4);
+const _: () = assert!(offset_of!(Elf64Phdr, p_offset) == 8);
+const _: () = assert!(offset_of!(Elf64Phdr, p_vaddr) == 16);
+const _: () = assert!(offset_of!(Elf64Phdr, p_paddr) == 24);
+const _: () = assert!(offset_of!(Elf64Phdr, p_filesz) == 32);
+const _: () = assert!(offset_of!(Elf64Phdr, p_memsz) == 40);
+const _: () = assert!(offset_of!(Elf64Phdr, p_align) == 48);
+
+const PT_LOAD: u32 = 1;
+
+/// `struct port_io_ops` of arch/x86/boot/io.h.
+#[repr(C)]
+struct PortIoOps {
+    f_inb: Option<unsafe extern "C" fn(u16) -> u8>,
+    f_outb: Option<unsafe extern "C" fn(u8, u16)>,
+    f_outw: Option<unsafe extern "C" fn(u16, u16)>,
+}
+
+/// struct boot_params.screen_info (offset 0x000, include/uapi/linux/screen_info.h): orig_x at 0, orig_y at 1 (both __u8).
+const SCREEN_INFO_ORIG_X: usize = 0;
+const SCREEN_INFO_ORIG_Y: usize = 1;
+const _: () = assert!(SCREEN_INFO_ORIG_Y == SCREEN_INFO_ORIG_X + 1);
+
+const XMTRDY: u8 = 0x20;
+const TXR: c_int = 0; // Transmit register (WRITE)
+const LSR: c_int = 5; // Line Status
+
+// These might be accessed before .bss is cleared, so use .data instead. Written by the C extract_kernel().
+#[no_mangle]
+#[link_section = ".data"]
+pub static mut misc_lines: c_int = 0;
+#[no_mangle]
+#[link_section = ".data"]
+pub static mut misc_cols: c_int = 0;
+#[no_mangle]
+#[link_section = ".data"]
+pub static mut misc_vidmem: *mut c_char = core::ptr::null_mut();
+#[no_mangle]
+#[link_section = ".data"]
+pub static mut misc_vidport: c_int = 0;
+
+extern "C" {
+    /// misc_cfg.c: LOAD_PHYSICAL_ADDR
+    static misc_load_physical_addr: c_ulong;
+    /// misc_cfg.c: __START_KERNEL_map
+    #[cfg(need_relocs)]
+    static misc_start_kernel_map: c_ulong;
+    /// misc_cfg.c: VO___bss_start - VO__text
+    #[cfg(need_relocs)]
+    static misc_text_to_bss_start: c_ulong;
+
+    /// struct boot_params *boot_params_ptr (misc.c); only screen_info (offset 0) is touched here.
+    static mut boot_params_ptr: *mut c_void;
+    /// arch/x86/boot/io.h: callbacks behind inb()/outb() (TDX guests replace them).
+    static mut pio_ops: PortIoOps;
+
+    /// misc.c globals: `memptr` is `long`.
+    static mut free_mem_ptr: c_long;
+    static mut free_mem_end_ptr: c_long;
+    static spurious_nmi_count: c_int;
+    /// misc.c: `static u8 boot_heap[BOOT_HEAP_SIZE]` (made a non-static global); only its address is used.
+    static mut boot_heap: u8;
+    /// misc.c: `unsigned int output_len` (generated by mkpiggy) and `const unsigned long kernel_total_size`.
+    #[link_name = "output_len"]
+    static OUTPUT_LEN: c_uint;
+    static kernel_total_size: c_ulong;
+    #[cfg(any(verbose_bootup, randomize_base))]
+    static input_data: [u8; 0];
+    #[cfg(any(verbose_bootup, randomize_base))]
+    static input_len: c_uint;
+    #[cfg(verbose_bootup)]
+    static trampoline_32bit: *mut c_ulong;
+    /// misc_cfg.c: BOOT_HEAP_SIZE, MIN_KERNEL_ALIGN, KERNEL_IMAGE_SIZE
+    static misc_boot_heap_size: c_ulong;
+    static misc_min_kernel_align: c_ulong;
+    static misc_kernel_image_size: c_ulong;
+
+    fn cmdline_find_option_bool(option: *const c_char) -> c_int;
+    /// pgtable_64_rs.rs: sanitize_boot_params() of bootparam_utils.h
+    fn misc_sanitize_boot_params(bp: *mut u8);
+    fn rust_preboot_probe(seed: c_uint) -> c_uint;
+    fn decompress_kernel(outbuf: *mut u8, virt_addr: c_ulong, error: unsafe extern "C" fn(*mut c_char)) -> c_ulong;
+    fn cleanup_exception_handling();
+    #[cfg(tdx_guest)]
+    fn early_tdx_detect();
+    #[cfg(amd_mem_encrypt)]
+    static sev_status: u64;
+    #[cfg(early_printk)]
+    fn console_init();
+    #[cfg(acpi)]
+    fn get_rsdp_addr() -> u64;
+    #[cfg(randomize_base)]
+    fn choose_random_location(input: c_ulong, input_size: c_ulong, output: *mut c_ulong, output_size: c_ulong, virt_addr: *mut c_ulong);
+    #[cfg(unaccepted_memory)]
+    fn init_unaccepted_memory() -> bool;
+    #[cfg(unaccepted_memory)]
+    fn accept_memory(start: u64, size: c_ulong);
+    /// early_serial_console_rs.rs; CONFIG_EARLY_PRINTK only (else the C has `static const int early_serial_base;` == 0).
+    #[cfg(early_printk)]
+    static early_serial_base: c_int;
+    /// error_rs.rs / error.c
+    fn error(m: *mut c_char) -> !;
+    /// misc.c (decompress/mm.h MALLOC_VISIBLE): note the `int` size, as the C.
+    fn malloc(size: c_int) -> *mut c_void;
+    fn free(p: *mut c_void);
+    /// string.c
+    fn memcpy(d: *mut c_void, s: *const c_void, n: usize) -> *mut c_void;
+    fn memmove(d: *mut c_void, s: *const c_void, n: usize) -> *mut c_void;
+}
+
+#[inline(always)]
+unsafe fn inb(port: c_int) -> u8 {
+    // SAFETY: init_default_io_ops() has set f_inb before any output; the C called it unconditionally.
+    unsafe { (pio_ops.f_inb.unwrap_unchecked())(port as u16) }
+}
+
+#[inline(always)]
+unsafe fn outb(v: c_int, port: c_int) {
+    // SAFETY: as inb(), for f_outb. `v` is truncated to u8 and `port` to u16, as the C's parameter types do.
+    unsafe { (pio_ops.f_outb.unwrap_unchecked())(v as u8, port as u16) }
+}
+
+/// `early_serial_base`: the variable under CONFIG_EARLY_PRINTK, the constant 0 otherwise.
+#[inline(always)]
+unsafe fn serial_base() -> c_int {
+    #[cfg(early_printk)]
+    // SAFETY: plain int owned by early_serial_console_rs.rs.
+    return unsafe { early_serial_base };
+    #[cfg(not(early_printk))]
+    return 0;
+}
+
+/// `static void scroll(void)` of misc.c. Same arithmetic: int products, converted to size_t by sign extension.
+unsafe fn scroll() {
+    // SAFETY (whole body): vidmem/lines/cols were set by extract_kernel() before any output; the
+    // memmove()/stores stay inside the VGA text buffer as in the C.
+    unsafe {
+        let (lines, cols, vidmem) = (misc_lines, misc_cols, misc_vidmem);
+        memmove(
+            vidmem as *mut c_void,
+            vidmem.wrapping_offset(cols.wrapping_mul(2) as isize) as *const c_void,
+            lines.wrapping_sub(1).wrapping_mul(cols).wrapping_mul(2) as isize as usize,
+        );
+        let mut i: c_int = lines.wrapping_sub(1).wrapping_mul(cols).wrapping_mul(2);
+        while i < lines.wrapping_mul(cols).wrapping_mul(2) {
+            *vidmem.wrapping_offset(i as isize) = b' ' as c_char;
+            i = i.wrapping_add(2);
+        }
+    }
+}
+
+/// `static void serial_putchar(int ch)` of misc.c.
+unsafe fn serial_putchar(ch: c_int) {
+    let mut timeout: u32 = 0xffff;
+    // SAFETY (whole body): port I/O to the console UART through pio_ops, as the C.
+    unsafe {
+        while (inb(serial_base().wrapping_add(LSR)) & XMTRDY) == 0 && {
+            timeout = timeout.wrapping_sub(1);
+            timeout != 0
+        } {
+            // cpu_relax() == native_pause(): `asm volatile("pause" ::: "memory")`
+            core::arch::asm!("pause", options(nostack));
+        }
+        outb(ch, serial_base().wrapping_add(TXR));
+    }
+}
+
+/// `void __putstr(const char *s)` of misc.c: writes to the early serial port and/or VGA.
+/// Behaviour identical to the C; no difference known.
+///
+/// # Safety
+/// `s` must point to a NUL-terminated string (as for the C).
+#[no_mangle]
+pub unsafe extern "C" fn __putstr(s: *const c_char) {
+    // SAFETY (whole body): `s` is NUL-terminated by contract; boot_params_ptr, vidmem, lines and cols
+    // are set by extract_kernel() before any output; screen_info orig_x/orig_y are bytes 0/1 of boot_params.
+    unsafe {
+        if serial_base() != 0 {
+            let mut str = s;
+            while *str != 0 {
+                if *str == b'\n' as c_char {
+                    serial_putchar(b'\r' as c_int);
+                }
+                serial_putchar(*str as c_int);
+                str = str.add(1);
+            }
+        }
+
+        let (lines, cols) = (misc_lines, misc_cols);
+        if lines == 0 || cols == 0 {
+            return;
+        }
+
+        let bp = boot_params_ptr as *mut u8;
+        let mut x: c_int = *bp.add(SCREEN_INFO_ORIG_X) as c_int;
+        let mut y: c_int = *bp.add(SCREEN_INFO_ORIG_Y) as c_int;
+
+        let mut s = s;
+        loop {
+            let c = *s;
+            s = s.add(1);
+            if c == 0 {
+                break;
+            }
+            if c == b'\n' as c_char {
+                x = 0;
+                y = y.wrapping_add(1);
+                if y >= lines {
+                    scroll();
+                    y = y.wrapping_sub(1);
+                }
+            } else {
+                let idx = x.wrapping_add(cols.wrapping_mul(y)).wrapping_mul(2);
+                *misc_vidmem.wrapping_offset(idx as isize) = c;
+                x = x.wrapping_add(1);
+                if x >= cols {
+                    x = 0;
+                    y = y.wrapping_add(1);
+                    if y >= lines {
+                        scroll();
+                        y = y.wrapping_sub(1);
+                    }
+                }
+            }
+        }
+
+        *bp.add(SCREEN_INFO_ORIG_X) = x as u8;
+        *bp.add(SCREEN_INFO_ORIG_Y) = y as u8;
+
+        let pos: c_int = x.wrapping_add(cols.wrapping_mul(y)).wrapping_mul(2); // Update cursor position
+        let vidport = misc_vidport;
+        outb(14, vidport);
+        outb(0xff & (pos >> 9), vidport.wrapping_add(1));
+        outb(15, vidport);
+        outb(0xff & (pos >> 1), vidport.wrapping_add(1));
+    }
+}
+
+/// `static noinline void __putnum(unsigned long value, unsigned int base, int mindig)` of misc.c.
+#[inline(never)]
+unsafe fn putnum(mut value: c_ulong, base: u32, mut mindig: c_int) {
+    let mut buf = [0 as c_char; 8 * size_of::<c_ulong>() + 1];
+    // SAFETY (whole body): p walks down from one past the end of `buf` by at most 64 digits
+    // (a 64-bit value in base >= 10 needs fewer, and mindig is 16 or 1), as in the C.
+    unsafe {
+        let mut p = buf.as_mut_ptr().add(buf.len());
+        p = p.sub(1);
+        *p = 0;
+
+        while {
+            let more = mindig > 0;
+            mindig = mindig.wrapping_sub(1);
+            more || value != 0
+        } {
+            let mut digit = (value % base as c_ulong) as u8;
+            digit = digit.wrapping_add(if digit >= 10 { b'a' - 10 } else { b'0' });
+            p = p.sub(1);
+            *p = digit as c_char;
+
+            value /= base as c_ulong;
+        }
+
+        __putstr(p);
+    }
+}
+
+/// `void __puthex(unsigned long value)` of misc.c.
+///
+/// # Safety
+/// Console state as for __putstr().
+#[no_mangle]
+pub unsafe extern "C" fn __puthex(value: c_ulong) {
+    // SAFETY: see putnum().
+    unsafe { putnum(value, 16, (size_of::<c_ulong>() * 2) as c_int) }
+}
+
+/// `void __putdec(unsigned long value)` of misc.c.
+///
+/// # Safety
+/// Console state as for __putstr().
+#[no_mangle]
+pub unsafe extern "C" fn __putdec(value: c_ulong) {
+    // SAFETY: see putnum().
+    unsafe { putnum(value, 10, 1) }
+}
+
+/// `debug_putstr()`: a no-op unless the C is built with CONFIG_X86_VERBOSE_BOOTUP.
+#[inline(always)]
+unsafe fn debug_putstr(_s: *const c_char) {
+    #[cfg(verbose_bootup)]
+    // SAFETY: callers pass NUL-terminated literals.
+    unsafe {
+        __putstr(_s)
+    }
+}
+
+/// Pure part of handle_relocations(): the address that table entry `e` designates, `(long)e + map`
+/// (sign-extended, wrapping), or None when it is outside [min_addr, max_addr] (the C's error() case).
+/// Kani-checked (rig/stubg/kani): an accepted address lies in the window, whatever `map`.
+#[cfg(any(need_relocs, kani))]
+#[inline(always)]
+fn reloc_target(e: i32, map: c_ulong, min_addr: c_ulong, max_addr: c_ulong) -> Option<c_ulong> {
+    let ptr = (e as i64 as c_ulong).wrapping_add(map);
+    if ptr < min_addr || ptr > max_addr {
+        None
+    } else {
+        Some(ptr)
+    }
+}
+
+/// `static void handle_relocations(void *output, unsigned long output_len, unsigned long virt_addr)`
+/// of misc.c (CONFIG_X86_NEED_RELOCS), 64-bit arm. Behaviour identical to the C; no difference known.
+///
+/// # Safety
+/// `output` must be the decompressed kernel image of `output_len` bytes with the relocation tables
+/// at its end, as for the C.
+#[cfg(need_relocs)]
+#[no_mangle]
+pub unsafe extern "C" fn handle_relocations(output: *mut c_void, output_len: c_ulong, virt_addr: c_ulong) {
+    let min_addr = output as c_ulong;
+    // SAFETY (whole body): the extern consts are plain data of misc_cfg.c; `reloc` walks the
+    // relocation tables inside `output` back to their zero terminators, exactly as the C does; every
+    // target address is range-checked against [min_addr, max_addr] before it is written, and the
+    // targets may be unaligned (hence read/write_unaligned, as the C's `*(uint32_t *)ptr`).
+    unsafe {
+        let max_addr = min_addr.wrapping_add(misc_text_to_bss_start);
+
+        // Calculate the delta between where vmlinux was linked to load and where it was actually loaded.
+        let mut delta = min_addr.wrapping_sub(misc_load_physical_addr);
+
+        // Adjustment of kernel memory addresses to the self map.
+        let map = delta.wrapping_sub(misc_start_kernel_map);
+
+        // 64-bit relocations are only needed if KASLR chose a different offset.
+        delta = virt_addr.wrapping_sub(misc_load_physical_addr);
+
+        if delta == 0 {
+            debug_putstr(c"No relocation needed... ".as_ptr());
+            return;
+        }
+        debug_putstr(c"Performing relocations... ".as_ptr());
+
+        // 32 bit relocations first, then 64 bit, working backwards from the end of the image.
+        let mut reloc = (output as *mut u8).wrapping_add(output_len as usize).wrapping_sub(size_of::<i32>()) as *mut i32;
+        while reloc.read_unaligned() != 0 {
+            // `long extended = *reloc; extended += map;`
+            let ptr = match reloc_target(reloc.read_unaligned(), map, min_addr, max_addr) {
+                Some(p) => p,
+                None => error(c"32-bit relocation outside of kernel!\n".as_ptr() as *mut c_char),
+            };
+            let p = ptr as *mut u32;
+            p.write_unaligned(p.read_unaligned().wrapping_add(delta as u32));
+            reloc = reloc.wrapping_sub(1);
+        }
+        reloc = reloc.wrapping_sub(1);
+        while reloc.read_unaligned() != 0 {
+            let ptr = match reloc_target(reloc.read_unaligned(), map, min_addr, max_addr) {
+                Some(p) => p,
+                None => error(c"64-bit relocation outside of kernel!\n".as_ptr() as *mut c_char),
+            };
+            let p = ptr as *mut u64;
+            p.write_unaligned(p.read_unaligned().wrapping_add(delta as u64));
+            reloc = reloc.wrapping_sub(1);
+        }
+    }
+}
+
+/// `static size_t parse_elf(void *output)` of misc.c, 64-bit arm: copies each PT_LOAD segment of the
+/// ELF image at `output` to its place and returns the entry offset. Behaviour identical to the C;
+/// no difference known (the phdrs are read with read_unaligned, which is a plain load on x86).
+///
+/// # Safety
+/// `output` must point to a decompressed ELF image, as for the C.
+#[no_mangle]
+pub unsafe extern "C" fn parse_elf(output: *mut c_void) -> usize {
+    let out = output as *mut u8;
+    // SAFETY (whole body): `ehdr` is fully written by memcpy before it is read; the phdr table is
+    // copied into a malloc()ed buffer of exactly e_phnum entries and indexed below e_phnum; the
+    // memmove() source/destination are the image's own segments, as in the C; extern fns are the stub's C.
+    unsafe {
+        let mut ehdr_buf = MaybeUninit::<Elf64Ehdr>::uninit();
+        memcpy(ehdr_buf.as_mut_ptr() as *mut c_void, output, size_of::<Elf64Ehdr>());
+        let ehdr = ehdr_buf.assume_init_ref();
+
+        if ehdr.e_ident[0] != 0x7f || ehdr.e_ident[1] != b'E' || ehdr.e_ident[2] != b'L' || ehdr.e_ident[3] != b'F' {
+            error(c"Kernel is not a valid ELF file".as_ptr() as *mut c_char);
+        }
+
+        debug_putstr(c"Parsing ELF... ".as_ptr());
+
+        let phnum = ehdr.e_phnum as usize;
+        let phdrs = malloc((size_of::<Elf64Phdr>() * phnum) as c_int) as *mut Elf64Phdr;
+        if phdrs.is_null() {
+            error(c"Failed to allocate space for phdrs".as_ptr() as *mut c_char);
+        }
+
+        memcpy(
+            phdrs as *mut c_void,
+            out.wrapping_add(ehdr.e_phoff as usize) as *const c_void,
+            size_of::<Elf64Phdr>() * phnum,
+        );
+
+        let mut i = 0;
+        while i < phnum {
+            let phdr = phdrs.add(i).read_unaligned();
+
+            if phdr.p_type == PT_LOAD {
+                if phdr.p_align % 0x200000 != 0 {
+                    error(c"Alignment of LOAD segment isn't multiple of 2MB".as_ptr() as *mut c_char);
+                }
+                #[cfg(relocatable)]
+                let dest = out.wrapping_add(phdr.p_paddr.wrapping_sub(misc_load_physical_addr) as usize);
+                #[cfg(not(relocatable))]
+                let dest = phdr.p_paddr as usize as *mut u8;
+                memmove(
+                    dest as *mut c_void,
+                    out.wrapping_add(phdr.p_offset as usize) as *const c_void,
+                    phdr.p_filesz as usize,
+                );
+            }
+            // other PT_*: ignored
+            i += 1;
+        }
+
+        free(phdrs as *mut c_void);
+
+        ehdr.e_entry.wrapping_sub(misc_load_physical_addr) as usize
+    }
+}
+
+// struct boot_params field offsets (arch/x86/include/uapi/asm/bootparam.h, screen_info.h)
+const BP_SCREEN_INFO_ORIG_VIDEO_MODE: usize = 0x06; // offsetof(struct boot_params, screen_info.orig_video_mode)
+const BP_SCREEN_INFO_ORIG_VIDEO_COLS: usize = 0x07; // offsetof(struct boot_params, screen_info.orig_video_cols)
+const BP_SCREEN_INFO_ORIG_VIDEO_LINES: usize = 0x0e; // offsetof(struct boot_params, screen_info.orig_video_lines)
+const BP_ACPI_RSDP_ADDR: usize = 0x70; // offsetof(struct boot_params, acpi_rsdp_addr)
+const BP_HDR_LOADFLAGS: usize = 0x211; // offsetof(struct boot_params, hdr.loadflags)
+const BP_HDR_XLOADFLAGS: usize = 0x236; // offsetof(struct boot_params, hdr.xloadflags)
+const KASLR_FLAG: u8 = 1 << 1;
+const XLF_MEM_ENCRYPTION: u16 = 1 << 7;
+#[cfg(amd_mem_encrypt)]
+const MSR_AMD64_SEV_ES_ENABLED: u64 = 1 << 1; // MSR_AMD64_SEV_ES_ENABLED = BIT_ULL(MSR_AMD64_SEV_ES_ENABLED_BIT=1)
+
+/// arch/x86/include/asm/shared/io.h `__inb()`: `inb %w1, %0`.
+unsafe extern "C" fn x86_inb(port: u16) -> u8 {
+    let value: u8;
+    // SAFETY: port input, as the C's inline asm.
+    unsafe { core::arch::asm!("in al, dx", out("al") value, in("dx") port, options(nomem, nostack, preserves_flags)) };
+    value
+}
+
+/// `__outb()`: `outb %0, %w1`.
+unsafe extern "C" fn x86_outb(value: u8, port: u16) {
+    // SAFETY: port output, as the C's inline asm.
+    unsafe { core::arch::asm!("out dx, al", in("al") value, in("dx") port, options(nomem, nostack, preserves_flags)) };
+}
+
+/// `__outw()`: `outw %0, %w1`.
+unsafe extern "C" fn x86_outw(value: u16, port: u16) {
+    // SAFETY: port output, as the C's inline asm.
+    unsafe { core::arch::asm!("out dx, ax", in("ax") value, in("dx") port, options(nomem, nostack, preserves_flags)) };
+}
+
+/// Callback handed to decompress_kernel(): `void (*error)(char *x)` is the C's error().
+unsafe extern "C" fn error_cb(m: *mut c_char) {
+    // SAFETY: `m` is NUL-terminated by the decompressors' contract, as for the C.
+    unsafe { error(m) }
+}
+
+/// `debug_puthex()`: a no-op unless CONFIG_X86_VERBOSE_BOOTUP.
+#[cfg(verbose_bootup)]
+#[inline(always)]
+unsafe fn debug_puthex(v: c_ulong) {
+    // SAFETY: console state is set up by extract_kernel() before use.
+    unsafe { __puthex(v) }
+}
+
+/// `debug_putaddr(x)` of misc.h: `debug_putstr("<x>: 0x"); debug_puthex((unsigned long)(x)); debug_putstr("\n");`
+/// (three __putstr/__puthex calls, the name and ": 0x" being ONE string, as the C's `#x ": 0x"`). CONFIG_X86_VERBOSE_BOOTUP only.
+#[cfg(verbose_bootup)]
+macro_rules! debug_putaddr {
+    ($name:literal, $v:expr) => {
+        // (used inside extract_kernel()'s unsafe block: the string is a NUL-terminated literal, console state is set up)
+        {
+            __putstr(concat!($name, ": 0x\0").as_ptr() as *const c_char);
+            __puthex($v);
+            __putstr(c"\n".as_ptr());
+        }
+    };
+}
+
+/// `asmlinkage __visible void *extract_kernel(void *rmode, unsigned char *output)` of misc.c, with
+/// `static void parse_mem_encrypt(struct setup_header *)` and `static void early_sev_detect(void)`
+/// folded in. 64-bit arms only (the 32-bit `__PAGE_OFFSET` heap check is not ported). Same statement
+/// order and texts as the C. `__pa()` is the identity in the stub (misc.h). The `debug_putaddr(x)`
+/// stringized names are written out. Behaviour identical to the C; no difference known.
+///
+/// # Safety
+/// Called from head_64.S with the boot_params pointer and the decompression output address.
+#[no_mangle]
+pub unsafe extern "C" fn extract_kernel(rmode: *mut c_void, output: *mut u8) -> *mut c_void {
+    // `output` is rewritten through its address by choose_random_location() (CONFIG_RANDOMIZE_BASE only).
+    #[allow(unused_mut)]
+    let mut output = output;
+    #[allow(unused_mut)]
+    let mut virt_addr: c_ulong;
+    // SAFETY (whole body): boot_params_ptr points at the live boot_params (byte offsets above) once
+    // set from rmode; the externs are the stub's C/Rust; statics are written single-threaded.
+    unsafe {
+        virt_addr = misc_load_physical_addr;
+        let heap: c_long = (&raw const boot_heap) as usize as c_long;
+
+        // Retain x86 boot parameters pointer passed from startup_32/64.
+        boot_params_ptr = rmode;
+        let bp = boot_params_ptr as *mut u8;
+
+        // Clear flags intended for solely in-kernel use.
+        *bp.add(BP_HDR_LOADFLAGS) &= !KASLR_FLAG;
+
+        // parse_mem_encrypt(&boot_params_ptr->hdr)
+        let on = cmdline_find_option_bool(c"mem_encrypt=on".as_ptr());
+        let off = cmdline_find_option_bool(c"mem_encrypt=off".as_ptr());
+        if on > off {
+            let xlf = bp.add(BP_HDR_XLOADFLAGS) as *mut u16;
+            xlf.write_unaligned(xlf.read_unaligned() | XLF_MEM_ENCRYPTION);
+        }
+
+        misc_sanitize_boot_params(bp);
+
+        if *bp.add(BP_SCREEN_INFO_ORIG_VIDEO_MODE) == 7 {
+            misc_vidmem = 0xb0000 as *mut c_char;
+            misc_vidport = 0x3b4;
+        } else {
+            misc_vidmem = 0xb8000 as *mut c_char;
+            misc_vidport = 0x3d4;
+        }
+
+        misc_lines = *bp.add(BP_SCREEN_INFO_ORIG_VIDEO_LINES) as c_int;
+        misc_cols = *bp.add(BP_SCREEN_INFO_ORIG_VIDEO_COLS) as c_int;
+
+        // init_default_io_ops()
+        pio_ops.f_inb = Some(x86_inb);
+        pio_ops.f_outb = Some(x86_outb);
+        pio_ops.f_outw = Some(x86_outw);
+
+        // Detect TDX guest environment; before console_init() in order to use paravirtualized port I/O.
+        #[cfg(tdx_guest)]
+        early_tdx_detect();
+
+        // early_sev_detect(): the C's sev_status is the constant 0 without CONFIG_AMD_MEM_ENCRYPT.
+        #[cfg(amd_mem_encrypt)]
+        if sev_status & MSR_AMD64_SEV_ES_ENABLED != 0 {
+            misc_lines = 0;
+            misc_cols = 0;
+        }
+
+        #[cfg(early_printk)]
+        console_init();
+
+        // Save RSDP address for later use (after console_init() so its debug output is collected).
+        #[cfg(acpi)]
+        let rsdp: u64 = get_rsdp_addr();
+        #[cfg(not(acpi))]
+        let rsdp: u64 = 0;
+        (bp.add(BP_ACPI_RSDP_ADDR) as *mut u64).write_unaligned(rsdp);
+
+        debug_putstr(c"early console in extract_kernel\n".as_ptr());
+
+        // Pre-boot Rust probe (CONFIG_RUST; this file is only built then).
+        if rust_preboot_probe(0x5eed) != 0x3074c5e8 {
+            error(c"pre-boot Rust probe returned the wrong value".as_ptr() as *mut c_char);
+        }
+        debug_putstr(c"pre-boot Rust probe OK\n".as_ptr());
+
+        free_mem_ptr = heap; // Heap
+        free_mem_end_ptr = (heap as c_ulong).wrapping_add(misc_boot_heap_size) as c_long;
+
+        // The memory hole needed for the kernel: the larger of the decompressed kernel plus relocation
+        // table, or plus .bss and .brk; rounded up to MIN_KERNEL_ALIGN (PMD pages on x86-64).
+        let mut needed_size: c_ulong = if (OUTPUT_LEN as c_ulong) > kernel_total_size { OUTPUT_LEN as c_ulong } else { kernel_total_size };
+        needed_size = needed_size.wrapping_add(misc_min_kernel_align).wrapping_sub(1) & !misc_min_kernel_align.wrapping_sub(1);
+
+        // Report initial kernel position details.
+        #[cfg(verbose_bootup)]
+        {
+            debug_putaddr!("input_data", (&raw const input_data) as usize as c_ulong);
+            debug_putaddr!("input_len", input_len as c_ulong);
+            debug_putaddr!("output", output as usize as c_ulong);
+            debug_putaddr!("output_len", OUTPUT_LEN as c_ulong);
+            debug_putaddr!("kernel_total_size", kernel_total_size);
+            debug_putaddr!("needed_size", needed_size);
+            // Report address of 32-bit trampoline
+            debug_putaddr!("trampoline_32bit", trampoline_32bit as usize as c_ulong);
+        }
+
+        #[cfg(randomize_base)]
+        choose_random_location(
+            (&raw const input_data) as usize as c_ulong,
+            input_len as c_ulong,
+            (&raw mut output) as *mut c_ulong,
+            needed_size,
+            &mut virt_addr,
+        );
+
+        // Validate memory location choices.
+        if (output as usize as c_ulong) & misc_min_kernel_align.wrapping_sub(1) != 0 {
+            error(c"Destination physical address inappropriately aligned".as_ptr() as *mut c_char);
+        }
+        if virt_addr & misc_min_kernel_align.wrapping_sub(1) != 0 {
+            error(c"Destination virtual address inappropriately aligned".as_ptr() as *mut c_char);
+        }
+        if (heap as c_ulong) > 0x3fffffffffff {
+            error(c"Destination address too large".as_ptr() as *mut c_char);
+        }
+        if virt_addr.wrapping_add(needed_size) > misc_kernel_image_size {
+            error(c"Destination virtual address is beyond the kernel mapping area".as_ptr() as *mut c_char);
+        }
+        #[cfg(not(relocatable))]
+        if virt_addr != misc_load_physical_addr {
+            error(c"Destination virtual address changed when not relocatable".as_ptr() as *mut c_char);
+        }
+
+        debug_putstr(c"\nDecompressing Linux... ".as_ptr());
+
+        #[cfg(unaccepted_memory)]
+        if init_unaccepted_memory() {
+            debug_putstr(c"Accepting memory... ".as_ptr());
+            accept_memory(output as usize as u64, needed_size);
+        }
+
+        let entry_offset: usize = decompress_kernel(output, virt_addr, error_cb) as usize;
+
+        debug_putstr(c"done.\nBooting the kernel (entry_offset: 0x".as_ptr());
+        #[cfg(verbose_bootup)]
+        debug_puthex(entry_offset as c_ulong);
+        debug_putstr(c").\n".as_ptr());
+
+        // Disable exception handling before booting the kernel
+        cleanup_exception_handling();
+
+        if spurious_nmi_count != 0 {
+            __putstr(c"Spurious early NMIs ignored: ".as_ptr());
+            __putdec(spurious_nmi_count as c_ulong);
+            __putstr(c"\n".as_ptr());
+        }
+
+        output.wrapping_add(entry_offset) as *mut c_void
+    }
+}
+
+#[cfg(kani)]
+mod proofs {
+    use super::*;
+
+    /// An accepted relocation target lies in [min_addr, max_addr]; with max_addr = min_addr + K (no wrap) and
+    /// 8 bytes of slack, the 4/8-byte write [ptr, ptr+8) lies inside [min_addr, min_addr + K + 8).
+    #[kani::proof]
+    fn reloc_target_in_window() {
+        let (e, map, min, k): (i32, c_ulong, c_ulong, c_ulong) = (kani::any(), kani::any(), kani::any(), kani::any());
+        kani::assume(min.checked_add(k).and_then(|m| m.checked_add(8)).is_some());
+        if let Some(p) = reloc_target(e, map, min, min + k) {
+            assert!(p >= min && p - min <= k);
+            assert!(p + 8 <= min + k + 8);
+        }
+    }
+
+    /// With the stub's map = (min - LPA) - SKM, whether an entry is accepted does not depend on the load address.
+    #[kani::proof]
+    fn reloc_acceptance_independent_of_load_address() {
+        const LPA: c_ulong = 0x100_0000;
+        const SKM: c_ulong = 0xffff_ffff_8000_0000;
+        let (e, min1, min2, k): (i32, c_ulong, c_ulong, c_ulong) = (kani::any(), kani::any(), kani::any(), kani::any());
+        kani::assume(min1.checked_add(k).is_some() && min2.checked_add(k).is_some());
+        let a = reloc_target(e, min1.wrapping_sub(LPA).wrapping_sub(SKM), min1, min1 + k).is_some();
+        let b = reloc_target(e, min2.wrapping_sub(LPA).wrapping_sub(SKM), min2, min2 + k).is_some();
+        assert!(a == b);
+    }
+
+    /// parse_elf(): the size handed to malloc(int) is `56 * e_phnum`: never negative, never truncated.
+    #[kani::proof]
+    fn phdr_table_size_fits_int() {
+        let n: u16 = kani::any();
+        let bytes = size_of::<Elf64Phdr>() * n as usize;
+        assert!(bytes as c_int >= 0 && bytes as c_int as usize == bytes);
+    }
+}

@@ -1,0 +1,47 @@
+root_lt7~if b < 7 {~if b < 6 {
+root_add~(V[a as u32 as usize] as u32 + 35) >> 6~(V[a as u32 as usize] as u32 + 34) >> 6
+root_b2~b = ((b * 84) >> 8) - 1;~b = ((b * 84) >> 8) - 2;
+root_shift~let shift = a >> (b * 3);~let shift = a >> (b * 3 + 1);
+root_x~let mut x: u32 = ((V[shift as usize] as u32 + 10) << b) >> 6;~let mut x: u32 = ((V[shift as usize] as u32 + 11) << b) >> 6;
+root_newton~x = 2u32.wrapping_mul(x).wrapping_add~x = 3u32.wrapping_mul(x).wrapping_add
+root_div~x.wrapping_sub(1) as u64~x as u64
+root_341~(x.wrapping_mul(341)) >> 10~(x.wrapping_mul(340)) >> 10
+tbl40~217, 219, 221, 222, 224~217, 219, 221, 223, 224
+tbl63~250, 251, 252, 254,~250, 251, 252, 253,
+up_ack~ca.ack_cnt = ca.ack_cnt.wrapping_add(acked); // count~ca.ack_cnt = ca.ack_cnt.wrapping_add(acked + 1); // count
+up_same~if ca.last_cwnd == cwnd && (now.wrapping_sub(ca.last_time) as i32) <= (hz / 32) as i32 {~if ca.last_cwnd == cwnd && (now.wrapping_sub(ca.last_time) as i32) < (hz / 32) as i32 {
+up_hz32~(hz / 32) as i32 {~(hz / 16) as i32 {
+up_signed~(now.wrapping_sub(ca.last_time) as i32) <= (hz / 32) as i32~(now.wrapping_sub(ca.last_time)) <= (hz / 32)
+up_once~if !(ca.epoch_start != 0 && now == ca.last_time) {~if !(ca.epoch_start != 0) {
+up_once2~if !(ca.epoch_start != 0 && now == ca.last_time) {~if !(now == ca.last_time) {
+up_lcwnd~ca.last_cwnd = cwnd;<NL>            ca.last_time = now;~ca.last_time = now;
+up_ltime~ca.last_cwnd = cwnd;<NL>            ca.last_time = now;~ca.last_cwnd = cwnd;
+up_epoch~ca.epoch_start = now; // record beginning~ca.epoch_start = now + 1; // record beginning
+up_ack0~ca.ack_cnt = acked; // start counting~ca.ack_cnt = ca.ack_cnt; // start counting
+up_tcpcwnd~ca.tcp_cwnd = cwnd; // syn with cubic~ca.tcp_cwnd = cwnd + 1; // syn with cubic
+up_k0~ca.bic_k = 0;<NL>                    ca.bic_origin_point = cwnd;~ca.bic_origin_point = cwnd;
+up_origin~ca.bic_origin_point = cwnd;<NL>                } else {~ca.bic_origin_point = cwnd + 1;<NL>                } else {
+up_k~rust_cubic_root(cube_factor.wrapping_mul(ca.last_max_cwnd.wrapping_sub(cwnd) as u64))~rust_cubic_root(cube_factor.wrapping_mul(cwnd.wrapping_sub(ca.last_max_cwnd) as u64))
+up_origin2~ca.bic_origin_point = ca.last_max_cwnd;~ca.bic_origin_point = cwnd;
+up_t_sign~let mut t: u64 = (now.wrapping_sub(ca.epoch_start) as i32) as i64 as u64;~let mut t: u64 = now.wrapping_sub(ca.epoch_start) as u64;
+up_t_delay~t = t.wrapping_add(delay_jiffies);~t = t.wrapping_add(delay_jiffies * 2);
+up_shift~t <<= BICTCP_HZ;~t <<= BICTCP_HZ - 1;
+up_hz~t /= hz as u64;~t /= (hz + 1) as u64;
+up_delta~(cube_rtt_scale as u64).wrapping_mul(offs).wrapping_mul(offs).wrapping_mul(offs) >> (10 + 3 * BICTCP_HZ)~(cube_rtt_scale as u64).wrapping_mul(offs).wrapping_mul(offs) >> (10 + 3 * BICTCP_HZ)
+up_delta2~>> (10 + 3 * BICTCP_HZ)) as u32~>> (10 + 3 * BICTCP_HZ - 1)) as u32
+up_below~ca.bic_origin_point.wrapping_sub(delta) // below origin~ca.bic_origin_point.wrapping_add(delta) // below origin
+up_above~ca.bic_origin_point.wrapping_add(delta) // above origin~ca.bic_origin_point.wrapping_sub(delta) // above origin
+up_cnt~if bic_target > cwnd {<NL>                ca.cnt = cwnd / (bic_target - cwnd);~if bic_target >= cwnd {<NL>                ca.cnt = cwnd / (bic_target - cwnd + 1);
+up_small~ca.cnt = 100u32.wrapping_mul(cwnd); // very small increment~ca.cnt = 10u32.wrapping_mul(cwnd); // very small increment
+up_cap~if ca.last_max_cwnd == 0 && ca.cnt > 20 {~if ca.last_max_cwnd == 0 && ca.cnt > 21 {
+up_cap2~if ca.last_max_cwnd == 0 && ca.cnt > 20 {~if ca.cnt > 20 {
+up_cap3~ca.cnt = 20; // increase cwnd 5% per RTT~ca.cnt = 21; // increase cwnd 5% per RTT
+up_fr~if tcp_friendliness != 0 {~if tcp_friendliness == 0 {
+up_fr_delta~let mut delta = cwnd.wrapping_mul(scale) >> 3;~let mut delta = cwnd.wrapping_mul(scale) >> 2;
+up_fr_loop~while ca.ack_cnt > delta {~while ca.ack_cnt >= delta {
+up_fr_dec~ca.ack_cnt -= delta;~ca.ack_cnt -= 1;
+up_fr_inc~ca.tcp_cwnd = ca.tcp_cwnd.wrapping_add(1);~ca.tcp_cwnd = ca.tcp_cwnd.wrapping_add(2);
+up_fr_cmp~if ca.tcp_cwnd > cwnd {~if ca.tcp_cwnd >= cwnd {
+up_fr_max~let max_cnt = cwnd / delta;~let max_cnt = cwnd / (delta + 1);
+up_min~ca.cnt = ca.cnt.max(2);~ca.cnt = ca.cnt.max(1);
+up_min2~ca.cnt = ca.cnt.max(2);~ca.cnt = ca.cnt.max(3);

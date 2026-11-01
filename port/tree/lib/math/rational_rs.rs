@@ -85,10 +85,10 @@ pub unsafe extern "C" fn rational_best_approximation(
             let mut t = usize::MAX;
 
             if d1 != 0 {
-                t = (max_denominator - d0) / d1;
+                t = max_denominator.wrapping_sub(d0) / d1;
             }
             if n1 != 0 {
-                t = core::cmp::min(t, (max_numerator - n0) / n1);
+                t = core::cmp::min(t, max_numerator.wrapping_sub(n0) / n1);
             }
 
             // Is the semi-convergent closer than the previous convergent?

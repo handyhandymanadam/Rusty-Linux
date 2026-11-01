@@ -35,6 +35,14 @@ pub extern "C" fn lcm(a: usize, b: usize) -> usize {
         // preconditions -- it returns a | b when either is zero -- and it
         // touches no memory. Both arguments are non-zero here, so the
         // division below cannot divide by zero either.
+        //
+        // NOT wrapping_div (there is no such thing for the div-by-zero
+        // case -- unlike add/sub/mul, division has no wraparound
+        // semantics to fall back to). `rig/uaccess-panic-check.sh` found
+        // this checked division live, but it is unreachable: gcd() of
+        // two nonzero arguments is a mathematical fact, not a caller
+        // contract that could be violated by corrupted state, always
+        // >= 1. Left checked and documented rather than routed around.
         (a / unsafe { gcd(a, b) }).wrapping_mul(b)
     } else {
         0

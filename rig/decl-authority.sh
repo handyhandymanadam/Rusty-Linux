@@ -11,7 +11,7 @@
 # DEFINITION's debug info (GENDWARFKSYMS, what we ship) or from the
 # DECLARATION (GENKSYMS). The second is what would let a Rust definition carry
 # an exported symbol with no C entry thunk -- the change that would dissolve
-# GOALS.md §1's first exception and delete 95 hand-offs.
+# notes/GOALS.md §1's first exception and delete 95 hand-offs.
 #
 # It has two silent failure modes, both DEMONSTRATED on 2026-09-04, neither
 # detectable by anything the project owned:

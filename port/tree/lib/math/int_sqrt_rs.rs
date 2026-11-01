@@ -37,12 +37,12 @@ pub extern "C" fn int_sqrt(x: usize) -> usize {
     let mut y: usize = 0;
 
     while m != 0 {
-        let b = y + m;
+        let b = y.wrapping_add(m);
         y >>= 1;
 
         if x >= b {
-            x -= b;
-            y += m;
+            x = x.wrapping_sub(b);
+            y = y.wrapping_add(m);
         }
         m >>= 2;
     }

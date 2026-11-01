@@ -1,0 +1,48 @@
+init_ge~if (pools_num as c_uint) >= max_pools {~if (pools_num as c_uint) > max_pools {
+init_noclear_prealloc~            *prealloc = null_mut();<NL>        }<NL><NL>        if (*st.new_pool).is_null() {<NL>            return false; // new~        }<NL><NL>        if (*st.new_pool).is_null() {<NL>            return false; // new
+init_pool_idx~*(*st.stack_pools).add(pools_num as usize) = *st.new_pool;~*(*st.stack_pools).add(0) = *st.new_pool;
+init_newpool_keep~wo(st.new_pool, null_mut());~wo(st.new_pool, *st.new_pool);
+init_pools_num~wo(st.pools_num, pools_num + 1);~wo(st.pools_num, pools_num + 2);
+init_offset~*st.pool_offset = 0;~*st.pool_offset = 16;
+init_nowarn_limit~            rust_sdw_warn_limit();~            let _ = rust_sdw_warn_limit as *const ();
+keep_inverted~if !(*st.new_pool).is_null() {<NL>            return;~if (*st.new_pool).is_null() {<NL>            return;
+popfp_gt~.wrapping_add(size) > rust_sd_pool_size~.wrapping_add(size) >= rust_sd_pool_size
+popfp_index~let pool_index = (pools_num - 1) as u32;~let pool_index = pools_num as u32;
+popfp_handle_off~(*st.pool_offset >> rust_sd_stack_align) as u32~(*st.pool_offset >> 3) as u32
+popfp_adv~*st.pool_offset = (*st.pool_offset).wrapping_add(size);~*st.pool_offset = (*st.pool_offset).wrapping_add(size + 16);
+pop_nopoll~if !rust_sdw_poll_state_synchronize_rcu(*rcu_state_of(stack)) {~if false && rust_sdw_poll_state_synchronize_rcu(*rcu_state_of(stack)) {
+pop_counter~*st.counters.add(DEPOT_COUNTER_FREELIST_SIZE) -= 1;~*st.counters.add(DEPOT_COUNTER_FREELIST_SIZE) += 1;
+pop_first~first.sub(32)~first.sub(16)
+recsize_align~wrapping_add(align - 1)) & !(align - 1)~wrapping_add(0)) & !(align - 1)
+alloc_clamp~if nr_entries as usize > rust_sd_max_frames {~if nr_entries as usize > rust_sd_max_frames + 1 {
+alloc_getsize~record_size = depot_stack_record_size(rust_sd_max_frames as c_uint);~record_size = depot_stack_record_size(nr_entries);
+alloc_refcnt~rust_sdw_refcount_set(core::ptr::addr_of_mut!((*stack).count), 1);~rust_sdw_refcount_set(core::ptr::addr_of_mut!((*stack).count), 2);
+alloc_allocs~DEPOT_COUNTER_REFD_ALLOCS) += 1;~DEPOT_COUNTER_REFD_ALLOCS) += 2;
+alloc_inuse~DEPOT_COUNTER_REFD_INUSE) += 1;~DEPOT_COUNTER_REFD_INUSE) -= 1;
+alloc_persist_count~DEPOT_COUNTER_PERSIST_COUNT) += 1;~DEPOT_COUNTER_PERSIST_COUNT) += 2;
+alloc_persist_bytes~+= record_size as c_long;~+= nr_entries as c_long;
+alloc_sat~REFCOUNT_SATURATED);~REFCOUNT_SATURATED - 1);
+alloc_hash~(*stack).hash = hash;~(*stack).hash = hash ^ 1;
+alloc_size~(*stack).size = nr_entries;~(*stack).size = nr_entries + 1;
+fetch_zero~(*stack).count)) == 0) {~(*stack).count)) == 1) {
+fetch_offset~(offset_units as usize) << rust_sd_stack_align~(offset_units as usize) << 3
+free_fl~DEPOT_COUNTER_FREELIST_SIZE) += 1;~DEPOT_COUNTER_FREELIST_SIZE) += 2;
+free_frees~DEPOT_COUNTER_REFD_FREES) += 1;~DEPOT_COUNTER_REFD_FREES) -= 1;
+free_inuse~DEPOT_COUNTER_REFD_INUSE) -= 1;~DEPOT_COUNTER_REFD_INUSE) -= 2;
+free_head~rust_sdw_list_add_tail(free_list_of(stack), st.free_stacks);~let _ = rust_sdw_list_add_tail as *const (); rust_sdw_list_add_rcu(free_list_of(stack), st.free_stacks);
+free_cookie~*rcu_state_of(stack) = rust_sdw_get_state_synchronize_rcu();~let _ = rust_sdw_get_state_synchronize_rcu as *const (); *rcu_state_of(stack) = 0;
+free_nounlink~rust_sdw_list_del_rcu(core::ptr::addr_of_mut!((*stack).hash_list));~let _ = rust_sdw_list_del_rcu as *const ();
+memcmp_eq~!= read_volatile(u2.add(i))~== read_volatile(u2.add(i))
+memcmp_last~while i < n as usize {~while i + 1 < n as usize {
+find_hash~ro(core::ptr::addr_of!((*stack).hash)) != hash~ro(core::ptr::addr_of!((*stack).hash)) == hash
+find_size~as c_int != size~as c_int == size
+find_inc~&& !rust_sdw_refcount_inc_not_zero~&& rust_sdw_refcount_inc_not_zero
+save_canalloc~!= 0 && allow_spin;~!= 0;
+save_prealloc~if can_alloc && ro(st.new_pool).is_null() {~if can_alloc {
+save_nmi~if rust_sdw_in_nmi() || !allow_spin {~if rust_sdw_in_nmi() {
+save_trylock~if !rust_sdw_trylock_irqsave(st.pool_lock, &mut flags) {~if false && !rust_sdw_trylock_irqsave(st.pool_lock, &mut flags) {
+save_freepool~rust_sdw_free_pool(prealloc, !allow_spin);~let _ = (prealloc, rust_sdw_free_pool as *const ());
+save_mask~depot_flags & !STACK_DEPOT_FLAGS_MASK != 0~depot_flags & !(STACK_DEPOT_FLAGS_MASK & STACK_DEPOT_FLAG_GET) != 0
+put_inv~if rust_sdw_refcount_dec_and_test(~if !rust_sdw_refcount_dec_and_test(
+fetch_entries~*entries = entries_of(stack);~*entries = null_mut();
+getrec_zero~if handle == 0 {<NL>            return null_mut();~if handle == 1 {<NL>            return null_mut();

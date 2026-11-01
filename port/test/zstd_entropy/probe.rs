@@ -4,7 +4,7 @@
 //!
 //! Pulls in the file the kernel build compiles, BY PATH, rather than copying
 //! it -- a stale copy tested here while the kernel builds something else is
-//! the failure PRIOR-ART.md §2 records four times.
+//! the failure notes/PRIOR-ART.md §2 records four times.
 //!
 //! It presents the port under `rs_*` so both arms can live in one binary. The
 //! three names the kernel keeps as C thunks (`FSE_readNCount`,
@@ -91,7 +91,7 @@ pub unsafe extern "C" fn rs_HUF_readStats(
 /// `FSE_buildDTable_wksp`, dead in-tree but still part of the ABI.
 /// # Safety
 /// Same contract as the C, which additionally requires `normalizedCounter`
-/// to be a valid normalised distribution -- see main.c, and STATUS.md.
+/// to be a valid normalised distribution -- see main.c, and notes/STATUS.md.
 #[no_mangle]
 pub unsafe extern "C" fn rs_FSE_buildDTable_wksp(
     dt: *mut u32, nc: *const i16, maxSV: c_uint, tableLog: c_uint,

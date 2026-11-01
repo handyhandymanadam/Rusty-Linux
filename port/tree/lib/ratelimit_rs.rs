@@ -64,11 +64,34 @@ const RATELIMIT_INITIALIZED: c_uint = 1 << 1;
 /// against `raw_spinlock_t`'s real `raw_lock` member and (correctly) call
 /// the field-name mismatch a defect -- this struct's contract is its SIZE,
 /// not its field layout.
+#[cfg(not(any(CONFIG_DEBUG_SPINLOCK, CONFIG_DEBUG_LOCK_ALLOC)))]
 #[repr(C)]
 pub struct RawSpinlockT {
     /// Opaque -- see this struct's own doc comment.
     pub bits: u32,
 }
+
+/// Same type under `CONFIG_DEBUG_SPINLOCK` and/or `CONFIG_DEBUG_LOCK_ALLOC`
+/// (the concurrency checker builds, configs/chk-ka.fragment): `raw_spinlock_t`
+/// then carries `magic`, `owner_cpu`, `owner` and/or a 40-byte `lockdep_map`, and the
+/// C struct is 24 / 48 / 64 bytes (pahole on build-chk-ka: 64), 8-aligned.
+/// Found by the checker build: the 4-byte mirror put the following fields at the wrong
+/// offsets and a KASAN+lockdep kernel died in early boot (logs/concurrency-tooling.md).
+#[cfg(any(CONFIG_DEBUG_SPINLOCK, CONFIG_DEBUG_LOCK_ALLOC))]
+#[repr(C, align(8))]
+pub struct RawSpinlockT {
+    /// Opaque -- see this struct's own doc comment.
+    pub bits: [u8; RAW_SPINLOCK_DEBUG_SIZE],
+}
+
+#[cfg(all(CONFIG_DEBUG_SPINLOCK, CONFIG_DEBUG_LOCK_ALLOC))]
+const RAW_SPINLOCK_DEBUG_SIZE: usize = 64;
+#[cfg(all(not(CONFIG_DEBUG_SPINLOCK), CONFIG_DEBUG_LOCK_ALLOC))]
+const RAW_SPINLOCK_DEBUG_SIZE: usize = 48;
+#[cfg(all(CONFIG_DEBUG_SPINLOCK, not(CONFIG_DEBUG_LOCK_ALLOC)))]
+const RAW_SPINLOCK_DEBUG_SIZE: usize = 24;
+#[cfg(CONFIG_LOCK_STAT)]
+compile_error!("CONFIG_LOCK_STAT adds fields to lockdep_map; the RawSpinlockT mirror sizes are for it off");
 
 /// Mirrors `struct ratelimit_state` (`include/linux/ratelimit_types.h`),
 /// verified field-for-field against `pahole -C ratelimit_state
@@ -168,7 +191,7 @@ pub unsafe extern "C" fn ___ratelimit(rs: *mut RatelimitState, func: *const c_ch
                 != 0;
             if initialized
                 && unsafe { (*rs).rs_n_left.load(Ordering::Relaxed) } > 0
-                && unsafe { (*rs).rs_n_left.fetch_sub(1, Ordering::SeqCst) } - 1 >= 0
+                && unsafe { (*rs).rs_n_left.fetch_sub(1, Ordering::SeqCst) }.wrapping_sub(1) >= 0
             {
                 ret = 1;
             }
@@ -205,7 +228,7 @@ pub unsafe extern "C" fn ___ratelimit(rs: *mut RatelimitState, func: *const c_ch
         }
 
         if unsafe { (*rs).rs_n_left.load(Ordering::Relaxed) } > 0
-            && unsafe { (*rs).rs_n_left.fetch_sub(1, Ordering::SeqCst) } - 1 >= 0
+            && unsafe { (*rs).rs_n_left.fetch_sub(1, Ordering::SeqCst) }.wrapping_sub(1) >= 0
         {
             ret = 1;
         }

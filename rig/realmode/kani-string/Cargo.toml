@@ -1,0 +1,12 @@
+# Kani proofs for string_rs.rs (real-mode setup):  rig/realmode/run-string-kani.sh
+[package]
+name = "string_rs_kani"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "../../../port/tree/arch/x86/boot/string_rs.rs"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)", "cfg(host_mock)"] }

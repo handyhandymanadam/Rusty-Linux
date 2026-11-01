@@ -15,6 +15,33 @@
 //! would be a kernel panic on ordinary input, not a wrong number. Every one
 //! is `wrapping_*`, and that is not defensiveness — it is the algorithm.
 //!
+//! # Two shapes of checked arithmetic left in place, not wrapped
+//!
+//! `rig/uaccess-panic-check.sh` also found live `panic_bounds_check` and
+//! two live checked subtractions the block above's `wrapping_*` blanket
+//! does not cover, deliberately:
+//!
+//! - `le32()`/`le64()`'s `b[i..i + 4]`/`b[i..i + 8]` slicing. Every call
+//!   site's own loop keeps `i` within `len` before calling in (the same
+//!   invariant the C's `p`/`b_end` pointer pair enforces by construction) --
+//!   provably in range, but across a function boundary the compiler
+//!   cannot see that. Left checked rather than switched to
+//!   `get_unchecked()`: this is the untrusted-input boundary the whole
+//!   point of porting to Rust was to get a bounds check on.
+//! - `xxh64_update()`'s `memsize + len < 32` and `take = 32 - memsize`.
+//!   `memsize` is `Xxh64State.memsize`, a plain field of a `#[repr(C)]`
+//!   struct passed across the FFI boundary -- the algorithm's own
+//!   invariant keeps it `< 32`, but nothing stops a corrupted or
+//!   hand-built state from violating that. `wrapping_add` on the first
+//!   check would let a wrapped (small) sum slip a corrupted `memsize`
+//!   past the guard it exists to be; `wrapping_sub` on the second would
+//!   silently turn a corrupted `memsize > 32` into a huge `take` instead
+//!   of catching it. Both stay checked because wrapping here would make
+//!   the outcome worse, not merely different -- unlike the two uses of
+//!   `memsize + len` immediately after the first check passes (line-local
+//!   redundant recomputations of an already-proven-safe value), which
+//!   are `wrapping_*` like everything else.
+//!
 //! # Slices and indices, not pointer walking
 //!
 //! The C walks `const uint8_t *p` against a `b_end`. Doing the same in Rust
@@ -281,7 +308,7 @@ pub unsafe extern "C" fn xxh32(input: *const c_void, len: usize, seed: u32) -> u
     let mut h32: u32;
 
     if len >= 16 {
-        let limit = len - 16;
+        let limit = len.wrapping_sub(16);
         let mut v1 = seed.wrapping_add(PRIME32_1).wrapping_add(PRIME32_2);
         let mut v2 = seed.wrapping_add(PRIME32_2);
         let mut v3 = seed;
@@ -289,10 +316,10 @@ pub unsafe extern "C" fn xxh32(input: *const c_void, len: usize, seed: u32) -> u
 
         loop {
             v1 = round32(v1, le32(b, i));
-            v2 = round32(v2, le32(b, i + 4));
-            v3 = round32(v3, le32(b, i + 8));
-            v4 = round32(v4, le32(b, i + 12));
-            i += 16;
+            v2 = round32(v2, le32(b, i.wrapping_add(4)));
+            v3 = round32(v3, le32(b, i.wrapping_add(8)));
+            v4 = round32(v4, le32(b, i.wrapping_add(12)));
+            i = i.wrapping_add(16);
             if i > limit {
                 break;
             }
@@ -309,16 +336,16 @@ pub unsafe extern "C" fn xxh32(input: *const c_void, len: usize, seed: u32) -> u
 
     h32 = h32.wrapping_add(len as u32);
 
-    while len - i >= 4 {
+    while len.wrapping_sub(i) >= 4 {
         h32 = h32.wrapping_add(le32(b, i).wrapping_mul(PRIME32_3));
         h32 = h32.rotate_left(17).wrapping_mul(PRIME32_4);
-        i += 4;
+        i = i.wrapping_add(4);
     }
 
     while i < len {
         h32 = h32.wrapping_add((b[i] as u32).wrapping_mul(PRIME32_5));
         h32 = h32.rotate_left(11).wrapping_mul(PRIME32_1);
-        i += 1;
+        i = i.wrapping_add(1);
     }
 
     avalanche32(h32)
@@ -345,7 +372,7 @@ pub unsafe extern "C" fn xxh64(input: *const c_void, len: usize, seed: u64) -> u
     let mut h64: u64;
 
     if len >= 32 {
-        let limit = len - 32;
+        let limit = len.wrapping_sub(32);
         let mut v1 = seed.wrapping_add(PRIME64_1).wrapping_add(PRIME64_2);
         let mut v2 = seed.wrapping_add(PRIME64_2);
         let mut v3 = seed;
@@ -353,10 +380,10 @@ pub unsafe extern "C" fn xxh64(input: *const c_void, len: usize, seed: u64) -> u
 
         loop {
             v1 = round64(v1, le64(b, i));
-            v2 = round64(v2, le64(b, i + 8));
-            v3 = round64(v3, le64(b, i + 16));
-            v4 = round64(v4, le64(b, i + 24));
-            i += 32;
+            v2 = round64(v2, le64(b, i.wrapping_add(8)));
+            v3 = round64(v3, le64(b, i.wrapping_add(16)));
+            v4 = round64(v4, le64(b, i.wrapping_add(24)));
+            i = i.wrapping_add(32);
             if i > limit {
                 break;
             }
@@ -377,24 +404,24 @@ pub unsafe extern "C" fn xxh64(input: *const c_void, len: usize, seed: u64) -> u
 
     h64 = h64.wrapping_add(len as u64);
 
-    while len - i >= 8 {
+    while len.wrapping_sub(i) >= 8 {
         let k1 = round64(0, le64(b, i));
 
         h64 ^= k1;
         h64 = h64.rotate_left(27).wrapping_mul(PRIME64_1).wrapping_add(PRIME64_4);
-        i += 8;
+        i = i.wrapping_add(8);
     }
 
-    if len - i >= 4 {
+    if len.wrapping_sub(i) >= 4 {
         h64 ^= (le32(b, i) as u64).wrapping_mul(PRIME64_1);
         h64 = h64.rotate_left(23).wrapping_mul(PRIME64_2).wrapping_add(PRIME64_3);
-        i += 4;
+        i = i.wrapping_add(4);
     }
 
     while i < len {
         h64 ^= (b[i] as u64).wrapping_mul(PRIME64_5);
         h64 = h64.rotate_left(11).wrapping_mul(PRIME64_1);
-        i += 1;
+        i = i.wrapping_add(1);
     }
 
     avalanche64(h64)
@@ -519,8 +546,8 @@ pub unsafe extern "C" fn xxh64_update(
     let memsize = st.memsize as usize;
 
     if memsize + len < 32 {
-        mem[memsize..memsize + len].copy_from_slice(b);
-        st.memsize += len as u32;
+        mem[memsize..memsize.wrapping_add(len)].copy_from_slice(b);
+        st.memsize = st.memsize.wrapping_add(len as u32);
         return 0;
     }
 
@@ -538,8 +565,8 @@ pub unsafe extern "C" fn xxh64_update(
         st.memsize = 0;
     }
 
-    if len - i >= 32 {
-        let limit = len - 32;
+    if len.wrapping_sub(i) >= 32 {
+        let limit = len.wrapping_sub(32);
         let mut v1 = st.v1;
         let mut v2 = st.v2;
         let mut v3 = st.v3;
@@ -547,10 +574,10 @@ pub unsafe extern "C" fn xxh64_update(
 
         loop {
             v1 = round64(v1, le64(b, i));
-            v2 = round64(v2, le64(b, i + 8));
-            v3 = round64(v3, le64(b, i + 16));
-            v4 = round64(v4, le64(b, i + 24));
-            i += 32;
+            v2 = round64(v2, le64(b, i.wrapping_add(8)));
+            v3 = round64(v3, le64(b, i.wrapping_add(16)));
+            v4 = round64(v4, le64(b, i.wrapping_add(24)));
+            i = i.wrapping_add(32);
             if i > limit {
                 break;
             }
@@ -563,7 +590,7 @@ pub unsafe extern "C" fn xxh64_update(
     }
 
     if i < len {
-        let rest = len - i;
+        let rest = len.wrapping_sub(i);
 
         mem[..rest].copy_from_slice(&b[i..]);
         st.memsize = rest as u32;
@@ -612,24 +639,24 @@ pub unsafe extern "C" fn xxh64_digest(state: *const Xxh64State) -> u64 {
 
     h64 = h64.wrapping_add(st.total_len);
 
-    while n - i >= 8 {
+    while n.wrapping_sub(i) >= 8 {
         let k1 = round64(0, le64(mem, i));
 
         h64 ^= k1;
         h64 = h64.rotate_left(27).wrapping_mul(PRIME64_1).wrapping_add(PRIME64_4);
-        i += 8;
+        i = i.wrapping_add(8);
     }
 
-    if n - i >= 4 {
+    if n.wrapping_sub(i) >= 4 {
         h64 ^= (le32(mem, i) as u64).wrapping_mul(PRIME64_1);
         h64 = h64.rotate_left(23).wrapping_mul(PRIME64_2).wrapping_add(PRIME64_3);
-        i += 4;
+        i = i.wrapping_add(4);
     }
 
     while i < n {
         h64 ^= (mem[i] as u64).wrapping_mul(PRIME64_5);
         h64 = h64.rotate_left(11).wrapping_mul(PRIME64_1);
-        i += 1;
+        i = i.wrapping_add(1);
     }
 
     avalanche64(h64)

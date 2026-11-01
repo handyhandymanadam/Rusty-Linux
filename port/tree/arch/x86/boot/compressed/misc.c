@@ -16,7 +16,9 @@
 #include "error.h"
 #include "../string.h"
 #include "../voffset.h"
+#ifndef MISC_BOOT_RUST
 #include <asm/bootparam_utils.h>
+#endif
 
 /*
  * WARNING!!
@@ -53,12 +55,25 @@ memptr free_mem_ptr;
 memptr free_mem_end_ptr;
 int spurious_nmi_count;
 
+#ifdef MISC_BOOT_RUST
+/* misc_rs.rs (Makefile STUBG) owns the console state and the output functions (__putstr, __puthex, __putdec).
+ * The state lives in .data there ("might be accessed before .bss is cleared"). */
+extern char *misc_vidmem;
+extern int misc_vidport;
+extern int misc_lines;
+extern int misc_cols;
+#define vidmem  misc_vidmem
+#define vidport misc_vidport
+#define lines   misc_lines
+#define cols    misc_cols
+#else
 static char *vidmem;
 static int vidport;
 
 /* These might be accessed before .bss is cleared, so use .data instead. */
 static int lines __section(".data");
 static int cols __section(".data");
+#endif
 
 #ifdef CONFIG_KERNEL_GZIP
 #include "../../../../lib/decompress_inflate.c"
@@ -92,6 +107,7 @@ static int cols __section(".data");
  * ../header.S.
  */
 
+#ifndef MISC_BOOT_RUST
 static void scroll(void)
 {
 	int i;
@@ -194,7 +210,14 @@ void __putdec(unsigned long value)
 	__putnum(value, 10, 1);
 }
 
+#endif /* MISC_BOOT_RUST */
+
 #ifdef CONFIG_X86_NEED_RELOCS
+#ifdef MISC_BOOT_RUST
+/* misc_rs.rs (Makefile STUBG): same function, same message texts. */
+void handle_relocations(void *output, unsigned long output_len,
+			unsigned long virt_addr);
+#else
 static void handle_relocations(void *output, unsigned long output_len,
 			       unsigned long virt_addr)
 {
@@ -272,12 +295,17 @@ static void handle_relocations(void *output, unsigned long output_len,
 	}
 #endif
 }
+#endif /* MISC_BOOT_RUST */
 #else
 static inline void handle_relocations(void *output, unsigned long output_len,
 				      unsigned long virt_addr)
 { }
 #endif
 
+#ifdef MISC_BOOT_RUST
+/* misc_rs.rs (Makefile STUBG) */
+size_t parse_elf(void *output);
+#else
 static size_t parse_elf(void *output)
 {
 #ifdef CONFIG_X86_64
@@ -330,13 +358,18 @@ static size_t parse_elf(void *output)
 
 	return ehdr.e_entry - LOAD_PHYSICAL_ADDR;
 }
+#endif /* MISC_BOOT_RUST */
 
 const unsigned long kernel_text_size = VO___start_rodata - VO__text;
 const unsigned long kernel_inittext_offset = VO__sinittext - VO__text;
 const unsigned long kernel_inittext_size = VO___inittext_end - VO__sinittext;
 const unsigned long kernel_total_size = VO__end - VO__text;
 
+#ifdef MISC_BOOT_RUST
+u8 boot_heap[BOOT_HEAP_SIZE] __aligned(4);	/* misc_rs.rs extract_kernel() sets the malloc heap up from it */
+#else
 static u8 boot_heap[BOOT_HEAP_SIZE] __aligned(4);
+#endif
 
 extern unsigned char input_data[];
 extern unsigned int input_len, output_len;
@@ -361,6 +394,9 @@ unsigned long decompress_kernel(unsigned char *outbuf, unsigned long virt_addr,
 	return entry;
 }
 
+#ifdef MISC_BOOT_RUST
+/* misc_rs.rs: parse_mem_encrypt(), early_sev_detect() and extract_kernel() (same texts, same order). */
+#else
 /*
  * Set the memory encryption xloadflag based on the mem_encrypt= command line
  * parameter, if provided.
@@ -564,3 +600,4 @@ asmlinkage __visible void *extract_kernel(void *rmode, unsigned char *output)
 
 	return output + entry_offset;
 }
+#endif /* MISC_BOOT_RUST */

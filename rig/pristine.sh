@@ -7,7 +7,7 @@
 # WHY: port/tree/ overwrites files in src/linux, and the differential tests
 # need the original C body as their oracle. Reading it back out of the tree
 # after a port reads OUR file, which is a test agreeing with itself -- one of
-# the shapes PRIOR-ART.md §5 records a helper refusing to build. The tarball
+# the shapes notes/PRIOR-ART.md §5 records a helper refusing to build. The tarball
 # is the only copy that cannot have been touched; it is sha256-verified and
 # src/ is gitignored, so port/pristine/ is also where the oracle gets
 # versioned.

@@ -56,6 +56,23 @@
 //! always return the FULL untruncated length (so a caller sizing a buffer
 //! from the return value gets the right answer even after a truncated
 //! first call) -- exactly `snprintf`'s contract, no more of it.
+//!
+//! # `rig/uaccess-panic-check.sh`: every `+`/`-` here is `wrapping_*`
+//!
+//! All are `size_t`-or-narrower unsigned in the pristine C. One
+//! `panic_bounds_check` remains, investigated rather than silenced:
+//! `look_up_oid()`'s binary search (`OID_SEARCH_TABLE[j]`,
+//! `OID_DATA[base + l]`) is the standard `lo <= j < hi` binary-search
+//! invariant (`j = (i + k) / 2` with `i < k` maintained as the loop
+//! condition), and `OID_INDEX[oid_val + 1]` relies on the generated
+//! `OID_INDEX` table having exactly `OID__NR + 1` entries for this exact
+//! purpose (`include/generated/oid_registry_data.h`, upstream's own
+//! generator, unmodified). `data[l]` is safe because the search only
+//! reaches that comparison after `len == datasize` is already confirmed
+//! (the `len != datasize` cases both `continue` first). Standard,
+//! provably-in-range indexing rustc cannot prove across the loop, not a
+//! defect -- and reproducing it with a wrapping cast instead would trade
+//! a panic for a silent wrong OID match, strictly worse.
 
 use core::ffi::c_int;
 
@@ -446,14 +463,14 @@ const OID_SEARCH_TABLE: [(u8, Oid); 103] = [
 fn fmt_decimal(mut n: u64, out: &mut [u8]) -> usize {
     let mut i = out.len();
     loop {
-        i -= 1;
+        i = i.wrapping_sub(1);
         out[i] = b'0' + (n % 10) as u8;
         n /= 10;
         if n == 0 || i == 0 {
             break;
         }
     }
-    out.len() - i
+    out.len().wrapping_sub(i)
 }
 
 /// Writes `text` into `buf[..bufsize]` the way `snprintf` does: at most
@@ -464,7 +481,7 @@ fn fmt_decimal(mut n: u64, out: &mut [u8]) -> usize {
 /// `buf` must be valid and writable for `bufsize` bytes.
 unsafe fn snprintf_str(buf: *mut u8, bufsize: usize, text: &[u8]) -> usize {
     if bufsize > 0 {
-        let n = core::cmp::min(text.len(), bufsize - 1);
+        let n = core::cmp::min(text.len(), bufsize.wrapping_sub(1));
         // SAFETY: `n < bufsize`, and the caller guarantees `buf` writable
         // for `bufsize` bytes.
         unsafe {
@@ -489,7 +506,7 @@ fn look_up_oid(data: &[u8]) -> Oid {
     let mut i: usize = 0;
     let mut k: usize = OID_SEARCH_TABLE.len();
     while i < k {
-        let j = (i + k) / 2;
+        let j = i.wrapping_add(k) / 2;
         let (xhash, oid) = OID_SEARCH_TABLE[j];
         let xhash = xhash as u32;
         if xhash > hash {
@@ -497,18 +514,18 @@ fn look_up_oid(data: &[u8]) -> Oid {
             continue;
         }
         if xhash < hash {
-            i = j + 1;
+            i = j.wrapping_add(1);
             continue;
         }
 
         let oid_val = oid as usize;
-        let len = (OID_INDEX[oid_val + 1] - OID_INDEX[oid_val]) as usize;
+        let len = OID_INDEX[oid_val.wrapping_add(1)].wrapping_sub(OID_INDEX[oid_val]) as usize;
         if len > datasize {
             k = j;
             continue;
         }
         if len < datasize {
-            i = j + 1;
+            i = j.wrapping_add(1);
             continue;
         }
 
@@ -517,15 +534,15 @@ fn look_up_oid(data: &[u8]) -> Oid {
         let mut next_i = None;
         let mut next_k = None;
         while l > 0 {
-            l -= 1;
-            let a = OID_DATA[base + l];
+            l = l.wrapping_sub(1);
+            let a = OID_DATA[base.wrapping_add(l)];
             let b = data[l];
             if a > b {
                 next_k = Some(j);
                 break;
             }
             if a < b {
-                next_i = Some(j + 1);
+                next_i = Some(j.wrapping_add(1));
                 break;
             }
         }
@@ -550,7 +567,12 @@ kernel::kabi_export! {
 #[no_mangle]
 pub unsafe extern "C" fn look_up_OID(data: *const core::ffi::c_void, datasize: usize) -> Oid {
     // SAFETY: the caller guarantees `data` readable for `datasize` bytes.
-    let slice = unsafe { core::slice::from_raw_parts(data.cast::<u8>(), datasize) };
+    // `(NULL, 0)` is legal C and `from_raw_parts` forbids a null pointer.
+    let slice: &[u8] = if datasize == 0 {
+        &[]
+    } else {
+        unsafe { core::slice::from_raw_parts(data.cast::<u8>(), datasize) }
+    };
     look_up_oid(slice)
 }
 
@@ -579,12 +601,12 @@ pub unsafe extern "C" fn parse_OID(
     // SAFETY: `datasize >= 3`, so both bytes are within the caller's
     // guaranteed readable range.
     let (v0, v1) = unsafe { (*v, *v.add(1)) };
-    if v0 != ASN1_OID || (v1 as usize) != datasize - 2 {
+    if v0 != ASN1_OID || (v1 as usize) != datasize.wrapping_sub(2) {
         return -EBADMSG;
     }
     // SAFETY: `datasize >= 3`, so `datasize - 2` bytes starting at `v + 2`
     // are within the caller's guaranteed readable range.
-    let slice = unsafe { core::slice::from_raw_parts(v.add(2), datasize - 2) };
+    let slice = unsafe { core::slice::from_raw_parts(v.add(2), datasize.wrapping_sub(2)) };
     // SAFETY: the caller guarantees `oid` valid and writable.
     unsafe { *oid = look_up_oid(slice) };
     0
@@ -626,30 +648,30 @@ pub unsafe extern "C" fn sprint_oid(
     let mut total: usize = 0;
 
     let n0 = bytes[pos];
-    pos += 1;
+    pos = pos.wrapping_add(1);
     let mut scratch = [0u8; 24];
     let mut tmp = [0u8; 12];
     let mut len = fmt_decimal((n0 / 40) as u64, &mut tmp);
-    scratch[..len].copy_from_slice(&tmp[12 - len..]);
+    scratch[..len].copy_from_slice(&tmp[(12usize).wrapping_sub(len)..]);
     scratch[len] = b'.';
-    len += 1;
+    len = len.wrapping_add(1);
     let n = fmt_decimal((n0 % 40) as u64, &mut tmp);
-    scratch[len..len + n].copy_from_slice(&tmp[12 - n..]);
-    len += n;
+    scratch[len..len.wrapping_add(n)].copy_from_slice(&tmp[(12usize).wrapping_sub(n)..]);
+    len = len.wrapping_add(n);
 
     // SAFETY: `buf` is valid and writable for `bsz` (== `bufsize`) bytes.
     let count = unsafe { snprintf_str(buf, bsz, &scratch[..len]) };
-    total += count;
+    total = total.wrapping_add(count);
     if count >= bsz {
         return -ENOBUFS;
     }
     // SAFETY: `count < bsz`, so this stays within the original buffer.
     buf = unsafe { buf.add(count) };
-    bsz -= count;
+    bsz = bsz.wrapping_sub(count);
 
     while pos < bytes.len() {
         let mut n = bytes[pos];
-        pos += 1;
+        pos = pos.wrapping_add(1);
         let num: u64;
         if n & 0x80 == 0 {
             num = n as u64;
@@ -670,7 +692,7 @@ pub unsafe extern "C" fn sprint_oid(
                     return -EBADMSG;
                 }
                 n = bytes[pos];
-                pos += 1;
+                pos = pos.wrapping_add(1);
                 acc = (acc << 7) | (n & 0x7f) as u64;
                 if n & 0x80 == 0 {
                     break;
@@ -682,18 +704,18 @@ pub unsafe extern "C" fn sprint_oid(
         let mut tmp20 = [0u8; 20];
         let n_digits = fmt_decimal(num, &mut tmp20);
         scratch[0] = b'.';
-        scratch[1..1 + n_digits].copy_from_slice(&tmp20[20 - n_digits..]);
-        let seg_len = 1 + n_digits;
+        scratch[1..1usize.wrapping_add(n_digits)].copy_from_slice(&tmp20[(20usize).wrapping_sub(n_digits)..]);
+        let seg_len = 1usize.wrapping_add(n_digits);
 
         // SAFETY: `buf` is valid and writable for `bsz` bytes.
         let count = unsafe { snprintf_str(buf, bsz, &scratch[..seg_len]) };
-        total += count;
+        total = total.wrapping_add(count);
         if count >= bsz {
             return -ENOBUFS;
         }
         // SAFETY: `count < bsz`, so this stays within the original buffer.
         buf = unsafe { buf.add(count) };
-        bsz -= count;
+        bsz = bsz.wrapping_sub(count);
     }
 
     total as c_int
@@ -709,3 +731,15 @@ kernel::kabi_rule!("type_string", "t#__kernel_ulong_t",
     "typedef_type __kernel_ulong_t { base_type unsigned long byte_size(8) encoding(7) }");
 kernel::kabi_rule!("type_string", "t#size_t",
     "typedef_type size_t { t#__kernel_size_t }");
+
+// Module build (logs/riscv64.md failure 3; riscv defconfig has this library =m): the C's
+// MODULE_DESCRIPTION()/MODULE_LICENSE() went away with the C file, and modpost refuses a module
+// without a license. UNPREFIXED tags, as md5_rs.rs. Built-in (=y, every x86 config) emits
+// nothing here, unchanged.
+#[cfg(MODULE)]
+core::arch::global_asm!(
+    ".section \".modinfo\",\"a\"",
+    ".asciz \"description=OID Registry\"",
+    ".asciz \"license=GPL\"",
+    ".previous",
+);

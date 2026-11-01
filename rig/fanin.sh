@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # fanin.sh <build-dir> -- rank lib/ modules by how many call sites the LINKER
-# actually resolved against them (SCOPE.md §1).
+# actually resolved against them (notes/SCOPE.md §1).
 #
 # Not a call graph. `objdump -r` on vmlinux.o -- the pre-link aggregate of every
 # built-in object -- lists the relocations the build already produced. A
@@ -10,7 +10,7 @@
 # vmlinux itself carries no relocations: the final link consumed them. Use
 # vmlinux.o.
 #
-# KNOWN GAP, accepted (SCOPE.md §1): a function always inlined in C has no
+# KNOWN GAP, accepted (notes/SCOPE.md §1): a function always inlined in C has no
 # symbol, so it counts zero here even if the Rust version would need a real one.
 set -u
 BUILD=${1:?usage: fanin.sh <build-dir>}

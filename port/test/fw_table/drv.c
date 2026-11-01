@@ -111,7 +111,7 @@ static unsigned long mismatches;
 static unsigned long checks;
 static unsigned long runs;
 
-/* Volume counters. STATUS.md standing guard 9: a clean result with an
+/* Volume counters. notes/STATUS.md standing guard 9: a clean result with an
  * implausible volume has not checked your work. In particular the
  * diagnostic-text comparison is worth nothing if no diagnostic ever fired,
  * and "0 mismatches" looks identical either way -- so the number of runs

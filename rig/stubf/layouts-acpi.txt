@@ -1,0 +1,20 @@
+type struct acpi_table_rsdp | AcpiTableRsdp | signature=signature checksum=checksum oem_id=oem_id revision=revision rsdt_physical_address=rsdt_physical_address length=length xsdt_physical_address=xsdt_physical_address extended_checksum=extended_checksum reserved=reserved
+type struct acpi_table_header | AcpiTableHeader | signature=signature length=length revision=revision checksum=checksum oem_id=oem_id oem_table_id=oem_table_id oem_revision=oem_revision asl_compiler_id=asl_compiler_id asl_compiler_revision=asl_compiler_revision
+type struct acpi_subtable_header | AcpiSubtableHeader | type=type_ length=length
+type struct acpi_table_srat | AcpiTableSrat | header=header table_revision=table_revision reserved=reserved
+type struct acpi_srat_mem_affinity | AcpiSratMemAffinity | header=header proximity_domain=proximity_domain reserved=reserved base_address=base_address length=length reserved1=reserved1 flags=flags reserved2=reserved2
+type struct mem_vector | MemVector | start=start size=size
+const struct boot_params acpi_rsdp_addr | BP_ACPI_RSDP_ADDR
+val ACPI_EBDA_PTR_LOCATION | ACPI_EBDA_PTR_LOCATION
+val ACPI_EBDA_WINDOW_SIZE | ACPI_EBDA_WINDOW_SIZE
+val ACPI_HI_RSDP_WINDOW_BASE | ACPI_HI_RSDP_WINDOW_BASE
+val ACPI_HI_RSDP_WINDOW_SIZE | ACPI_HI_RSDP_WINDOW_SIZE
+val ACPI_RSDP_SCAN_STEP | ACPI_RSDP_SCAN_STEP
+val ACPI_RSDP_CHECKSUM_LENGTH | ACPI_RSDP_CHECKSUM_LENGTH
+val ACPI_RSDP_XCHECKSUM_LENGTH | ACPI_RSDP_XCHECKSUM_LENGTH
+val ACPI_RSDT_ENTRY_SIZE | ACPI_RSDT_ENTRY_SIZE
+val ACPI_XSDT_ENTRY_SIZE | ACPI_XSDT_ENTRY_SIZE
+val ACPI_SRAT_TYPE_MEMORY_AFFINITY | ACPI_SRAT_TYPE_MEMORY_AFFINITY
+val ACPI_SRAT_MEM_HOT_PLUGGABLE | ACPI_SRAT_MEM_HOT_PLUGGABLE
+val MAX_NUMNODES*2 | MAX_NUMNODES * 2
+val sizeof((char[10]){0}) | MAX_ACPI_ARG_LENGTH

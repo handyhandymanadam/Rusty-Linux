@@ -124,7 +124,7 @@ echo "$n_managed managed by port/tree, $n_generated generated _norust.c" \
      "(byte-identical to port/pristine), $n_declared declared, $n_stale stale," \
      "$n_undecl UNDECLARED"
 
-# STATUS.md lesson 9. This script's whole output is a negative result, so a
+# notes/STATUS.md lesson 9. This script's whole output is a negative result, so a
 # clean run with an implausible volume is the dangerous case -- and it is not
 # hypothetical: the first version passed src/linux (a SYMLINK) to diff with
 # --no-dereference, compared nothing, and reported 0 UNDECLARED.

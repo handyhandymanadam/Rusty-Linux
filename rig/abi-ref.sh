@@ -42,6 +42,21 @@ out="$build/abi-ref"
 [ -d "$build" ] || { echo "no build dir $build" >&2; exit 2; }
 
 mkdir -p "$out"
+
+# GENERATED INPUTS the pristine C #includes and a fresh tree no longer produces (the ports stopped
+# needing them in the Rust arm): lib/oid_registry_data.c and lib/crc/crc32table.h. Without them
+# oid_registry.c and crc32-main.c "do not compile against current headers" and their exports
+# show up as NO C REFERENCE. Generated the way the kernel does, into abi-ref/_gen, added with -I.
+# (An older tree kept stale copies from before the ports, which hid this -- 2026-10-03.)
+gen="$root/$out/_gen"; mkdir -p "$gen/lib/crc" "$gen/include/generated"
+perl "$root/src/linux/lib/build_OID_registry" "$root/src/linux/include/linux/oid_registry.h" "$gen/oid_registry_data.c" 2>/dev/null
+if [ -f "$build/include/generated/autoconf.h" ]; then
+    cp "$root/src/linux/lib/crc/gen_crc32table.c" "$gen/lib/crc/"
+    cp "$build/include/generated/autoconf.h" "$gen/include/generated/"
+    cc -O1 -I "$root/src/linux/include" -I "$root/src/linux/include/uapi" -I "$root/src/linux/tools/include" \
+        -o "$gen/gen_crc32table" "$gen/lib/crc/gen_crc32table.c" 2>/dev/null \
+        && "$gen/gen_crc32table" > "$gen/crc32table.h"
+fi
 n_ok=0; n_nocmd=0; n_fail=0; n_borrowed=0
 printf '%-52s %s\n' "PRISTINE FILE" "VERDICT"
 
@@ -67,7 +82,26 @@ while IFS= read -r src; do
     # sibling is the right command line to within those, and which donor was
     # used is printed rather than assumed.
     if [ ! -f "$cmdfile" ]; then
-        sib=$(ls "$build/$(dirname "$rel")"/.*.o.cmd 2>/dev/null | head -1)
+        # First sibling that is a C compile. On a fresh tree (no stale C .cmd
+        # files left over from before the ports) the alphabetical first sibling
+        # is often a *_rs.o rustc command, whose flags cannot compile C -- every
+        # such file then fails "substitution did not take". Found 2026-10-02 on
+        # fedora-server's first from-scratch build.
+        sib=""
+        # Then, for a directory with no C object of its own left (lib/lz4: its one C file is gone), the
+        # top-level lib/ donors: their flags are what lib/*.c is built with (2026-10-03).
+        for d in "$build/$(dirname "$rel")" "$build/lib"; do
+            for c in "$d"/.*.o.cmd; do
+                [ -f "$c" ] || continue
+                grep -q '^savedcmd_[^:]*:= *[^ ]*rustc' "$c" && continue
+                grep -q 'clang' "$c" || continue
+                # an assembler donor (arch/x86/lib/bhi.S) is not a C compile: its input is not substituted and the
+                # "reference" comes out as the donor's own object (2026-10-04, cpu.c/csum-partial_64.c unresolved)
+                sed -n 's/^savedcmd_[^:]*:= *//p' "$c" | head -1 | grep -qE '\.c *$' || continue
+                sib=$c; break
+            done
+            [ -n "$sib" ] && break
+        done
         if [ -n "$sib" ]; then
             cmdfile=$sib
             donor=$(basename "$sib" .o.cmd); donor=${donor#.}
@@ -113,7 +147,7 @@ while IFS= read -r src; do
     # substitute the WRONG tree's headers -- found by md5-porter, 2026-09-05.
     srcdir="$root/src/linux/$(dirname "$rel")"
     newcmd=$(printf '%s' "$cmd" \
-      | sed -E "s#-Wp,-MMD,[^ ]+ # -I$srcdir #" \
+      | sed -E "s#-Wp,-MMD,[^ ]+ # -I$srcdir -I$gen #" \
       | sed -E "s#-o [^ ]*/${base}\.o#-o $root/$dst#" \
       | sed -E "s#[^ ]*/${base}\.c#$root/$src#")
     # Never let a botched substitution write into the real build tree.

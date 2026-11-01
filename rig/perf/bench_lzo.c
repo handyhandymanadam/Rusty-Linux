@@ -4,7 +4,7 @@
  * out of port/test/lzo/shim, and bench.c is built against the top-level lib
  * shim.
  *
- * SIX benchmarks, not one, for the reason PRIOR-ART.md §5 gives: a single
+ * SIX benchmarks, not one, for the reason notes/PRIOR-ART.md §5 gives: a single
  * number in a decompressor family is worth almost nothing, and the spread
  * across corpus shapes is the measurement.
  *

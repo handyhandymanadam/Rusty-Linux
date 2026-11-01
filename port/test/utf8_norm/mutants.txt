@@ -1,0 +1,66 @@
+sup_zero~while i >= 0 && *(*t).utf8agetab.add(i as usize) != 0 {~while i >= 0 {
+clen_e0~(c >= 0xE0) as usize~(c > 0xE0) as usize
+clen_f0~(c >= 0xF0) as usize~(c >= 0xF8) as usize
+dec3_3~uc |= (*str.add(2) & 0x3F) as u32;~uc |= (*str.add(2) & 0x1F) as u32;
+enc3_2~*str.add(2) = ((val & 0x3F) | 0x80) as u8;~*str.add(2) = ((val & 0x3F) | 0x40) as u8;
+enc3_0~*str = (val | 0xE0) as u8;~*str = (val | 0xC0) as u8;
+hg_si~let si = utf8decode3(str).wrapping_sub(SB);~let si = utf8decode3(str).wrapping_sub(SB - 1);
+hg_li~let li = si / NC;~let li = si / TC;
+hg_vi~let vi = (si % NC) / TC;~let vi = (si % NC) / NC;
+hg_ti~let ti = si % TC;~let ti = si % NC;
+hg_gen~*h = 2;~*h = 1;
+hg_ccc~*h.add(1) = DECOMPOSE as u8;~*h.add(1) = 0;
+hg_lb~h = h.add(utf8encode3(h, li.wrapping_add(LB)));~h = h.add(utf8encode3(h, li.wrapping_add(LB + 1)));
+hg_vb~h = h.add(utf8encode3(h, vi.wrapping_add(VB)));~h = h.add(utf8encode3(h, vi.wrapping_add(VB + 1)));
+hg_tb~h = h.add(utf8encode3(h, ti.wrapping_add(TB)));~h = h.add(utf8encode3(h, ti.wrapping_add(TB + 1)));
+hg_tcheck~        if ti != 0 {~        if ti == 0 {
+hg_term~        *h = 0;<NL><NL>        hangul~        *h = 1;<NL><NL>        hangul
+look_len0~if len == 0 {<NL>            return null();~if len == 1 {<NL>            return null();
+look_next~if *trie & NEXTBYTE != 0 {<NL>                len = len.wrapping_sub(1);~if *trie & NEXTBYTE == 0 {<NL>                len = len.wrapping_sub(1);
+look_len1~len = len.wrapping_sub(1);<NL>                if len == 0 {~len = len.wrapping_sub(1);<NL>                if len == 1 {
+look_mask~let mask = 1u8 << (*trie & BITNUM);~let mask = 1u8 << ((*trie & BITNUM) ^ 1);
+look_roff~node = (*trie & RIGHTNODE) as i32;<NL>                    let mut offset~node = (*trie & TRIENODE) as i32;<NL>                    let mut offset
+look_offset~offset <<= 8;~offset <<= 7;
+look_rpath~} else if *trie & RIGHTPATH != 0 {<NL>                    // Right node after this node~} else if *trie & RIGHTPATH == 0 {<NL>                    // Right node after this node
+look_lnode~node = (*trie & LEFTNODE) as i32;<NL>                    trie = trie.add(offlen as usize + 1);~node = (*trie & RIGHTNODE) as i32;<NL>                    trie = trie.add(offlen as usize + 1);
+look_ladv~trie = trie.add(offlen as usize + 1);~trie = trie.add(offlen as usize);
+look_lpath~} else if *trie & RIGHTPATH != 0 {<NL>                    // No left node.~} else if *trie & RIGHTPATH == 0 {<NL>                    // No left node.
+look_hg_ccc~if *trie.add(1) as i16 == DECOMPOSE && *trie.add(2) == HANGUL {~if *trie.add(1) as i16 == DECOMPOSE {
+look_hg_chr~&& *trie.add(2) == HANGUL~&& *trie.add(2) != 0
+look_hg_s~trie = utf8hangul(s.sub(2), hangul);~trie = utf8hangul(s.sub(1), hangul);
+nlen_age~if *(*t).utf8agetab.add(*leaf as usize) > (*(*um).ntab[n as usize]).maxage {<NL>                ret = ret.wrapping_add(utf8clen(s));~if *(*t).utf8agetab.add(*leaf as usize) >= (*(*um).ntab[n as usize]).maxage {<NL>                ret = ret.wrapping_add(utf8clen(s));
+nlen_dec~} else if *leaf.add(1) as i16 == DECOMPOSE {<NL>                ret = ret.wrapping_add(leaf_strlen(leaf));~} else if *leaf.add(1) as i16 == DECOMPOSE {<NL>                ret = ret.wrapping_add(leaf_strlen(leaf) + 1);
+nlen_len~            len = len.wrapping_sub(c);<NL>            s = s.add(c);~            len = len.wrapping_sub(1);<NL>            s = s.add(c);
+nlen_loop~while len != 0 && *s != 0 {<NL>            let leaf = utf8nlookup(um, n,~while len != 0 {<NL>            let leaf = utf8nlookup(um, n,
+cur_null~if s.is_null() {<NL>            return -1;~if s.is_null() {<NL>            return 0;
+cur_ccc~(*u8c).ccc = STOPPER;<NL>        (*u8c).nccc = STOPPER;<NL>        // Check~(*u8c).ccc = 1;<NL>        (*u8c).nccc = STOPPER;<NL>        // Check
+cur_cont~(*(s as *const u8) & 0xC0) == 0x80~(*(s as *const u8) & 0xC0) == 0xC0
+cur_len~if len > 0 && (*(s as *const u8)~if len > 1 && (*(s as *const u8)
+cur_clob~if (*u8c).len as usize != len {<NL>            return -1;~if (*u8c).len as usize != len {<NL>            return 0;
+by_endp~if !c.p.is_null() && *c.s == 0 {<NL>                c.s = c.p;~if !c.p.is_null() && *c.s == 0 {<NL>                c.s = c.s;
+by_endp2~                c.s = c.p;<NL>                c.p = null();~                c.s = c.p;
+by_eos~if c.p.is_null() && (c.len == 0 || *c.s == 0) {~if c.p.is_null() && (c.len == 0 && *c.s == 0) {
+by_eos_ccc~if c.ccc == STOPPER {<NL>                        return 0;~if c.ccc != STOPPER {<NL>                        return 0;
+by_cont~} else if (*c.s & 0xC0) == 0x80 {~} else if (*c.s & 0xC0) == 0xC0 {
+by_cont_len~if c.p.is_null() {<NL>                        c.len = c.len.wrapping_sub(1);<NL>                    }<NL>                    let b = *c.s;~if !c.p.is_null() {<NL>                        c.len = c.len.wrapping_sub(1);<NL>                    }<NL>                    let b = *c.s;
+by_look_p~let mut leaf = if !c.p.is_null() {~let mut leaf = if c.p.is_null() {
+by_new~if *(*(*c.um).tables).utf8agetab.add(*leaf as usize) > (*(*c.um).ntab[c.n as usize]).maxage {~if *(*(*c.um).tables).utf8agetab.add(*leaf as usize) >= (*(*c.um).ntab[c.n as usize]).maxage {
+by_dec_len~c.len = c.len.wrapping_sub(utf8clen(c.s) as u32);<NL>                    c.p = c.s.add(utf8clen(c.s));~c.len = c.len.wrapping_sub(1);<NL>                    c.p = c.s.add(utf8clen(c.s));
+by_dec_p~c.p = c.s.add(utf8clen(c.s));~c.p = c.s.add(1);
+by_dec_s~c.s = leaf.add(2);~c.s = leaf.add(1);
+by_empty~if *c.s == 0 {<NL>                        if c.ccc == STOPPER {<NL>                            continue 'outer;~if *c.s == 0 {<NL>                        if c.ccc != STOPPER {<NL>                            continue 'outer;
+by_empty2~                        ccc = STOPPER;<NL>                        break 'mismatch;<NL>                    }<NL><NL>                    leaf~                        ccc = 1;<NL>                        break 'mismatch;<NL>                    }<NL><NL>                    leaf
+by_nccc2~if ccc != STOPPER && c.ccc < ccc && ccc < c.nccc {~if ccc != STOPPER && c.ccc <= ccc && ccc < c.nccc {
+by_emit~if ccc == c.ccc {<NL>                    if c.p.is_null() {~if ccc != c.ccc {<NL>                    if c.p.is_null() {
+by_emit_len~if ccc == c.ccc {<NL>                    if c.p.is_null() {<NL>                        c.len = c.len.wrapping_sub(1);~if ccc == c.ccc {<NL>                    if c.p.is_null() {<NL>                        c.len = c.len.wrapping_sub(2);
+mm_first~if c.nccc == STOPPER {<NL>                // Scan forward~if c.nccc != STOPPER {<NL>                // Scan forward
+mm_ccc~c.ccc = MINCCC - 1;~c.ccc = MINCCC;
+mm_save~c.slen = c.len;<NL>                if c.p.is_null() {~c.slen = 0;<NL>                if c.p.is_null() {
+mm_sp~c.sp = c.p;<NL>                c.ss = c.s;~c.sp = null();<NL>                c.ss = c.s;
+mm_adv~                c.s = c.s.add(utf8clen(c.s));<NL>            } else if ccc != STOPPER {~                c.s = c.s.add(1);<NL>            } else if ccc != STOPPER {
+mm_skip~} else if ccc != STOPPER {<NL>                // Not a stopper~} else if ccc == STOPPER {<NL>                // Not a stopper
+mm_skip_len~                if c.p.is_null() {<NL>                    c.len = c.len.wrapping_sub(utf8clen(c.s) as u32);<NL>                }<NL>                c.s = c.s.add(utf8clen(c.s));<NL>            } else if c.nccc~                if !c.p.is_null() {<NL>                    c.len = c.len.wrapping_sub(utf8clen(c.s) as u32);<NL>                }<NL>                c.s = c.s.add(utf8clen(c.s));<NL>            } else if c.nccc
+mm_restart~} else if c.nccc != MAXCCC + 1 {~} else if c.nccc == MAXCCC + 1 {
+mm_restart_max~c.nccc = MAXCCC + 1;~c.nccc = MAXCCC;
+mm_restart_s~c.s = c.ss;<NL>                c.p = c.sp;~c.s = c.ss;<NL>                c.p = null();
+mm_restart_len~c.p = c.sp;<NL>                c.len = c.slen;~c.p = c.sp;

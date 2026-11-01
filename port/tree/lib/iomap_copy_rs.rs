@@ -31,6 +31,17 @@
 
 use core::ffi::c_void;
 
+// The export of `__iowrite32_copy` (logs/riscv64.md: crc-check REMOVED 1 on riscv64 before this).
+// x86-64 and arm64 supply their own, so only the other architectures export the C's version.
+// Same contract as `__ioread32_copy` below: `__iomem` is a sparse annotation, not DWARF.
+#[cfg(not(any(CONFIG_X86_64, target_arch = "aarch64")))]
+kernel::kabi_export! {
+    __iowrite32_copy,
+    license = "GPL",
+    namespace = "",
+    contract = "subprogram ( formal_parameter pointer_type { base_type void } to , formal_parameter pointer_type { const_type { base_type void } } from , formal_parameter t#size_t count ) -> base_type void",
+}
+
 /// `__iowrite32_copy()`: kernel memory to MMIO, 32 bits at a time.
 ///
 /// **Not built on x86-64**, which supplies its own in
@@ -87,6 +98,11 @@ pub unsafe extern "C" fn __ioread32_copy(to: *mut c_void, from: *const c_void, c
     }
 }
 
+// arm64 defines its own `__iowrite64_copy()` (arch/arm64/include/asm/io.h,
+// `#define __iowrite64_copy __iowrite64_copy`), so the C's `#ifndef` skips
+// this body there and the symbol must not be added to the export table
+// (logs/arm64.md: crc-check ADDED 1 before this cfg). x86-64 is unchanged.
+#[cfg(not(target_arch = "aarch64"))]
 kernel::kabi_export! {
     __iowrite64_copy,
     license = "GPL",
@@ -100,6 +116,7 @@ kernel::kabi_export! {
 /// # Safety
 /// `to` must be a valid MMIO mapping writable for `count` 64-bit words and
 /// `from` readable for the same; both must be 64-bit aligned.
+#[cfg(not(target_arch = "aarch64"))]
 #[no_mangle]
 pub unsafe extern "C" fn __iowrite64_copy(to: *mut c_void, from: *const c_void, count: usize) {
     #[cfg(CONFIG_64BIT)]

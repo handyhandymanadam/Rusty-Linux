@@ -4,7 +4,7 @@
 # Boot a kernel and actually INSMOD a module into it.
 #
 # WHY THIS EXISTS. logs/build-limits.md has recorded, since the beginning, that
-# neither of this project's builds loads a module -- so GOALS.md §2 criterion 4
+# neither of this project's builds loads a module -- so notes/GOALS.md §2 criterion 4
 # ("the MODVERSIONS CRCs do not change") has always been a claim about numbers
 # in a file, never a claim that a module built against those numbers loads.
 # rig/crc-check.sh compares fingerprints; nothing checked that the fingerprints
@@ -60,5 +60,5 @@ timeout 120 qemu-system-x86_64 $KVM -m 1024 -smp 2 -no-reboot -display none \
   -kernel "$BZ" -initrd "$TMP.cpio.gz" -append "console=ttyS0 panic=-1 loglevel=7" \
   -serial mon:stdio < /dev/null > "$LOG" 2>&1
 echo "qemu-exit=$?"
-rm -rf "$TMP" "$TMP.cpio.gz"
+rm -rf "${TMP:?}" "${TMP:?}.cpio.gz"
 grep -E "MODTEST|disagrees|no symbol version|Unknown symbol" "$LOG"

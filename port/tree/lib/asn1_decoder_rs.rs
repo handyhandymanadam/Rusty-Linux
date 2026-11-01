@@ -78,6 +78,25 @@
 //! ...` become single match arms covering both opcodes, with the extra
 //! precondition made an explicit `if` gated on which opcode it actually
 //! was -- there is no separate code path to lose sync with the other.
+//!
+//! # `rig/uaccess-panic-check.sh`: every `+`/`-` on `pc`/`dp`/`len`/
+//! # `datalen`/`hdr`/`csp`/`jsp`/`tdp` is `wrapping_*`
+//!
+//! All are `size_t`-or-narrower unsigned in the pristine C, so C's own
+//! wraparound is already their defined behaviour on overflow, not a
+//! divergence being masked. One `panic_bounds_check` remains and was
+//! investigated, not silenced: `jump_stack[jsp]`/`cons_dp_stack[csp]`-
+//! family indexing is guarded by an explicit `>= NR_JUMP_STACK`/
+//! `>= NR_CONS_STACK` check on every PUSH (`jsp += 1`/`csp += 1`), so
+//! every subsequent read is provably in range -- except the two
+//! `csp += 1` sites inside `ASN1_OP_END_*_OF` handling, which have no
+//! adjacent check at all. Confirmed against the pristine C
+//! (`lib/asn1_decoder.c:409,422`): neither does upstream, because both
+//! sites immediately follow this same function's own `csp -= 1`
+//! (the "pop" for the level this "OF" iteration just finished) --
+//! net stack depth across the pop-then-repush is unchanged, so it stays
+//! within whatever depth the ORIGINAL push already validated. Same
+//! invariant, same shape, in both languages; nothing to fix.
 
 #![allow(non_upper_case_globals)]
 
@@ -232,19 +251,19 @@ unsafe fn asn1_find_indefinite_length(
         // SAFETY: `datalen - dp >= 2` just checked, `data` readable for
         // `datalen` bytes per this function's contract.
         let tag = unsafe { *data.add(dp) };
-        dp += 1;
+        dp = dp.wrapping_add(1);
 
         if tag == ASN1_EOC {
             // SAFETY: as above, one more byte available.
             let eoc_len = unsafe { *data.add(dp) };
-            dp += 1;
+            dp = dp.wrapping_add(1);
             if eoc_len != 0 {
                 *dp_inout = dp;
                 return -1; // invalid_eoc
             }
-            indef_level -= 1;
+            indef_level = indef_level.wrapping_sub(1);
             if indef_level <= 0 {
-                *len_out = dp - start;
+                *len_out = dp.wrapping_sub(start);
                 *dp_inout = dp;
                 return 0;
             }
@@ -259,7 +278,7 @@ unsafe fn asn1_find_indefinite_length(
                 }
                 // SAFETY: as above.
                 let tmp = unsafe { *data.add(dp) };
-                dp += 1;
+                dp = dp.wrapping_add(1);
                 if tmp & 0x80 == 0 {
                     break;
                 }
@@ -269,7 +288,7 @@ unsafe fn asn1_find_indefinite_length(
         // SAFETY: bounds already ensured at least one more byte is
         // available on every path reaching here.
         let mut len = unsafe { *data.add(dp) } as usize;
-        dp += 1;
+        dp = dp.wrapping_add(1);
 
         if len > 0x7f {
             if len == ASN1_INDEFINITE_LENGTH as usize {
@@ -277,7 +296,7 @@ unsafe fn asn1_find_indefinite_length(
                     *dp_inout = dp;
                     return -1; // indefinite_len_primitive
                 }
-                indef_level += 1;
+                indef_level = indef_level.wrapping_add(1);
                 continue;
             }
 
@@ -294,14 +313,14 @@ unsafe fn asn1_find_indefinite_length(
             for _ in 0..n {
                 // SAFETY: `n <= datalen - dp` just checked.
                 len = (len << 8) | unsafe { *data.add(dp) } as usize;
-                dp += 1;
+                dp = dp.wrapping_add(1);
             }
         }
         if len > datalen.wrapping_sub(dp) {
             *dp_inout = dp;
             return -1; // data_overrun_error
         }
-        dp += len;
+        dp = dp.wrapping_add(len);
     }
 }
 
@@ -359,7 +378,7 @@ pub unsafe extern "C" fn asn1_ber_decoder(
         let Some(&op_len) = ASN1_OP_LENGTHS.get(op as usize) else {
             return -EBADMSG;
         };
-        if pc + op_len as usize > machlen {
+        if pc.wrapping_add(op_len as usize) > machlen {
             return -EBADMSG; // machine_overrun_error
         }
 
@@ -369,7 +388,7 @@ pub unsafe extern "C" fn asn1_ber_decoder(
                 || (op & ASN1_OP_MATCH__SKIP != 0 && dp == datalen)
             {
                 flags &= !FLAG_LAST_MATCHED;
-                pc += op_len as usize;
+                pc = pc.wrapping_add(op_len as usize);
                 continue 'next_op;
             }
 
@@ -382,7 +401,7 @@ pub unsafe extern "C" fn asn1_ber_decoder(
             // SAFETY: caller guarantees `data` readable for `datalen`
             // bytes; `dp < datalen - 1` just checked.
             tag = unsafe { *data.add(dp) };
-            dp += 1;
+            dp = dp.wrapping_add(1);
             if (tag & 0x1f) == ASN1_LONG_TAG {
                 return -EBADMSG; // long_tag_not_supported
             }
@@ -391,14 +410,14 @@ pub unsafe extern "C" fn asn1_ber_decoder(
                 // SAFETY: `pc + op_len <= machlen` already checked, and
                 // every opcode <= ASN1_OP__MATCHES_TAG without
                 // ASN1_OP_MATCH__ANY has a tag operand at pc+1.
-                let optag = unsafe { *machine.add(pc + 1) };
+                let optag = unsafe { *machine.add(pc.wrapping_add(1)) };
                 flags |= optag & FLAG_CONS;
 
                 let tmp = (optag ^ tag) & !(optag & ASN1_CONS_BIT);
                 if tmp != 0 {
                     if op & ASN1_OP_MATCH__SKIP != 0 {
-                        pc += op_len as usize;
-                        dp -= 1;
+                        pc = pc.wrapping_add(op_len as usize);
+                        dp = dp.wrapping_sub(1);
                         continue 'next_op;
                     }
                     return -EBADMSG; // tag_mismatch
@@ -409,7 +428,7 @@ pub unsafe extern "C" fn asn1_ber_decoder(
             // SAFETY: `dp < datalen` here (one byte was consumed above,
             // and `datalen - dp >= 2` before that consumption).
             len = unsafe { *data.add(dp) } as usize;
-            dp += 1;
+            dp = dp.wrapping_add(1);
             if len > 0x7f {
                 if len == ASN1_INDEFINITE_LENGTH as usize {
                     if tag & ASN1_CONS_BIT == 0 {
@@ -430,12 +449,12 @@ pub unsafe extern "C" fn asn1_ber_decoder(
                     if n > datalen.wrapping_sub(dp) {
                         return -EBADMSG; // data_overrun_error
                     }
-                    hdr += n as u8;
+                    hdr = hdr.wrapping_add(n as u8);
                     len = 0;
                     for _ in 0..n {
                         // SAFETY: `n <= datalen - dp` just checked.
                         len = (len << 8) | unsafe { *data.add(dp) } as usize;
-                        dp += 1;
+                        dp = dp.wrapping_add(1);
                     }
                     if len > datalen.wrapping_sub(dp) {
                         return -EBADMSG; // data_overrun_error
@@ -459,11 +478,11 @@ pub unsafe extern "C" fn asn1_ber_decoder(
                     // against it), so this narrowing matches the C's own
                     // `unsigned short cons_dp_stack[]` exactly, not a
                     // truncation bug.
-                    datalen = dp + len;
+                    datalen = dp.wrapping_add(len);
                 } else {
                     cons_datalen_stack[csp as usize] = 0;
                 }
-                csp += 1;
+                csp = csp.wrapping_add(1);
             }
             tdp = dp;
         }
@@ -497,10 +516,10 @@ pub unsafe extern "C" fn asn1_ber_decoder(
                 if op & ASN1_OP_MATCH__ACT != 0 {
                     let act = if op & ASN1_OP_MATCH__ANY != 0 {
                         // SAFETY: bounds already checked via op_len/machlen.
-                        unsafe { *machine.add(pc + 1) }
+                        unsafe { *machine.add(pc.wrapping_add(1)) }
                     } else {
                         // SAFETY: as above.
-                        unsafe { *machine.add(pc + 2) }
+                        unsafe { *machine.add(pc.wrapping_add(2)) }
                     };
                     // SAFETY: caller guarantees `actions` has an entry for
                     // every action index the bytecode references, and
@@ -515,9 +534,9 @@ pub unsafe extern "C" fn asn1_ber_decoder(
                 }
 
                 if flags & FLAG_CONS == 0 {
-                    dp += len;
+                    dp = dp.wrapping_add(len);
                 }
-                pc += op_len as usize;
+                pc = pc.wrapping_add(op_len as usize);
                 continue 'next_op;
             }
 
@@ -525,10 +544,10 @@ pub unsafe extern "C" fn asn1_ber_decoder(
                 if jsp as usize == NR_JUMP_STACK {
                     return -EBADMSG; // jump_stack_overflow
                 }
-                jump_stack[jsp as usize] = (pc + op_len as usize) as u8;
-                jsp += 1;
+                jump_stack[jsp as usize] = pc.wrapping_add(op_len as usize) as u8;
+                jsp = jsp.wrapping_add(1);
                 // SAFETY: bounds already checked via op_len/machlen.
-                pc = unsafe { *machine.add(pc + 2) } as usize;
+                pc = unsafe { *machine.add(pc.wrapping_add(2)) } as usize;
                 continue 'next_op;
             }
 
@@ -536,7 +555,7 @@ pub unsafe extern "C" fn asn1_ber_decoder(
                 if flags & FLAG_MATCHED == 0 {
                     return -EBADMSG; // tag_mismatch
                 }
-                pc += op_len as usize;
+                pc = pc.wrapping_add(op_len as usize);
                 continue 'next_op;
             }
 
@@ -562,7 +581,7 @@ pub unsafe extern "C" fn asn1_ber_decoder(
                 if csp == 0 {
                     return -EBADMSG; // cons_stack_underflow
                 }
-                csp -= 1;
+                csp = csp.wrapping_sub(1);
                 tdp = cons_dp_stack[csp as usize] as usize;
                 hdr = cons_hdrlen_stack[csp as usize];
                 len = datalen;
@@ -576,45 +595,45 @@ pub unsafe extern "C" fn asn1_ber_decoder(
                     // SAFETY: caller guarantees `data` readable for
                     // `datalen` bytes; bounds just checked.
                     if unsafe { *data.add(dp) } != 0 {
-                        dp += 1;
+                        dp = dp.wrapping_add(1);
                         if op & ASN1_OP_END__OF != 0 {
-                            dp -= 1;
-                            csp += 1;
+                            dp = dp.wrapping_sub(1);
+                            csp = csp.wrapping_add(1);
                             // SAFETY: bounds already checked via
                             // op_len/machlen.
-                            pc = unsafe { *machine.add(pc + 1) } as usize;
+                            pc = unsafe { *machine.add(pc.wrapping_add(1)) } as usize;
                             continue 'next_op;
                         }
                         return -EBADMSG; // missing_eoc
                     }
-                    dp += 1;
+                    dp = dp.wrapping_add(1);
                     // SAFETY: as above.
                     if unsafe { *data.add(dp) } != 0 {
                         return -EBADMSG; // invalid_eoc
                     }
-                    dp += 1;
-                    len = dp - tdp - 2;
+                    dp = dp.wrapping_add(1);
+                    len = dp.wrapping_sub(tdp).wrapping_sub(2);
                 } else {
                     if dp < len && op & ASN1_OP_END__OF != 0 {
                         datalen = len;
-                        csp += 1;
+                        csp = csp.wrapping_add(1);
                         // SAFETY: bounds already checked via op_len/machlen.
-                        pc = unsafe { *machine.add(pc + 1) } as usize;
+                        pc = unsafe { *machine.add(pc.wrapping_add(1)) } as usize;
                         continue 'next_op;
                     }
                     if dp != len {
                         return -EBADMSG; // cons_length_error
                     }
-                    len -= tdp;
+                    len = len.wrapping_sub(tdp);
                 }
 
                 if op & ASN1_OP_END__ACT != 0 {
                     let act = if op & ASN1_OP_END__OF != 0 {
                         // SAFETY: bounds already checked via op_len/machlen.
-                        unsafe { *machine.add(pc + 2) }
+                        unsafe { *machine.add(pc.wrapping_add(2)) }
                     } else {
                         // SAFETY: as above.
-                        unsafe { *machine.add(pc + 1) }
+                        unsafe { *machine.add(pc.wrapping_add(1)) }
                     };
                     // SAFETY: caller guarantees `actions` has an entry for
                     // every action index the bytecode references.
@@ -626,17 +645,17 @@ pub unsafe extern "C" fn asn1_ber_decoder(
                         return ret;
                     }
                 }
-                pc += op_len as usize;
+                pc = pc.wrapping_add(op_len as usize);
                 continue 'next_op;
             }
 
             ASN1_OP_MAYBE_ACT | ASN1_OP_ACT => {
                 if op == ASN1_OP_MAYBE_ACT && flags & FLAG_LAST_MATCHED == 0 {
-                    pc += op_len as usize;
+                    pc = pc.wrapping_add(op_len as usize);
                     continue 'next_op;
                 }
                 // SAFETY: bounds already checked via op_len/machlen.
-                let act = unsafe { *machine.add(pc + 1) };
+                let act = unsafe { *machine.add(pc.wrapping_add(1)) };
                 // SAFETY: caller guarantees `actions` has an entry for
                 // every action index the bytecode references.
                 let f = unsafe { *actions.add(act as usize) };
@@ -646,7 +665,7 @@ pub unsafe extern "C" fn asn1_ber_decoder(
                 if ret < 0 {
                     return ret;
                 }
-                pc += op_len as usize;
+                pc = pc.wrapping_add(op_len as usize);
                 continue 'next_op;
             }
 
@@ -654,7 +673,7 @@ pub unsafe extern "C" fn asn1_ber_decoder(
                 if jsp == 0 {
                     return -EBADMSG; // jump_stack_underflow
                 }
-                jsp -= 1;
+                jsp = jsp.wrapping_sub(1);
                 pc = jump_stack[jsp as usize] as usize;
                 flags |= FLAG_MATCHED | FLAG_LAST_MATCHED;
                 continue 'next_op;
@@ -710,3 +729,15 @@ kernel::kabi_export! {
     namespace = "",
     contract = "subprogram ( formal_parameter pointer_type { const_type { s#asn1_decoder } } decoder , formal_parameter pointer_type { base_type void } context , formal_parameter pointer_type { const_type { base_type unsigned char byte_size(1) encoding(8) } } data , formal_parameter t#size_t datalen ) -> base_type int byte_size(4) encoding(5)",
 }
+
+// Module build (logs/riscv64.md failure 3; riscv defconfig has this library =m): the C's
+// MODULE_DESCRIPTION()/MODULE_LICENSE() went away with the C file, and modpost refuses a module
+// without a license. UNPREFIXED tags, as md5_rs.rs. Built-in (=y, every x86 config) emits
+// nothing here, unchanged.
+#[cfg(MODULE)]
+core::arch::global_asm!(
+    ".section \".modinfo\",\"a\"",
+    ".asciz \"description=Decoder for ASN.1 BER/DER/CER encoded bytestream\"",
+    ".asciz \"license=GPL\"",
+    ".previous",
+);

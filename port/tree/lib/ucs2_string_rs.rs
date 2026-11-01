@@ -29,7 +29,7 @@ pub unsafe extern "C" fn ucs2_strnlen(s: *const Ucs2Char, maxlength: usize) -> u
     // the caller guarantees is readable -- see the divergence note below.
     unsafe {
         while length < maxlength && *s.add(length) != 0 {
-            length += 1;
+            length = length.wrapping_add(1);
         }
     }
     length
@@ -52,7 +52,7 @@ pub unsafe extern "C" fn ucs2_strlen(s: *const Ucs2Char) -> usize {
 #[no_mangle]
 pub unsafe extern "C" fn ucs2_strsize(data: *const Ucs2Char, maxlength: usize) -> usize {
     // SAFETY: the caller's contract.
-    unsafe { ucs2_strnlen(data, maxlength / 2) * 2 }
+    unsafe { (ucs2_strnlen(data, maxlength / 2)).wrapping_mul(2) }
 }
 
 /// Body of `ucs2_strscpy()`, minus the argument checks.
@@ -86,7 +86,7 @@ pub unsafe extern "C" fn rust_ucs2_strscpy(
         }
 
         // Ran out of room: truncate, terminate, and say so.
-        *dst.add(count - 1) = 0;
+        *dst.add(count.wrapping_sub(1)) = 0;
     }
     -E2BIG
 }
@@ -138,14 +138,14 @@ pub unsafe extern "C" fn ucs2_utf8size(src: *const Ucs2Char) -> usize {
             if c == 0 {
                 break;
             }
-            j += if c >= 0x800 {
+            j = j.wrapping_add(if c >= 0x800 {
                 3
             } else if c >= 0x80 {
                 2
             } else {
                 1
-            };
-            i += 1;
+            });
+            i = i.wrapping_add(1);
         }
     }
     j
@@ -183,25 +183,25 @@ pub unsafe extern "C" fn ucs2_as_utf8(
                 if maxlength < 3 {
                     break;
                 }
-                maxlength -= 3;
+                maxlength = maxlength.wrapping_sub(3);
                 *dest.add(j) = 0xe0 | ((c & 0xf000) >> 12) as u8;
-                *dest.add(j + 1) = 0x80 | ((c & 0x0fc0) >> 6) as u8;
-                *dest.add(j + 2) = 0x80 | (c & 0x003f) as u8;
-                j += 3;
+                *dest.add(j.wrapping_add(1)) = 0x80 | ((c & 0x0fc0) >> 6) as u8;
+                *dest.add(j.wrapping_add(2)) = 0x80 | (c & 0x003f) as u8;
+                j = j.wrapping_add(3);
             } else if c >= 0x80 {
                 if maxlength < 2 {
                     break;
                 }
-                maxlength -= 2;
+                maxlength = maxlength.wrapping_sub(2);
                 *dest.add(j) = 0xc0 | ((c & 0x7c0) >> 6) as u8;
-                *dest.add(j + 1) = 0x80 | (c & 0x03f) as u8;
-                j += 2;
+                *dest.add(j.wrapping_add(1)) = 0x80 | (c & 0x03f) as u8;
+                j = j.wrapping_add(2);
             } else {
-                maxlength -= 1;
+                maxlength = maxlength.wrapping_sub(1);
                 *dest.add(j) = (c & 0x7f) as u8;
-                j += 1;
+                j = j.wrapping_add(1);
             }
-            i += 1;
+            i = i.wrapping_add(1);
         }
 
         // Only terminated when there was room left. A full buffer comes

@@ -13,7 +13,7 @@
  *   calling the function directly, it is the only honest one.
  *
  * WHY THE CORPUS IS SHAPED LIKE THIS
- *   PRIOR-ART.md §5 records a TWELVE-FOLD spread on a decompressor between
+ *   notes/PRIOR-ART.md §5 records a TWELVE-FOLD spread on a decompressor between
  *   two corpus inputs, from one mechanism. The lesson is that a single input
  *   tells you almost nothing here. So the corpus varies the data (runs,
  *   short periods, random, text, long-range repeats), the compressor
@@ -998,8 +998,8 @@ int main(int argc, char **argv)
     load_file("port/tree/lib/zlib_inflate/inffast_rs.rs");
     load_file("port/pristine/lib/zlib_inflate/inflate.c");
     load_file("port/pristine/include/linux/zlib.h");
-    load_file("STATUS.md");
-    load_file("GOALS.md");
+    load_file("notes/STATUS.md");
+    load_file("notes/GOALS.md");
     printf("  corpus: %d generators, %d of them file-backed\n", NGEN, nfiles ? 1 : 0);
 
     mix_scratch = malloc(PLAIN_CAP);

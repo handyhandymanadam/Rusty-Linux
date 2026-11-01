@@ -1,0 +1,125 @@
+ns_valid_lo~!(t <= KOBJ_NS_TYPE_NONE || t >= KOBJ_NS_TYPES)~!(t < KOBJ_NS_TYPE_NONE || t >= KOBJ_NS_TYPES)
+ns_valid_hi~!(t <= KOBJ_NS_TYPE_NONE || t >= KOBJ_NS_TYPES)~!(t <= KOBJ_NS_TYPE_NONE || t > KOBJ_NS_TYPES)
+ns_register_busy~error = -16; // -EBUSY~error = -22;
+ns_register_inval~error = -EINVAL;<NL>        if !ns_type_is_valid(t) {~error = -ENOMEM;<NL>        if !ns_type_is_valid(t) {
+ns_register_store~unsafe { KOBJ_NS_OPS_TBL[t as usize] = ops };~unsafe { KOBJ_NS_OPS_TBL[0] = ops };
+ns_register_ok~error = 0;<NL>        unsafe { KOBJ_NS_OPS_TBL~error = 1;<NL>        unsafe { KOBJ_NS_OPS_TBL
+ns_registered_val~registered = unsafe { !KOBJ_NS_OPS_TBL[t as usize].is_null() } as c_int;~registered = unsafe { KOBJ_NS_OPS_TBL[t as usize].is_null() } as c_int;
+ns_registered_skip~    if ns_type_is_valid(t) {<NL>        registered~    if true {<NL>        registered
+child_ns_parent_null~    if !parent.is_null() {<NL>        let kt = unsafe { (*parent).ktype };~    if !parent.is_null() && false {<NL>        let kt = unsafe { (*parent).ktype };
+child_ns_ktype~        if !kt.is_null() {<NL>            if let Some(f) = unsafe { (*kt).child_ns_type }~        if kt.is_null() {<NL>            if let Some(f) = unsafe { (*kt).child_ns_type }
+ns_ops_parent~unsafe { rust_kobj_child_ns_ops((*kobj).parent) }~unsafe { rust_kobj_child_ns_ops(kobj) }
+may_mount_default~let mut may_mount = true;~let mut may_mount = false;
+may_mount_call~Some(f) => may_mount = unsafe { f() },~Some(_) => may_mount = true,
+grab_ns~Some(f) => ns = unsafe { f() },~Some(_) => ns = null_mut(),
+drop_ns_call~if let Some(f) = unsafe { (*ops).drop_ns } {<NL>                unsafe { f(ns) };~if let Some(f) = unsafe { (*ops).drop_ns } {<NL>                unsafe { f(null_mut()) };
+drop_ns_valid~    unsafe { rust_ko_ns_lock() };<NL>    if ns_type_is_valid(t) {<NL>        let ops = unsafe { KOBJ_NS_OPS_TBL[t as usize] };<NL>        if !ops.is_null() {<NL>            if let Some(f)~    unsafe { rust_ko_ns_lock() };<NL>    if true {<NL>        let ops = unsafe { KOBJ_NS_OPS_TBL[t as usize] };<NL>        if !ops.is_null() {<NL>            if let Some(f)
+namespace_none~|| unsafe { (*ns_ops).type_ } == KOBJ_NS_TYPE_NONE~|| unsafe { (*ns_ops).type_ } != KOBJ_NS_TYPE_NONE
+namespace_null~    if ns_ops.is_null() ||~    if false ||
+ownership_root~    unsafe { rust_ko_root_ownership(uid, gid) };~    
+ownership_call~unsafe { f(kobj, uid, gid) };~unsafe { f(kobj, gid, uid) };
+create_ns~rust_ko_sysfs_create_dir_ns(kobj, rust_kobject_namespace(kobj))~rust_ko_sysfs_create_dir_ns(kobj, null())
+create_err~    if error != 0 {<NL>        return error;<NL>    }<NL>    if !ktype.is_null() {~    if error < 0 {<NL>        return error;<NL>    }<NL>    if !ktype.is_null() {
+create_groups_null~    if !ktype.is_null() {<NL>        error = unsafe { rust_ko_sysfs_create_groups~    if ktype.is_null() {<NL>        error = unsafe { rust_ko_sysfs_create_groups
+create_groups_cleanup~            unsafe { rust_ko_sysfs_remove_dir(kobj) };<NL>            return error;~            return error;
+create_sysfs_get~    unsafe { rust_ko_sysfs_get(kobj) };~    
+create_enable_ns~            rust_ko_sysfs_enable_ns(kobj);~            
+create_bug_valid~rust_ko_bug_on(!ns_type_is_valid(t));~rust_ko_bug_on(false);
+path_len_start~let mut length: c_int = 1;~let mut length: c_int = 0;
+path_len_slash~.wrapping_add(unsafe { strlen(name) } as c_int).wrapping_add(1);~.wrapping_add(unsafe { strlen(name) } as c_int);
+path_len_null~        if name.is_null() {<NL>            return 0;~        if false {<NL>            return 0;
+path_len_walk~        parent = unsafe { (*parent).parent };<NL>        if parent.is_null() {<NL>            break;~        parent = unsafe { (*parent).parent };<NL>        if true {<NL>            break;
+path_fill_start~let mut length = length.wrapping_sub(1);~let mut length = length;
+path_fill_le~        if length <= 0 {<NL>            return -EINVAL;~        if length < 0 {<NL>            return -EINVAL;
+path_fill_copy~core::ptr::copy_nonoverlapping(name, path.add(length as usize), cur as usize)~core::ptr::copy_nonoverlapping(name, path.add(length as usize), 0)
+path_fill_slash~unsafe { *path.add(length as usize) = b'/' as c_char };~unsafe { *path.add(length as usize) = b'!' as c_char };
+path_fill_dec~        length -= 1;<NL>        unsafe { *path~        length -= 0;<NL>        unsafe { *path
+path_retry~            unsafe { rust_ko_kfree(path as *const c_void) };<NL>            continue;~            unsafe { rust_ko_kfree(path as *const c_void) };<NL>            return null_mut();
+path_len_zero~        if len == 0 {<NL>            return null_mut();~        if len == 1 {<NL>            return null_mut();
+path_alloc~let path = unsafe { rust_ko_kzalloc(len as usize, gfp) };~let path = unsafe { rust_ko_kzalloc(len as usize + 1, gfp) };
+kset_get_null~    if !k.is_null() {<NL>        unsafe { rust_kobject_get(ks_kobj(k)) };~    if k.is_null() {<NL>        unsafe { rust_kobject_get(ks_kobj(k)) };
+kset_join_null~    let ks = unsafe { (*kobj).kset };<NL>    if ks.is_null() {<NL>        return;<NL>    }<NL>    unsafe {<NL>        kset_get(ks);~    let ks = unsafe { (*kobj).kset };<NL>    if ks.is_null() {<NL>        return;<NL>    }<NL>    unsafe {
+kset_join_add~rust_ko_list_add_tail(&raw mut (*kobj).entry, ks_list(ks));~rust_ko_list_add_tail(ks_list(ks), &raw mut (*kobj).entry);
+kset_join_lock~        kset_get(ks);<NL>        rust_ko_ks_lock(ks);~        kset_get(ks);<NL>        rust_ko_ks_unlock(ks);
+kset_leave_del~rust_ko_list_del_init(&raw mut (*kobj).entry);~rust_ko_init_list_head(&raw mut (*kobj).entry);
+kset_leave_put~        rust_ko_ks_unlock(ks);<NL>        kset_put(ks);~        rust_ko_ks_unlock(ks);
+init_internal_null~    if kobj.is_null() {<NL>        return;<NL>    }<NL>    unsafe {<NL>        rust_ko_kref_init~    if false {<NL>        return;<NL>    }<NL>    unsafe {<NL>        rust_ko_kref_init
+init_internal_list~        rust_ko_init_list_head(&raw mut (*kobj).entry);<NL>        rust_ko_init_state(kobj);~        rust_ko_init_state(kobj);
+add_internal_null~    if kobj.is_null() {<NL>        return -ENOENT;~    if kobj.is_null() {<NL>        return -EINVAL;
+add_internal_empty~if name.is_null() || *name == 0 {~if name.is_null() {
+add_internal_parent~let mut parent = rust_kobject_get((*kobj).parent);~let mut parent = (*kobj).parent;
+add_internal_kset_parent~            if parent.is_null() {<NL>                parent = rust_kobject_get(ks_kobj((*kobj).kset));~            if parent.is_null() {<NL>                parent = ks_kobj((*kobj).kset);
+add_internal_join~            kobj_kset_join(kobj);<NL>            (*kobj).parent = parent;~            (*kobj).parent = parent;
+add_internal_setparent~            kobj_kset_join(kobj);<NL>            (*kobj).parent = parent;~            kobj_kset_join(kobj);
+add_internal_leave~            kobj_kset_leave(kobj);<NL>            rust_kobject_put(parent);<NL>            (*kobj).parent = null_mut();~            rust_kobject_put(parent);<NL>            (*kobj).parent = null_mut();
+add_internal_putparent~            kobj_kset_leave(kobj);<NL>            rust_kobject_put(parent);~            kobj_kset_leave(kobj);
+add_internal_clearparent~            (*kobj).parent = null_mut();<NL><NL>            // be noisy~            // be noisy
+add_internal_eexist~if error == -17 {~if error == -12 {
+add_internal_sysfs~            rust_ko_set_in_sysfs(kobj, true);~            
+init_null_kobj~            rust_ko_err_init_bad(kobj, 0);~            rust_ko_err_init_bad(kobj, 1);
+init_null_ktype~            rust_ko_err_init_bad(kobj, 1);~            rust_ko_err_init_bad(kobj, 0);
+init_reinit~        if rust_ko_get_initialized(kobj) {~        if !rust_ko_get_initialized(kobj) {
+init_ktype~        (*kobj).ktype = ktype;~        
+rename_null~    if kobj.is_null() {<NL>            return -EINVAL;<NL>        }<NL>        if (*kobj).parent.is_null() {~    if kobj.is_null() {<NL>            return -EINVAL;<NL>        }<NL>        if false {
+rename_noparent_put~            rust_kobject_put(kobj);<NL>            return -EINVAL;~            return -EINVAL;
+rename_name~            dup_name = (*kobj).name;<NL>            (*kobj).name = name;~            dup_name = (*kobj).name;
+rename_free_old~            dup_name = (*kobj).name;~            dup_name = name;
+rename_uevent~            rust_ko_uevent_env(kobj, KOBJ_MOVE, envp.as_mut_ptr());<NL>        }<NL>        rust_ko_kfree_const(dup_name);~            rust_ko_uevent_env(kobj, KOBJ_MOVE, null_mut());<NL>        }<NL>        rust_ko_kfree_const(dup_name);
+rename_sysfs~error = rust_ko_sysfs_rename_dir_ns(kobj, new_name, rust_kobject_namespace(kobj));~error = rust_ko_sysfs_rename_dir_ns(kobj, new_name, null());
+rename_dupfree~        rust_ko_kfree_const(dup_name);<NL>        rust_ko_kfree(devpath_string~        rust_ko_kfree(devpath_string
+rename_devpath~        rust_ko_kfree(devpath_string as *const c_void);<NL>        rust_ko_kfree(devpath as *const c_void);<NL>        rust_kobject_put(kobj);~        rust_ko_kfree(devpath as *const c_void);<NL>        rust_kobject_put(kobj);
+rename_put~        rust_ko_kfree(devpath as *const c_void);<NL>        rust_kobject_put(kobj);<NL>        error~        rust_ko_kfree(devpath as *const c_void);<NL>        error
+rename_nomem~            devpath_string = rust_ko_devpath_old(devpath);<NL>            if devpath_string.is_null() {<NL>                error = -ENOMEM;<NL>                break 'out;<NL>            }<NL>            envp[0] = devpath_string;<NL>            envp[1] = null_mut();<NL><NL>            let name~            devpath_string = rust_ko_devpath_old(devpath);<NL>            if devpath_string.is_null() {<NL>                error = -EINVAL;<NL>                break 'out;<NL>            }<NL>            envp[0] = devpath_string;<NL>            envp[1] = null_mut();<NL><NL>            let name
+move_kset_parent~        if new_parent.is_null() && !(*kobj).kset.is_null() {~        if new_parent.is_null() && (*kobj).kset.is_null() {
+move_kset_get~            new_parent = rust_kobject_get(ks_kobj((*kobj).kset));~            new_parent = ks_kobj((*kobj).kset);
+move_sysfs~error = rust_ko_sysfs_move_dir_ns(kobj, new_parent, rust_kobject_namespace(kobj));~error = rust_ko_sysfs_move_dir_ns(kobj, new_parent, null());
+move_parent~            (*kobj).parent = new_parent;<NL>            new_parent = null_mut();~            new_parent = null_mut();
+move_oldput~            rust_kobject_put(old_parent);<NL>            rust_ko_uevent_env~            rust_ko_uevent_env
+move_clear~            new_parent = null_mut();<NL>            rust_kobject_put(old_parent);~            rust_kobject_put(old_parent);
+move_event~            rust_ko_uevent_env(kobj, KOBJ_MOVE, envp.as_mut_ptr());<NL>        }<NL>        rust_kobject_put(new_parent);~        }<NL>        rust_kobject_put(new_parent);
+move_final_put~        rust_kobject_put(new_parent);<NL>        rust_kobject_put(kobj);~        rust_kobject_put(kobj);
+move_null~        let kobj = rust_kobject_get(kobj);<NL>        if kobj.is_null() {<NL>            return -EINVAL;<NL>        }<NL>        let mut new_parent~        let kobj = rust_kobject_get(kobj);<NL>        let mut new_parent
+del_groups~            rust_ko_sysfs_remove_groups(kobj, (*ktype).default_groups);~            
+del_remove_event~if rust_ko_get_add_sent(kobj) && !rust_ko_get_remove_sent(kobj) {~if rust_ko_get_add_sent(kobj) {
+del_remove_event2~if rust_ko_get_add_sent(kobj) && !rust_ko_get_remove_sent(kobj) {~if !rust_ko_get_remove_sent(kobj) {
+del_sd~        rust_ko_sysfs_put(sd);~        
+del_sysfs_flag~        rust_ko_set_in_sysfs(kobj, false);~        
+del_leave~        rust_ko_set_in_sysfs(kobj, false);<NL>        kobj_kset_leave(kobj);~        rust_ko_set_in_sysfs(kobj, false);
+del_parent~        kobj_kset_leave(kobj);<NL>        (*kobj).parent = null_mut();~        kobj_kset_leave(kobj);
+del_putparent~        kobject_del_inner(kobj);<NL>        rust_kobject_put(parent);~        kobject_del_inner(kobj);
+del_null~    if kobj.is_null() {<NL>        return;<NL>    }<NL>    unsafe {<NL>        let parent~    if false {<NL>        return;<NL>    }<NL>    unsafe {<NL>        let parent
+get_warn~            if !rust_ko_get_initialized(kobj) {<NL>                rust_ko_warn_uninit(kobj, true);~            if rust_ko_get_initialized(kobj) {<NL>                rust_ko_warn_uninit(kobj, true);
+get_warn_kind~rust_ko_warn_uninit(kobj, true);~rust_ko_warn_uninit(kobj, false);
+get_ref~            rust_ko_kref_get(kobj);~            
+put_warn~            if !rust_ko_get_initialized(kobj) {<NL>                rust_ko_warn_uninit(kobj, false);~            if rust_ko_get_initialized(kobj) {<NL>                rust_ko_warn_uninit(kobj, false);
+put_ref~            rust_ko_kref_put(kobj);~            
+gunz_null~    if kobj.is_null() {<NL>        return null_mut();~    if !kobj.is_null() {<NL>        return null_mut();
+gunz_ref~    if unsafe { !rust_ko_kref_get_unless_zero(kobj) } {~    if unsafe { rust_ko_kref_get_unless_zero(kobj) } {
+cleanup_sysfs~        if rust_ko_get_in_sysfs(kobj) {<NL>            kobject_del_inner(kobj);~        if !rust_ko_get_in_sysfs(kobj) {<NL>            kobject_del_inner(kobj);
+cleanup_parent~            // avoid dropping the parent reference unnecessarily<NL>            parent = null_mut();~            // avoid dropping the parent reference unnecessarily
+cleanup_release~            if let Some(release) = (*t).release {<NL>                release(kobj);~            if let Some(release) = (*t).release {
+cleanup_ktype~        if !t.is_null() {<NL>            if let Some(release)~        if t.is_null() {<NL>            if let Some(release)
+cleanup_name~        if !name.is_null() {<NL>            rust_ko_kfree_const(name);~        if name.is_null() {<NL>            rust_ko_kfree_const(name);
+cleanup_putparent~            rust_ko_kfree_const(name);<NL>        }<NL><NL>        rust_kobject_put(parent);~            rust_ko_kfree_const(name);<NL>        }
+kset_register_null~    if k.is_null() {<NL>        return -EINVAL;<NL>    }<NL>    unsafe {<NL>        let kobj = ks_kobj(k);~    if false {<NL>        return -EINVAL;<NL>    }<NL>    unsafe {<NL>        let kobj = ks_kobj(k);
+kset_register_ktype~        if (*kobj).ktype.is_null() {~        if !(*kobj).ktype.is_null() {
+kset_register_init~        kset_init(k);~        
+kset_register_free~            rust_ko_kfree_const((*kobj).name);~            
+kset_register_null_name~            (*kobj).name = null();<NL>            return err;~            return err;
+kset_register_event~        rust_ko_uevent(kobj, KOBJ_ADD);~        
+kset_register_event_kind~        rust_ko_uevent(kobj, KOBJ_ADD);~        rust_ko_uevent(kobj, KOBJ_REMOVE);
+kset_unreg_null~    if k.is_null() {<NL>        return;<NL>    }<NL>    unsafe {<NL>        rust_kobject_del(ks_kobj(k));~    if false {<NL>        return;<NL>    }<NL>    unsafe {<NL>        rust_kobject_del(ks_kobj(k));
+kset_unreg_del~        rust_kobject_del(ks_kobj(k));~        
+kset_unreg_put~        rust_kobject_put(ks_kobj(k));~        
+find_name~if !n.is_null() && streq(n, name) {~if !n.is_null() && !streq(n, name) {
+find_null_name~if !n.is_null() && streq(n, name) {~if streq(n, name) {
+find_gunz~ret = rust_kobject_get_unless_zero(k);~ret = k;
+find_break~                ret = rust_kobject_get_unless_zero(k);<NL>                break;~                ret = rust_kobject_get_unless_zero(k);
+find_next~            p = (*p).next;~            p = (*p).prev;
+find_lock~        rust_ko_ks_lock(kset);<NL>        let head~        let head
+streq_end~        if x == 0 {<NL>            return true;~        if x == 1 {<NL>            return true;
+streq_cmp~        if x != y {<NL>            return false;~        if x == y {<NL>            return false;
+strlen_loop~    while unsafe { *s.add(n) } != 0 {~    while unsafe { *s.add(n) } > 0 {
+ks_off_list~(kset as *mut u8).add(rust_ks_off_kobj) as *mut Kobject~(kset as *mut u8).add(rust_ks_off_list) as *mut Kobject
+ks_off_kobj~(kset as *mut u8).add(rust_ks_off_list) as *mut ListHead~(kset as *mut u8).add(rust_ks_off_kobj) as *mut ListHead
+entry_off~core::mem::offset_of!(Kobject, entry)~core::mem::offset_of!(Kobject, parent)

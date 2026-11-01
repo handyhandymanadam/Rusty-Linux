@@ -1,0 +1,19 @@
+skip_one~        if c == 1 {<NL>            return false;~        if c == 0 {<NL>            return false;
+skip_never~        if c == 1 {<NL>            return false;~        if false {<NL>            return false;
+skip_dec~match a.compare_exchange_weak(c, c.wrapping_sub(1)~match a.compare_exchange_weak(c, c.wrapping_sub(2)
+skip_ret~            Ok(_) => return true,~            Ok(_) => return false,
+skip_err~            Err(x) => c = x,~            Err(_) => {}
+dec_test~a.fetch_sub(1, Ordering::SeqCst).wrapping_sub(1) == 0~a.fetch_sub(1, Ordering::SeqCst) == 0
+dec_test_dec~a.fetch_sub(1, Ordering::SeqCst).wrapping_sub(1) == 0~a.fetch_sub(2, Ordering::SeqCst).wrapping_sub(2) == 0
+fast_ret~        if dec_unless_one(atomic) {<NL>            return 0;<NL>        }<NL><NL>        // Otherwise do it the slow way<NL>        rust_dl_lock(lock);~        if dec_unless_one(atomic) {<NL>            return 1;<NL>        }<NL><NL>        // Otherwise do it the slow way<NL>        rust_dl_lock(lock);
+slow_lock~        rust_dl_lock(lock);<NL>        if dec_and_test(atomic) {~        if dec_and_test(atomic) {
+slow_unlock~        rust_dl_unlock(lock);<NL>        0~        0
+slow_ret~        if dec_and_test(atomic) {<NL>            return 1;<NL>        }<NL>        rust_dl_unlock(lock);~        if dec_and_test(atomic) {<NL>            return 0;<NL>        }<NL>        rust_dl_unlock(lock);
+irq_flags~        rust_dl_lock_irqsave(lock, flags);~        let mut f: c_ulong = 0;<NL>        rust_dl_lock_irqsave(lock, &mut f);
+irq_restore~rust_dl_unlock_irqrestore(lock, *flags);~rust_dl_unlock_irqrestore(lock, 0);
+irq_unlock~        rust_dl_unlock_irqrestore(lock, *flags);<NL>        0~        0
+raw_lock~        rust_dl_raw_lock(lock);~        rust_dl_lock(lock);
+raw_unlock~        rust_dl_raw_unlock(lock);~        rust_dl_unlock(lock);
+raw_ret~        rust_dl_raw_lock(lock);<NL>        if dec_and_test(atomic) {<NL>            return 1;~        rust_dl_raw_lock(lock);<NL>        if dec_and_test(atomic) {<NL>            return 2;
+raw_irq_save~        rust_dl_raw_lock_irqsave(lock, flags);~        let mut f: c_ulong = 0;<NL>        rust_dl_raw_lock_irqsave(lock, &mut f);
+raw_irq_restore~rust_dl_raw_unlock_irqrestore(lock, *flags);~rust_dl_raw_unlock_irqrestore(lock, 0);

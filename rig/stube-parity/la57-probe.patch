@@ -1,0 +1,28 @@
+diff --git a/port/tree/arch/x86/boot/compressed/misc.c b/port/tree/arch/x86/boot/compressed/misc.c
+index 71acbc3..b2ca54a 100644
+--- a/port/tree/arch/x86/boot/compressed/misc.c
++++ b/port/tree/arch/x86/boot/compressed/misc.c
+@@ -464,6 +464,23 @@ asmlinkage __visible void *extract_kernel(void *rmode, unsigned char *output)
+ 	boot_params_ptr->acpi_rsdp_addr = get_rsdp_addr();
+ 
+ 	debug_putstr("early console in extract_kernel\n");
++	/* STUBE-PROBE (scratch, never committed): what configure_5level_paging() left behind */
++	{
++		extern unsigned long *trampoline_32bit;
++		unsigned long cr4;
++		asm volatile("mov %%cr4, %0" : "=r" (cr4));
++		__putstr("STUBE-PROBE cr4.la57=");
++		__puthex(!!(cr4 & (1UL << 12)));
++		__putstr(" l5_enabled=");
++		__puthex(__pgtable_l5_enabled);
++		__putstr(" pgdir_shift=");
++		__puthex(pgdir_shift);
++		__putstr(" ptrs_per_p4d=");
++		__puthex(ptrs_per_p4d);
++		__putstr(" trampoline=");
++		__puthex((unsigned long)trampoline_32bit);
++		__putstr("\n");
++	}
+ 
+ 	/* Pre-boot Rust probe -- logs/preboot-experiment.md.
+ 	 *

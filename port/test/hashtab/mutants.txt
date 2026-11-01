@@ -1,0 +1,47 @@
+h_size_zero~h~if nel == 0 {<NL>        0~if nel == 1 {<NL>        0
+h_size_pow~h~(nel as u64).next_power_of_two() as u32~(nel as u64 + 1).next_power_of_two() as u32
+h_init_nel~h~(*h).nel = 0;<NL>        (*h).size = 0;<NL>        (*h).htable = null_mut();<NL><NL>        if size~(*h).size = 0;<NL>        (*h).htable = null_mut();<NL><NL>        if size
+h_init_size~h~(*h).nel = 0;<NL>        (*h).size = 0;<NL>        (*h).htable = null_mut();~(*h).nel = 0;<NL>        (*h).htable = null_mut();
+h_init_tab~h~(*h).size = 0;<NL>        (*h).htable = null_mut();<NL><NL>        if size~(*h).size = 0;<NL><NL>        if size
+h_init_fail~h~if (*h).htable.is_null() {<NL>                return -ENOMEM;<NL>            }<NL>            (*h).size = size;~if (*h).htable.is_null() {<NL>                return 0;<NL>            }<NL>            (*h).size = size;
+h_init_set~h~(*h).size = size;<NL>        }<NL>        0~(*h).size = size - 1;<NL>        }<NL>        0
+h_ins_fail~h~if newnode.is_null() {<NL>            return -ENOMEM;<NL>        }<NL>        (*newnode).key~if newnode.is_null() {<NL>            return 0;<NL>        }<NL>        (*newnode).key
+h_ins_key~h~(*newnode).key = key;<NL>        (*newnode).datum = datum;~(*newnode).key = datum;<NL>        (*newnode).datum = key;
+h_ins_next~h~(*newnode).next = *dst;~(*newnode).next = null_mut();
+h_ins_nel~h~(*h).nel += 1;~(*h).nel += 2;
+h_des_free~h~rust_ht_node_free(temp);<NL>            }~{ }<NL>            }
+h_des_tab~h~rust_ht_kfree((*h).htable as *mut c_void);<NL>        (*h).htable = null_mut();~(*h).htable = null_mut();
+h_des_nulltab~h~rust_ht_kfree((*h).htable as *mut c_void);<NL>        (*h).htable = null_mut();~rust_ht_kfree((*h).htable as *mut c_void);
+h_map_rc~h~if ret != 0 {<NL>                    return ret;~if ret != 0 {<NL>                    return 1;
+h_map_stop~h~if ret != 0 {<NL>                    return ret;<NL>                }~if ret > 1 {<NL>                    return ret;<NL>                }
+h_map_args~h~apply((*cur).key, (*cur).datum, args)~apply((*cur).datum, (*cur).key, args)
+h_dup_zero~h~core::ptr::write_bytes(new as *mut u8, 0, core::mem::size_of::<Hashtab>());<NL><NL>        (*new).htable~(*new).htable
+h_dup_fail~h~if (*new).htable.is_null() {<NL>            return -ENOMEM;~if (*new).htable.is_null() {<NL>            return 0;
+h_dup_size~h~(*new).size = (*orig).size;~(*new).size = (*orig).size + 0 * 1;<NL>        (*new).nel = 1;
+h_dup_nofree~h~if tmp.is_null() {<NL>                        break 'error;~if tmp.is_null() {<NL>                        return -ENOMEM;
+h_dup_copyfree~h~rust_ht_node_free(tmp);<NL>                        break 'error;~break 'error;
+h_dup_nextnull~h~(*tmp).next = null_mut();~(*tmp).next = tmp;
+h_dup_tail~h~(*tail).next = tmp;~(*tail).next = null_mut();
+h_dup_nel~h~(*new).nel += 1;~(*new).nel += 0;
+h_dup_head~h~*(*new).htable.add(i as usize) = tmp;~*(*new).htable.add(0) = tmp;
+h_dup_ok~h~return 0;<NL>        }<NL><NL>        // error:~return -ENOMEM;<NL>        }<NL><NL>        // error:
+h_dup_destroy~h~destroy((*cur).key, (*cur).datum, args);~destroy((*cur).datum, (*cur).key, args);
+h_dup_efree~h~rust_ht_node_free(cur);<NL>                cur = tmp;~cur = tmp;
+h_dup_etab~h~rust_ht_kfree((*new).htable as *mut c_void);<NL>        core::ptr::write_bytes~core::ptr::write_bytes
+h_dup_ezero~h~core::ptr::write_bytes(new as *mut u8, 0, core::mem::size_of::<Hashtab>());<NL>        -ENOMEM~-ENOMEM
+s_init_nprim~s~(*s).nprim = 0;~(*s).nprim = (*s).nprim;
+s_hash_init~s~let mut hash: u32 = 5381;~let mut hash: u32 = 5382;
+s_hash_mul~s~((hash << 5).wrapping_add(hash)) ^ (*p as u32)~((hash << 5).wrapping_add(hash)) + (*p as u32)
+s_hash_shift~s~((hash << 5).wrapping_add(hash))~((hash << 4).wrapping_add(hash))
+s_cmp_eq~s~if *a == 0 {<NL>                return 0;~if *a == 1 {<NL>                return 0;
+s_cmp_diff~s~return *a as c_int - *b as c_int;~return *b as c_int - *a as c_int;
+s_ins_inval~s~if (*h).size == 0 || (*h).nel == u32::MAX {~if (*h).size == 0 {
+s_ins_inval2~s~if (*h).size == 0 || (*h).nel == u32::MAX {~if (*h).nel == u32::MAX {
+s_ins_exist~s~if cmp == 0 {<NL>                return -EEXIST;~if cmp == 0 {<NL>                return -EINVAL;
+s_ins_prev~s~prev = cur;<NL>            cur = (*cur).next;<NL>        }<NL><NL>        let dst~cur = (*cur).next;<NL>        }<NL><NL>        let dst
+s_ins_mask~s~let hvalue = symhash(name) & ((*h).size - 1);<NL>        let mut prev~let hvalue = symhash(name) & (*h).size;<NL>        let mut prev
+s_ins_arg~s~__hashtab_insert(h, dst, name as *mut c_void, datum)~__hashtab_insert(h, dst, datum, name as *mut c_void)
+s_srch_size~s~if (*h).size == 0 {<NL>            return null_mut();~if (*h).size == 1 {<NL>            return null_mut();
+s_srch_mask~s~let hvalue = symhash(name) & ((*h).size - 1);<NL>        let mut cur~let hvalue = symhash(name) & ((*h).size >> 1);<NL>        let mut cur
+s_init_rc~s~hashtab_init(&mut (*s).table, size)~{ hashtab_init(&mut (*s).table, size); 0 }
+s_ins_sched~s~rust_st_cond_resched();<NL><NL>        if (*h).size == 0 || (*h).nel == u32::MAX {~if (*h).size == 0 || (*h).nel == u32::MAX {

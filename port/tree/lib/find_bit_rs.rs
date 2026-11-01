@@ -61,8 +61,8 @@ fn bitmap_last_word_mask(nbits: usize) -> usize {
 /// `BITS_PER_LONG` if `word` has `n` or fewer set bits.
 fn fns(mut word: usize, mut n: usize) -> usize {
     while word != 0 && n > 0 {
-        word &= word - 1;
-        n -= 1;
+        word &= word.wrapping_sub(1);
+        n = n.wrapping_sub(1);
     }
     if word != 0 {
         word.trailing_zeros() as usize
@@ -74,14 +74,14 @@ fn fns(mut word: usize, mut n: usize) -> usize {
 /// `FIND_FIRST_BIT(FETCH, /* nop */, size)`.
 fn find_first_bit_by(fetch: impl Fn(usize) -> usize, size: usize) -> usize {
     let mut sz = size;
-    let mut idx = 0;
-    while idx * BITS_PER_LONG < sz {
+    let mut idx: usize = 0;
+    while idx.wrapping_mul(BITS_PER_LONG) < sz {
         let val = fetch(idx);
         if val != 0 {
-            sz = core::cmp::min(idx * BITS_PER_LONG + val.trailing_zeros() as usize, sz);
+            sz = core::cmp::min(idx.wrapping_mul(BITS_PER_LONG).wrapping_add(val.trailing_zeros() as usize), sz);
             break;
         }
-        idx += 1;
+        idx = idx.wrapping_add(1);
     }
     sz
 }
@@ -96,13 +96,13 @@ fn find_next_bit_by(fetch: impl Fn(usize) -> usize, size: usize, start: usize) -
     let mut idx = start / BITS_PER_LONG;
     let mut tmp = fetch(idx) & mask;
     while tmp == 0 {
-        if (idx + 1) * BITS_PER_LONG >= sz {
+        if (idx.wrapping_add(1)).wrapping_mul(BITS_PER_LONG) >= sz {
             return sz;
         }
-        idx += 1;
+        idx = idx.wrapping_add(1);
         tmp = fetch(idx);
     }
-    sz = core::cmp::min(idx * BITS_PER_LONG + tmp.trailing_zeros() as usize, sz);
+    sz = core::cmp::min(idx.wrapping_mul(BITS_PER_LONG).wrapping_add(tmp.trailing_zeros() as usize), sz);
     sz
 }
 
@@ -112,22 +112,22 @@ fn find_nth_bit_by(fetch: impl Fn(usize) -> usize, size: usize, num: usize) -> u
     let mut nr = num;
     let mut idx = 0usize;
     let mut tmp: usize = 0;
-    while (idx + 1) * BITS_PER_LONG <= sz {
-        if idx * BITS_PER_LONG + nr >= sz {
+    while (idx.wrapping_add(1)).wrapping_mul(BITS_PER_LONG) <= sz {
+        if idx.wrapping_mul(BITS_PER_LONG).wrapping_add(nr) >= sz {
             return sz;
         }
         tmp = fetch(idx);
         let w = tmp.count_ones() as usize;
         if w > nr {
-            return idx * BITS_PER_LONG + fns(tmp, nr);
+            return idx.wrapping_mul(BITS_PER_LONG).wrapping_add(fns(tmp, nr));
         }
-        nr -= w;
-        idx += 1;
+        nr = nr.wrapping_sub(w);
+        idx = idx.wrapping_add(1);
     }
     if sz % BITS_PER_LONG != 0 {
         tmp = fetch(idx) & bitmap_last_word_mask(sz);
     }
-    idx * BITS_PER_LONG + fns(tmp, nr)
+    idx.wrapping_mul(BITS_PER_LONG).wrapping_add(fns(tmp, nr))
 }
 
 unsafe extern "C" {
@@ -378,19 +378,19 @@ pub unsafe extern "C" fn _find_last_bit(addr: *const usize, size: usize) -> usiz
         return 0;
     }
     let mut val = bitmap_last_word_mask(size);
-    let mut idx = (size - 1) / BITS_PER_LONG;
+    let mut idx = (size.wrapping_sub(1)) / BITS_PER_LONG;
     loop {
         // SAFETY: `idx <= (size-1)/BITS_PER_LONG`, within the caller's
         // guaranteed readable range.
         val &= unsafe { *addr.add(idx) };
         if val != 0 {
-            return idx * BITS_PER_LONG + (BITS_PER_LONG - 1 - val.leading_zeros() as usize);
+            return idx.wrapping_mul(BITS_PER_LONG).wrapping_add((BITS_PER_LONG.wrapping_sub(1)).wrapping_sub(val.leading_zeros() as usize));
         }
         val = usize::MAX;
         if idx == 0 {
             break;
         }
-        idx -= 1;
+        idx = idx.wrapping_sub(1);
     }
     size
 }

@@ -1,0 +1,47 @@
+cyc_shr~.wrapping_shr(shift)~.wrapping_shr(shift + 1)
+cyc_mulmult~cycles.wrapping_mul(mult as u64)~cycles.wrapping_mul(mult as u64 + 1)
+adj_11~* 11 / 100~* 10 / 100
+adj_div~/ 100) as u32~/ 101) as u32
+cms_sftacc_init~let mut sftacc: u32 = 32;~let mut sftacc: u32 = 31;
+cms_sftacc_dec~        sftacc -= 1;~        sftacc -= 2;
+cms_tmp_shift~((maxsec as u64) * (from as u64)) >> 32~((maxsec as u64) * (from as u64)) >> 31
+cms_tmp_loop~    while tmp != 0 {<NL>        tmp >>= 1;~    while tmp > 1 {<NL>        tmp >>= 1;
+cms_sft_start~let mut sft: u32 = 32;~let mut sft: u32 = 31;
+cms_sft_gt~while sft > 0 {~while sft > 1 {
+cms_to_shift~tmp = (to as u64) << sft;~tmp = (to as u64) << (sft - 1);
+cms_round~(from / 2) as u64~(from / 3) as u64
+cms_noround~tmp = tmp.wrapping_add((from / 2) as u64);~
+cms_div~tmp /= from as u64;~tmp /= (from as u64) + 1;
+cms_break~if (tmp >> sftacc) == 0 {~if (tmp >> sftacc) <= 1 {
+cms_dec~        sft -= 1;<NL>    }<NL>    (tmp~        sft -= 2;<NL>    }<NL>    (tmp
+cms_ret~(tmp as u32, sft)~(tmp as u32, sft + 1)
+cmn_div~u64::MAX / (mult.wrapping_add(maxadj) as u64)~u64::MAX / (mult.wrapping_sub(maxadj) as u64)
+cmn_min~if mask < max_cycles {~if mask > max_cycles {
+cmn_sub~cyc2ns(max_cycles, mult.wrapping_sub(maxadj), shift)~cyc2ns(max_cycles, mult.wrapping_add(maxadj), shift)
+cmn_half~(max_nsecs >> 1, max_cycles)~(max_nsecs, max_cycles)
+cmn_cyc~(max_nsecs >> 1, max_cycles)~(max_nsecs >> 1, mask)
+mcnull~    if !max_cyc.is_null() {~    if max_cyc.is_null() {
+up_freq0~    if freq != 0 {<NL>        // The maximum~    if freq == 0 {<NL>        // The maximum
+up_sec_scale~        sec /= scale as u64;~
+up_sec_freq~        sec /= freq as u64;~
+up_sec1~            sec = 1;~            sec = 4;
+up_sec601~sec > 600 && m.mask~sec > 601 && m.mask
+up_sec600v~            sec = 600;~            sec = 601;
+up_to~(NSEC_PER_SEC / (scale as i64)) as u32~(NSEC_PER_SEC / (scale as i64) + 1) as u32
+up_maxsec~sec.wrapping_mul(scale as u64) as u32~sec as u32
+up_um_cond~if scale != 0 && freq != 0 && m.uncertainty_margin == 0 {~if scale != 0 && freq != 0 {
+up_um_div~(scale.wrapping_mul(freq) as i64)) as u32;~(scale.wrapping_add(freq) as i64)) as u32;
+up_um_lt~if (m.uncertainty_margin as i64) < max_skew.wrapping_mul(2) {~if (m.uncertainty_margin as i64) <= max_skew.wrapping_mul(2) + 1 {
+up_um_floor~m.uncertainty_margin = max_skew.wrapping_mul(2) as u32;~m.uncertainty_margin = max_skew as u32;
+up_um_thr~m.uncertainty_margin = threshold as u32;~m.uncertainty_margin = max_skew as u32;
+up_um_else~    } else if m.uncertainty_margin == 0 {~    } else if m.uncertainty_margin != 0 {
+up_loop_freq~while freq != 0 && (~while (
+up_loop_add~m.mult.wrapping_add(m.maxadj) < m.mult ||~false ||
+up_loop_half~        m.mult >>= 1;~        m.mult >>= 2;
+up_loop_shift~        m.shift = m.shift.wrapping_sub(1);~        m.shift = m.shift.wrapping_sub(2);
+up_loop_adj~        m.maxadj = max_adjustment(m.mult);<NL>    }~    }
+up_idle~m.max_idle_ns = nsecs;~m.max_idle_ns = nsecs + 1;
+up_cyc~m.max_cycles = cycles;~m.max_cycles = cycles - 1;
+up_raw1~(m.mask >> 1).wrapping_add(m.mask >> 2).wrapping_add(m.mask >> 3)~(m.mask >> 1).wrapping_add(m.mask >> 2)
+up_raw2~(m.mask >> 1).wrapping_add(m.mask >> 2).wrapping_add(m.mask >> 3)~(m.mask >> 1).wrapping_add(m.mask >> 3).wrapping_add(m.mask >> 3)
+up_maxadj_init~    m.maxadj = max_adjustment(m.mult);<NL>    while~    while

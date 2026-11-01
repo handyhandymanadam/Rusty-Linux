@@ -1,0 +1,48 @@
+cm_eq~        AUDIT_EQUAL_ => (left == right) as c_int,<NL>        AUDIT_NOT_EQUAL_ => (left != right) as c_int,<NL>        AUDIT_LT_ => (left < right) as c_int,<NL>        AUDIT_LE_ => (left <= right) as c_int,<NL>        AUDIT_GT_ => (left > right) as c_int,<NL>        AUDIT_GE_ => (left >= right) as c_int,<NL>        AUDIT_BITMASK_~        AUDIT_EQUAL_ => (left != right) as c_int,<NL>        AUDIT_NOT_EQUAL_ => (left != right) as c_int,<NL>        AUDIT_LT_ => (left < right) as c_int,<NL>        AUDIT_LE_ => (left <= right) as c_int,<NL>        AUDIT_GT_ => (left > right) as c_int,<NL>        AUDIT_GE_ => (left >= right) as c_int,<NL>        AUDIT_BITMASK_
+cm_ne~        AUDIT_NOT_EQUAL_ => (left != right) as c_int,<NL>        AUDIT_LT_ => (left < right) as c_int,<NL>        AUDIT_LE_ => (left <= right) as c_int,<NL>        AUDIT_GT_ => (left > right) as c_int,<NL>        AUDIT_GE_ => (left >= right) as c_int,<NL>        AUDIT_BITMASK_~        AUDIT_NOT_EQUAL_ => (left == right) as c_int,<NL>        AUDIT_LT_ => (left < right) as c_int,<NL>        AUDIT_LE_ => (left <= right) as c_int,<NL>        AUDIT_GT_ => (left > right) as c_int,<NL>        AUDIT_GE_ => (left >= right) as c_int,<NL>        AUDIT_BITMASK_
+cm_lt~        AUDIT_LT_ => (left < right) as c_int,<NL>        AUDIT_LE_ => (left <= right) as c_int,<NL>        AUDIT_GT_ => (left > right) as c_int,<NL>        AUDIT_GE_ => (left >= right) as c_int,<NL>        AUDIT_BITMASK_~        AUDIT_LT_ => (left <= right) as c_int,<NL>        AUDIT_LE_ => (left <= right) as c_int,<NL>        AUDIT_GT_ => (left > right) as c_int,<NL>        AUDIT_GE_ => (left >= right) as c_int,<NL>        AUDIT_BITMASK_
+cm_le~        AUDIT_LE_ => (left <= right) as c_int,<NL>        AUDIT_GT_ => (left > right) as c_int,<NL>        AUDIT_GE_ => (left >= right) as c_int,<NL>        AUDIT_BITMASK_~        AUDIT_LE_ => (left < right) as c_int,<NL>        AUDIT_GT_ => (left > right) as c_int,<NL>        AUDIT_GE_ => (left >= right) as c_int,<NL>        AUDIT_BITMASK_
+cm_gt~        AUDIT_GT_ => (left > right) as c_int,<NL>        AUDIT_GE_ => (left >= right) as c_int,<NL>        AUDIT_BITMASK_~        AUDIT_GT_ => (left >= right) as c_int,<NL>        AUDIT_GE_ => (left >= right) as c_int,<NL>        AUDIT_BITMASK_
+cm_ge~        AUDIT_GE_ => (left >= right) as c_int,<NL>        AUDIT_BITMASK_~        AUDIT_GE_ => (left > right) as c_int,<NL>        AUDIT_BITMASK_
+cm_mask~        AUDIT_BITMASK_ => (left & right) as c_int,~        AUDIT_BITMASK_ => ((left & right) != 0) as c_int,
+cm_test~        AUDIT_BITTEST_ => ((left & right) == right) as c_int,~        AUDIT_BITTEST_ => ((left & right) != 0) as c_int,
+cm_default~        _ => 0,<NL>    }<NL>}<NL><NL>/// `audit_uid_comparator()`~        _ => 1,<NL>    }<NL>}<NL><NL>/// `audit_uid_comparator()`
+id_bit~        _ => 0,<NL>    }<NL>}<NL><NL>/// `audit_to_op()`~        AUDIT_BITMASK_ => (left & right) as c_int,<NL>        _ => 0,<NL>    }<NL>}<NL><NL>/// `audit_to_op()`
+id_lt~        AUDIT_LT_ => (left < right) as c_int,<NL>        AUDIT_LE_ => (left <= right) as c_int,<NL>        AUDIT_GT_ => (left > right) as c_int,<NL>        AUDIT_GE_ => (left >= right) as c_int,<NL>        _ => 0,~        AUDIT_LT_ => (left <= right) as c_int,<NL>        AUDIT_LE_ => (left <= right) as c_int,<NL>        AUDIT_GT_ => (left > right) as c_int,<NL>        AUDIT_GE_ => (left >= right) as c_int,<NL>        _ => 0,
+to_start~    let mut n = AUDIT_EQUAL_;~    let mut n = AUDIT_NOT_EQUAL_;
+to_lim~    while n < AUDIT_BAD_ &&~    while n < AUDIT_BAD_ - 1 &&
+to_cmp~ != op {<NL>        n += 1;~ == op {<NL>        n += 1;
+fv_msg~            if listnr != FILTER_EXCLUDE && listnr != FILTER_USER {~            if listnr != FILTER_EXCLUDE {
+fv_msg2~            if listnr != FILTER_EXCLUDE && listnr != FILTER_USER {~            if listnr != FILTER_USER {
+fv_fs~            if listnr != FILTER_FS {<NL>                return -EINVAL;<NL>            }<NL>        }<NL>        PERM~            if listnr == FILTER_FS {<NL>                return -EINVAL;<NL>            }<NL>        }<NL>        PERM
+fv_perm~            if listnr == FILTER_URING_EXIT {~            if listnr == FILTER_FS {
+fv_fslist~            FSTYPE | FILTERKEY => {}<NL>            _ => return -EINVAL,~            FSTYPE => {}<NL>            _ => return -EINVAL,
+fv_fslist2~    if listnr == FILTER_FS {<NL>        match ftype {~    if listnr == FILTER_EXCLUDE {<NL>        match ftype {
+fv_args~        ARG0 | ARG1 | ARG2 | ARG3 | PERS | DEVMINOR => {}~        ARG0 | ARG1 | ARG2 | PERS | DEVMINOR => {}
+fv_pers~        ARG0 | ARG1 | ARG2 | ARG3 | PERS | DEVMINOR => {}~        ARG0 | ARG1 | ARG2 | ARG3 | DEVMINOR => {}
+fv_minor~        ARG0 | ARG1 | ARG2 | ARG3 | PERS | DEVMINOR => {}~        ARG0 | ARG1 | ARG2 | ARG3 | PERS => {}
+fv_bitops~            if op == AUDIT_BITMASK_ || op == AUDIT_BITTEST_ {~            if op == AUDIT_BITMASK_ {
+fv_bitops2~            if op == AUDIT_BITMASK_ || op == AUDIT_BITTEST_ {~            if op == AUDIT_BITTEST_ {
+fv_eqne~            if op != AUDIT_NOT_EQUAL_ && op != AUDIT_EQUAL_ {~            if op != AUDIT_NOT_EQUAL_ {
+fv_eqne2~            if op != AUDIT_NOT_EQUAL_ && op != AUDIT_EQUAL_ {~            if op != AUDIT_EQUAL_ {
+fv_unknown~        _ => return -EINVAL,<NL>    }<NL><NL>    // Check for select~        _ => {}<NL>    }<NL><NL>    // Check for select
+fv_lset~            if val != 0 && val != 1 {~            if val != 0 {
+fv_perm_val~            if val & !15 != 0 {~            if val & !7 != 0 {
+fv_ft~            if val & !S_IFMT != 0 {~            if val & !0o177777 != 0 {
+fv_cmp~            if val > MAX_FIELD_COMPARE {~            if val >= MAX_FIELD_COMPARE {
+fv_af~            if val >= AF_MAX {~            if val > AF_MAX {
+fv_ret~    0<NL>}<NL><NL>/// `parent_len()`~    -EINVAL<NL>}<NL><NL>/// `parent_len()`
+pl_empty~        if plen == 0 {~        if plen == 1 {
+pl_trail~        while *p == b'/' as c_char && p > path {~        while *p == b'/' as c_char {
+pl_trail2~        while *p == b'/' as c_char && p > path {~        while *p == b'/' as c_char && p > path.add(1) {
+pl_walk~        while *p != b'/' as c_char && p > path {~        while *p != b'/' as c_char {
+pl_walk2~        while *p != b'/' as c_char && p > path {~        while *p != b'/' as c_char && p > path.add(1) {
+pl_inc~        if *p == b'/' as c_char {<NL>            p = p.add(1);~        if *p != b'/' as c_char {<NL>            p = p.add(1);
+pl_start~        let mut p = path.add(plen - 1);~        let mut p = path.add(plen);
+dp_short~        if pathlen < dlen {~        if pathlen <= dlen {
+dp_full~        let parentlen = if parentlen == AUDIT_NAME_FULL {~        let parentlen = if parentlen != AUDIT_NAME_FULL {
+dp_sub~        pathlen -= parentlen;~        pathlen -= parentlen - 1;
+dp_loop~        while pathlen > 0 &&~        while pathlen > 1 &&
+dp_idx~*p.offset((pathlen - 1) as isize) == b'/' as c_char~*p.offset(pathlen as isize) == b'/' as c_char
+dp_ne~        if pathlen != dlen {~        if pathlen > dlen {
+dp_cmp~        memcmp(p as *const c_void, dname as *const c_void, dlen as usize)~        0

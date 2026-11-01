@@ -21,6 +21,19 @@
 //! Both are entered only with `a` and `b` both non-zero; `gcd()` handles the
 //! zero cases before dispatching, exactly as the C did.
 //!
+//! # `rig/uaccess-panic-check.sh`: wrapping throughout, matching the C's
+//! # own unsigned semantics
+//!
+//! Every `trailing_zeros()`-as-shift-amount here (`b.trailing_zeros()`,
+//! `a.trailing_zeros()`, `r.trailing_zeros()`) is safe under the
+//! non-zero contract above (a zero operand is the one case
+//! `trailing_zeros()` returns the bit width itself, an invalid shift
+//! amount) -- `wrapping_shl`/`wrapping_shr` regardless, since the
+//! compiler cannot see that contract. Every `+=`/`-=` is the same
+//! `unsigned long` modular arithmetic the C compiles these to already;
+//! `wrapping_add`/`wrapping_sub` reproduces it exactly whether or not
+//! the specific bound is reachable in practice.
+//!
 //! Replaces: lib/math/gcd.c
 
 /// Binary GCD using find-first-set. `a` and `b` must both be non-zero.
@@ -32,24 +45,24 @@ pub extern "C" fn rust_binary_gcd(a: usize, b: usize) -> usize {
     let mut b = b;
     let r = a | b;
 
-    b >>= b.trailing_zeros();
+    b = b.wrapping_shr(b.trailing_zeros());
     if b == 1 {
         return r & r.wrapping_neg();
     }
 
     loop {
-        a >>= a.trailing_zeros();
+        a = a.wrapping_shr(a.trailing_zeros());
         if a == 1 {
             return r & r.wrapping_neg();
         }
         if a == b {
-            return a << r.trailing_zeros();
+            return a.wrapping_shl(r.trailing_zeros());
         }
 
         if a < b {
             core::mem::swap(&mut a, &mut b);
         }
-        a -= b;
+        a = a.wrapping_sub(b);
     }
 }
 
@@ -89,10 +102,10 @@ pub extern "C" fn rust_gcd_even_odd(a: usize, b: usize) -> usize {
         if a < b {
             core::mem::swap(&mut a, &mut b);
         }
-        a -= b;
+        a = a.wrapping_sub(b);
         a >>= 1;
         if a & r != 0 {
-            a += b;
+            a = a.wrapping_add(b);
         }
         a >>= 1;
     }

@@ -78,7 +78,7 @@ pub unsafe extern "C" fn uf_union(node1: *mut UfNode, node2: *mut UfNode) {
             (*root2).parent = root1;
         } else {
             (*root2).parent = root1;
-            (*root1).rank += 1;
+            (*root1).rank = (*root1).rank.wrapping_add(1);
         }
     }
 }

@@ -1,0 +1,13 @@
+# Kani proofs for arch/x86/kernel/e820_rs.rs:  cd rig/e820-kani && cargo kani
+# (the harnesses are the `#[cfg(kani)] mod proofs` at the bottom of e820_rs.rs itself).
+[package]
+name = "e820_rs_kani"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "../../port/tree/arch/x86/kernel/e820_rs.rs"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)", "cfg(userspace_test)", "cfg(CONFIG_MEMORY_HOTPLUG)", "cfg(CONFIG_PNPBIOS)"] }

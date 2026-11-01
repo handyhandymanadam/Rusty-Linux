@@ -1,4 +1,4 @@
-# config-fast -- the ITERATION instrument (SCOPE.md §3).
+# config-fast -- the ITERATION instrument (notes/SCOPE.md §3).
 # Base: allnoconfig. Every line below is something a boot, a module load, or a
 # ported lib/ function actually needs. Nothing is here "in case".
 #
@@ -40,9 +40,9 @@ CONFIG_SHMEM=y
 CONFIG_BLK_DEV_INITRD=y
 CONFIG_RD_GZIP=y
 
-# --- Criterion 4 is unmeasurable without these (SCOPE.md §3), and the
+# --- Criterion 4 is unmeasurable without these (notes/SCOPE.md §3), and the
 # --- MODVERSIONS/GENDWARFKSYMS pair is what keeps CONFIG_RUST from being
-# --- silently dropped (PRIOR-ART.md §2).
+# --- silently dropped (notes/PRIOR-ART.md §2).
 CONFIG_MODULES=y
 CONFIG_MODULE_UNLOAD=y
 CONFIG_MODVERSIONS=y
@@ -64,7 +64,7 @@ CONFIG_SAMPLE_RUST_PRINT=y
 
 # --- lib/glob: the first ported module. GLOB has no prompt upstream (it is
 # --- select-only), so port/tree/lib/Kconfig uncomments upstream's own commented
-# --- prompt; see the note there. GLOB_SELFTEST is the SCOPE.md §4 class-A proof
+# --- prompt; see the note there. GLOB_SELFTEST is the notes/SCOPE.md §4 class-A proof
 # --- caller and is not ours -- it ships in lib/globtest.c with a 63-case
 # --- corpus, and it is the reason this port needs no proof caller written for
 # --- it. It prints "glob: N self-tests passed, M failed" at boot.

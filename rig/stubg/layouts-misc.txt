@@ -1,0 +1,14 @@
+type Elf64_Ehdr | Elf64Ehdr | e_ident=e_ident e_type=e_type e_machine=e_machine e_version=e_version e_entry=e_entry e_phoff=e_phoff e_shoff=e_shoff e_flags=e_flags e_ehsize=e_ehsize e_phentsize=e_phentsize e_phnum=e_phnum e_shentsize=e_shentsize e_shnum=e_shnum e_shstrndx=e_shstrndx
+type Elf64_Phdr | Elf64Phdr | p_type=p_type p_flags=p_flags p_offset=p_offset p_vaddr=p_vaddr p_paddr=p_paddr p_filesz=p_filesz p_memsz=p_memsz p_align=p_align
+val PT_LOAD | PT_LOAD
+const struct boot_params screen_info.orig_x | SCREEN_INFO_ORIG_X
+const struct boot_params screen_info.orig_y | SCREEN_INFO_ORIG_Y
+const struct boot_params screen_info.orig_video_mode | BP_SCREEN_INFO_ORIG_VIDEO_MODE
+const struct boot_params screen_info.orig_video_cols | BP_SCREEN_INFO_ORIG_VIDEO_COLS
+const struct boot_params screen_info.orig_video_lines | BP_SCREEN_INFO_ORIG_VIDEO_LINES
+const struct boot_params acpi_rsdp_addr | BP_ACPI_RSDP_ADDR
+const struct boot_params hdr.loadflags | BP_HDR_LOADFLAGS
+const struct boot_params hdr.xloadflags | BP_HDR_XLOADFLAGS
+val KASLR_FLAG | KASLR_FLAG
+val XLF_MEM_ENCRYPTION | XLF_MEM_ENCRYPTION
+val MSR_AMD64_SEV_ES_ENABLED | MSR_AMD64_SEV_ES_ENABLED

@@ -1,0 +1,33 @@
+d_shl~latch.wrapping_shl(shift)~latch.wrapping_shl(shift + 1)
+d_rnd~(mult as u64) - 1;~(mult as u64);
+d_rnd0~(mult as u64) - 1;~(mult as u64) - 2;
+d_check~if clc.wrapping_shr(shift) != latch {~if clc.wrapping_shr(shift) == latch {
+d_check_shift~clc.wrapping_shr(shift) != latch~clc.wrapping_shr(shift + 1) != latch
+d_sat~clc = u64::MAX;~clc = 0;
+d_room~if (u64::MAX - clc > rnd) &&~if (u64::MAX - clc >= rnd) &&
+d_room2~if (u64::MAX - clc > rnd) &&~if (u64::MAX - clc < rnd) &&
+d_nomax~(!ismax || (mult as u64) <= 1u64.wrapping_shl(shift))~true
+d_ismax~(!ismax || (mult as u64) <= 1u64.wrapping_shl(shift))~(ismax || (mult as u64) <= 1u64.wrapping_shl(shift))
+d_le2~(mult as u64) <= 1u64.wrapping_shl(shift)~(mult as u64) <= 1u64.wrapping_shl(shift + 1)
+d_add~        clc += rnd;~        clc += rnd + 1;
+d_div~    clc /= mult as u64;~    clc /= (mult as u64) + 1;
+d_floor~    if clc > 1000 {<NL>        clc~    if clc > 1001 {<NL>        clc
+d_floor_v~        1000<NL>    }<NL>}<NL><NL>/// `(unsigned~        999<NL>    }<NL>}<NL><NL>/// `(unsigned
+t_mul~(delta as u64).wrapping_mul(mult as u64).wrapping_shr(shift)~(delta as u64).wrapping_mul(mult as u64 + 1).wrapping_shr(shift)
+t_shr~.wrapping_mul(mult as u64).wrapping_shr(shift)~.wrapping_mul(mult as u64).wrapping_shr(shift + 1)
+c_min~let d = delta.min(max_delta_ns as i64);~let d = delta.max(max_delta_ns as i64);
+c_max~    d.max(min_delta_ns as i64)~    d.min(min_delta_ns as i64)
+c_order~let d = delta.min(max_delta_ns as i64);<NL>    d.max(min_delta_ns as i64)~let d = delta.max(min_delta_ns as i64);<NL>    d.min(max_delta_ns as i64)
+c_cast~let d = delta.min(max_delta_ns as i64);~let d = (delta as u64).min(max_delta_ns) as i64;
+b_thresh~if min_delta_ns < 5000 { 5000 }~if min_delta_ns < 5001 { 5000 }
+b_thresh2~if min_delta_ns < 5000 { 5000 }~if min_delta_ns <= 5000 { 5000 }
+b_floor~if min_delta_ns < 5000 { 5000 }~if min_delta_ns < 5000 { 5001 }
+b_half~min_delta_ns.wrapping_add(min_delta_ns >> 1)~min_delta_ns.wrapping_add(min_delta_ns >> 2)
+b_cap2~    if n > limit {<NL>        limit~    if n > limit {<NL>        n
+b_cap3~    if n > limit {~    if n < limit {
+s_div~let mut sec = ticks / (freq as u64);~let mut sec = ticks / (freq as u64) + 1;
+s_32~ticks > u32::MAX as u64~ticks >= u32::MAX as u64
+s_and~sec > 600 && ticks > u32::MAX as u64~sec > 600 || ticks > u32::MAX as u64
+s_one~        sec = 1;~        sec = 5;
+s_600~        sec = 600;~        sec = 1200;
+s_gt~} else if sec > 600 &&~} else if sec > 6000 &&

@@ -83,7 +83,7 @@ const char *rs_HUF_getErrorName(size_t);
 
 /* ---- the configuration facts, asserted rather than assumed -------------
  *
- * STATUS.md lesson 11: a shim that compiles is not a shim that matches. Each
+ * notes/STATUS.md lesson 11: a shim that compiles is not a shim that matches. Each
  * of these selects a code path in the oracle, and getting one wrong makes
  * both arms equally wrong -- which the differential cannot see.
  */
@@ -289,7 +289,7 @@ static void arm_poison(struct arm *a, unsigned char tag, unsigned mask)
 }
 
 /* The five one-line wrappers above are dead in-tree -- nothing in the kernel
- * references them (see STATUS.md's nm table) -- but the port still has to
+ * references them (see notes/STATUS.md's nm table) -- but the port still has to
  * define them, so they still have to be right. They are pure functions of a
  * size_t, so they get swept exhaustively over the interesting range once at
  * startup rather than sampled per run. */
@@ -596,7 +596,7 @@ int main(int argc, char **argv)
 			 * 1<<tableLog lowprob symbols wraps it and
 			 * tableDecode[highThreshold--] writes far outside dt.
 			 * That is a defect in the pristine C, it is recorded in
-			 * STATUS.md as an upstream candidate, and it is NOT
+			 * notes/STATUS.md as an upstream candidate, and it is NOT
 			 * reachable in-tree -- so the harness stays inside the
 			 * contract rather than pretending the crash is the
 			 * port's fault.
@@ -693,7 +693,7 @@ int main(int argc, char **argv)
 	printf("\ncomparisons: %lu   mismatches: %lu   bmi2 splits: %lu\n",
 	       checks, fails, bmi2_split);
 
-	/* STATUS.md lesson 9: a clean result with an implausible volume has not
+	/* notes/STATUS.md lesson 9: a clean result with an implausible volume has not
 	 * checked anything. These floors are deliberately low -- they catch a
 	 * corpus that stopped reaching the decoder at all, not a corpus that
 	 * merely got less productive. */

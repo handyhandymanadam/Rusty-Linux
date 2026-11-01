@@ -4,12 +4,12 @@
 //!
 //! This pulls in the file the kernel build compiles, by path, rather than
 //! copying it — a stale copy tested here while the kernel builds something
-//! else is the failure PRIOR-ART.md §2 records four times.
+//! else is the failure notes/PRIOR-ART.md §2 records four times.
 //!
 //! It exists only to add [`lz4_rs_abi`], which reports the offsets the port's
 //! `LZ4_streamDecode_t_internal` mirror assumes so the C side can check them
 //! against `offsetof()` on `include/linux/lz4.h`. That struct is the caller's —
-//! zram embeds it — so GOALS.md §5 puts its layout out of bounds.
+//! zram embeds it — so notes/GOALS.md §5 puts its layout out of bounds.
 
 /// The port itself, compiled from the file the kernel build compiles.
 #[path = "../../tree/lib/lz4/lz4_decompress_rs.rs"]

@@ -43,7 +43,12 @@ pub unsafe extern "C" fn base64_encode(
 ) -> core::ffi::c_int {
     let n = if srclen > 0 { srclen as usize } else { 0 };
     // SAFETY: the caller guarantees `srclen` readable bytes at `src`.
-    let src = unsafe { core::slice::from_raw_parts(src, n) };
+    // `(NULL, 0)` is legal C and `from_raw_parts` forbids a null pointer.
+    let src: &[u8] = if n == 0 {
+        &[]
+    } else {
+        unsafe { core::slice::from_raw_parts(src, n) }
+    };
 
     let mut ac: u32 = 0;
     let mut bits: i32 = 0;
@@ -54,27 +59,27 @@ pub unsafe extern "C" fn base64_encode(
     // function has produced, and the total is the documented output length.
     let mut put = |b: u8| {
         unsafe { *dst.add(written) = b };
-        written += 1;
+        written = written.wrapping_add(1);
     };
 
     for &byte in src {
-        ac = (ac << 8) | byte as u32;
-        bits += 8;
+        ac = (ac.wrapping_shl(8)) | byte as u32;
+        bits = bits.wrapping_add(8);
         loop {
-            bits -= 6;
-            put(TABLE[((ac >> bits) & 0x3f) as usize]);
+            bits = bits.wrapping_sub(6);
+            put(TABLE[((ac.wrapping_shr(bits as u32)) & 0x3f) as usize]);
             if bits < 6 {
                 break;
             }
         }
     }
     if bits != 0 {
-        put(TABLE[((ac << (6 - bits)) & 0x3f) as usize]);
-        bits -= 6;
+        put(TABLE[((ac.wrapping_shl((6i32.wrapping_sub(bits)) as u32)) & 0x3f) as usize]);
+        bits = bits.wrapping_sub(6);
     }
     while bits < 0 {
         put(b'=');
-        bits += 2;
+        bits = bits.wrapping_add(2);
     }
 
     written as core::ffi::c_int
@@ -93,7 +98,7 @@ fn index_of(c: u8) -> Option<u8> {
         if TABLE[i] == c {
             return Some(i as u8);
         }
-        i += 1;
+        i = i.wrapping_add(1);
     }
     None
 }
@@ -121,7 +126,12 @@ pub unsafe extern "C" fn base64_decode(
 ) -> core::ffi::c_int {
     let n = if srclen > 0 { srclen as usize } else { 0 };
     // SAFETY: the caller guarantees `srclen` readable bytes at `src`.
-    let src = unsafe { core::slice::from_raw_parts(src, n) };
+    // `(NULL, 0)` is legal C and `from_raw_parts` forbids a null pointer.
+    let src: &[u8] = if n == 0 {
+        &[]
+    } else {
+        unsafe { core::slice::from_raw_parts(src, n) }
+    };
 
     let mut ac: u32 = 0;
     let mut bits: i32 = 0;
@@ -129,31 +139,31 @@ pub unsafe extern "C" fn base64_decode(
 
     for &c in src {
         if c == b'=' {
-            ac <<= 6;
-            bits += 6;
+            ac = ac.wrapping_shl(6);
+            bits = bits.wrapping_add(6);
             if bits >= 8 {
-                bits -= 8;
+                bits = bits.wrapping_sub(8);
             }
             continue;
         }
         let Some(v) = index_of(c) else {
             return -1;
         };
-        ac = (ac << 6) | v as u32;
-        bits += 6;
+        ac = (ac.wrapping_shl(6)) | v as u32;
+        bits = bits.wrapping_add(6);
         if bits >= 8 {
-            bits -= 8;
+            bits = bits.wrapping_sub(8);
             // SAFETY: the caller guarantees `dst` has room for the decoded
             // output; `written` counts only bytes produced here, and a
             // 4-character group yields at most 3 of them.
-            unsafe { *dst.add(written) = (ac >> bits) as u8 };
-            written += 1;
+            unsafe { *dst.add(written) = (ac.wrapping_shr(bits as u32)) as u8 };
+            written = written.wrapping_add(1);
         }
     }
 
     // Trailing bits that were not consumed must be zero, or the input was
     // not produced by a conforming encoder.
-    if ac & ((1u32 << bits) - 1) != 0 {
+    if ac & ((1u32.wrapping_shl(bits as u32)).wrapping_sub(1)) != 0 {
         return -1;
     }
 

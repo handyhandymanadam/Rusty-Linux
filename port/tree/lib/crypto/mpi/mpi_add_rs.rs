@@ -90,7 +90,7 @@ unsafe fn mpihelp_add_1(
 
     if s2_limb < x0 {
         loop {
-            s1_size -= 1;
+            s1_size = s1_size.wrapping_sub(1);
             if s1_size == 0 {
                 return 1;
             }
@@ -108,7 +108,7 @@ unsafe fn mpihelp_add_1(
     if (res_ptr as *const c_ulong) != s1_ptr {
         // SAFETY: `s1_size - 1` limbs remain readable/writable at these
         // positions -- the same invariant the C's own copy relies on.
-        for i in 0..(s1_size - 1) as usize {
+        for i in 0..(s1_size.wrapping_sub(1)) as usize {
             unsafe { *res_ptr.add(i) = *s1_ptr.add(i) };
         }
     }
@@ -135,7 +135,7 @@ unsafe fn mpihelp_sub_1(
 
     if s2_limb_out > x0 {
         loop {
-            s1_size -= 1;
+            s1_size = s1_size.wrapping_sub(1);
             if s1_size == 0 {
                 return 1;
             }
@@ -152,7 +152,7 @@ unsafe fn mpihelp_sub_1(
 
     if (res_ptr as *const c_ulong) != s1_ptr {
         // SAFETY: as `mpihelp_add_1`.
-        for i in 0..(s1_size - 1) as usize {
+        for i in 0..(s1_size.wrapping_sub(1)) as usize {
             unsafe { *res_ptr.add(i) = *s1_ptr.add(i) };
         }
     }
@@ -183,7 +183,7 @@ unsafe fn mpihelp_add(
             mpihelp_add_1(
                 res_ptr.add(s2_size as usize),
                 s1_ptr.add(s2_size as usize),
-                s1_size - s2_size,
+                s1_size.wrapping_sub(s2_size),
                 cy,
             )
         };
@@ -211,7 +211,7 @@ unsafe fn mpihelp_sub(
             mpihelp_sub_1(
                 res_ptr.add(s2_size as usize),
                 s1_ptr.add(s2_size as usize),
-                s1_size - s2_size,
+                s1_size.wrapping_sub(s2_size),
                 cy,
             )
         };
@@ -229,7 +229,7 @@ unsafe fn mpn_normalize(d: *const c_ulong, mut n: c_int) -> c_int {
         if unsafe { *d.add((n - 1) as usize) } != 0 {
             break;
         }
-        n -= 1;
+        n = n.wrapping_sub(1);
     }
     n
 }
@@ -292,7 +292,7 @@ pub unsafe extern "C" fn mpi_add(
         // SAFETY: `u` valid.
         vsign = unsafe { (*u).sign };
         // SAFETY: `w` valid (caller contract).
-        let err = unsafe { resize_if_needed(w, usize_ + 1) };
+        let err = unsafe { resize_if_needed(w, usize_.wrapping_add(1)) };
         if err != 0 {
             return err;
         }
@@ -306,7 +306,7 @@ pub unsafe extern "C" fn mpi_add(
         usign = unsafe { (*u).sign };
         vsize = v_nlimbs;
         vsign = unsafe { (*v).sign };
-        let err = unsafe { resize_if_needed(w, usize_ + 1) };
+        let err = unsafe { resize_if_needed(w, usize_.wrapping_add(1)) };
         if err != 0 {
             return err;
         }
@@ -354,7 +354,7 @@ pub unsafe extern "C" fn mpi_add(
         let cy = unsafe { mpihelp_add(wp, up, usize_, vp, vsize) };
         // SAFETY: `wp` was resized to `usize_ + 1` limbs above.
         unsafe { *wp.add(usize_ as usize) = cy };
-        wsize = usize_ + cy as c_int;
+        wsize = usize_.wrapping_add(cy as c_int);
         if usign != 0 {
             wsign = 1;
         }

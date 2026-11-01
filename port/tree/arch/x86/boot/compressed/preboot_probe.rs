@@ -35,3 +35,18 @@ pub extern "C" fn rust_preboot_probe(seed: u32) -> u32 {
     }
     h
 }
+
+/// `core` is linked into the stub as one object now (the XZ decoder uses it),
+/// and that object references 128-bit division from `fmt`'s integer printing.
+/// Nothing in the stub formats a u128, so this is dead code that exists only
+/// so the link resolves; if it ever runs, stopping is the safe answer. The
+/// running kernel's `rust/compiler_builtins.rs` makes the same choice.
+#[no_mangle]
+pub extern "C" fn __udivti3(_n: u128, _d: u128) -> u128 {
+    loop {
+        // SAFETY: as `panic` above.
+        unsafe {
+            core::arch::asm!("hlt", options(nomem, nostack, preserves_flags));
+        }
+    }
+}

@@ -72,6 +72,29 @@
 //! unconditionally, which is what happens here instead of the SIGFPE --
 //! recorded because a future reader diffing against the C would otherwise
 //! wonder where the exact expression went.
+//!
+//! # `divisor_limb <<= normalization_steps` and `n1 % d1` in `udiv_qrnnd`:
+//! # same class, `divisor_limb == 0` rather than `dsize == 0`
+//!
+//! `rig/uaccess-panic-check.sh` also found live `panic_const_shl_overflow`
+//! and `panic_const_rem_by_zero` dependencies in this object. Both trace
+//! to the same precondition, not two different bugs: `mpihelp_mod_1` and
+//! `mpihelp_divmod_1` normalize with `normalization_steps =
+//! count_leading_zeros(divisor_limb)`, then `divisor_limb <<=
+//! normalization_steps`. That shift is only by the full 64 bits (the
+//! checked-shift panic) when `count_leading_zeros` returned 64, which
+//! happens only for `divisor_limb == 0` -- dividing by zero, the same
+//! "should not happen" case as `dsize == 0` above, just reached from a
+//! different entry point. `udiv_qrnnd`'s own doc comment already requires
+//! its `d` argument normalized (top bit set) at every call site in this
+//! file; `d == 0` is the one value that can never satisfy that, so its
+//! `n1 % d1`/`r1 % d1` (`panic_const_rem_by_zero`) cannot fire for any `d`
+//! that respects the contract either. Left as checked arithmetic rather
+//! than `wrapping_*`: `wrapping_shl(64)` would silently mask the shift
+//! amount to 0 and carry on dividing by the original (zero) value, turning
+//! a clean panic at the point of the mistake into either silent garbage
+//! or a `rem_by_zero` panic several calls deeper -- strictly worse than
+//! leaving the check in place.
 
 use core::ffi::{c_int, c_ulong};
 
@@ -192,21 +215,21 @@ pub unsafe extern "C" fn mpihelp_mod_1(
 
         // SAFETY: `dividend_size >= 1` (checked above), so index
         // `dividend_size - 1` is in bounds.
-        let mut n1 = unsafe { *dividend_ptr.add((dividend_size - 1) as usize) };
-        let mut r = n1 >> (BITS_PER_MPI_LIMB - normalization_steps);
+        let mut n1 = unsafe { *dividend_ptr.add((dividend_size.wrapping_sub(1)) as usize) };
+        let mut r = n1 >> (BITS_PER_MPI_LIMB.wrapping_sub(normalization_steps));
 
-        let mut i = dividend_size - 2;
+        let mut i = dividend_size.wrapping_sub(2);
         while i >= 0 {
             // SAFETY: `i` in `0..dividend_size - 1` here.
             let n0 = unsafe { *dividend_ptr.add(i as usize) };
             let (_q, rr) = udiv_qrnnd(
                 r,
-                (n1 << normalization_steps) | (n0 >> (BITS_PER_MPI_LIMB - normalization_steps)),
+                (n1 << normalization_steps) | (n0 >> (BITS_PER_MPI_LIMB.wrapping_sub(normalization_steps))),
                 divisor_limb,
             );
             r = rr;
             n1 = n0;
-            i -= 1;
+            i = i.wrapping_sub(1);
         }
         let (_q, rr) = udiv_qrnnd(r, n1 << normalization_steps, divisor_limb);
         r = rr;
@@ -214,20 +237,20 @@ pub unsafe extern "C" fn mpihelp_mod_1(
     }
 
     // No normalization needed: divisor_limb is already normalized.
-    let mut i = dividend_size - 1;
+    let mut i = dividend_size.wrapping_sub(1);
     // SAFETY: `i` in bounds (`dividend_size >= 1`).
     let mut r = unsafe { *dividend_ptr.add(i as usize) };
     if r >= divisor_limb {
         r = 0;
     } else {
-        i -= 1;
+        i = i.wrapping_sub(1);
     }
     while i >= 0 {
         // SAFETY: `i` in `0..dividend_size` here.
         let n0 = unsafe { *dividend_ptr.add(i as usize) };
         let (_q, rr) = udiv_qrnnd(r, n0, divisor_limb);
         r = rr;
-        i -= 1;
+        i = i.wrapping_sub(1);
     }
     r
 }
@@ -254,24 +277,24 @@ pub unsafe extern "C" fn mpihelp_divmod_1(
         divisor_limb <<= normalization_steps;
 
         // SAFETY: `dividend_size >= 1`.
-        let mut n1 = unsafe { *dividend_ptr.add((dividend_size - 1) as usize) };
-        let mut r = n1 >> (BITS_PER_MPI_LIMB - normalization_steps);
+        let mut n1 = unsafe { *dividend_ptr.add((dividend_size.wrapping_sub(1)) as usize) };
+        let mut r = n1 >> (BITS_PER_MPI_LIMB.wrapping_sub(normalization_steps));
 
-        let mut i = dividend_size - 2;
+        let mut i = dividend_size.wrapping_sub(2);
         while i >= 0 {
             // SAFETY: `i` in `0..dividend_size - 1`.
             let n0 = unsafe { *dividend_ptr.add(i as usize) };
             let (q, rr) = udiv_qrnnd(
                 r,
-                (n1 << normalization_steps) | (n0 >> (BITS_PER_MPI_LIMB - normalization_steps)),
+                (n1 << normalization_steps) | (n0 >> (BITS_PER_MPI_LIMB.wrapping_sub(normalization_steps))),
                 divisor_limb,
             );
             // SAFETY: `quot_ptr` writable for `dividend_size` limbs;
             // `i + 1` is in `1..dividend_size` here.
-            unsafe { *quot_ptr.add((i + 1) as usize) = q };
+            unsafe { *quot_ptr.add((i.wrapping_add(1)) as usize) = q };
             r = rr;
             n1 = n0;
-            i -= 1;
+            i = i.wrapping_sub(1);
         }
         let (q, rr) = udiv_qrnnd(r, n1 << normalization_steps, divisor_limb);
         // SAFETY: `quot_ptr` writable for `dividend_size` limbs.
@@ -280,7 +303,7 @@ pub unsafe extern "C" fn mpihelp_divmod_1(
         return r >> normalization_steps;
     }
 
-    let mut i = dividend_size - 1;
+    let mut i = dividend_size.wrapping_sub(1);
     // SAFETY: `i` in bounds.
     let mut r = unsafe { *dividend_ptr.add(i as usize) };
     if r >= divisor_limb {
@@ -288,7 +311,7 @@ pub unsafe extern "C" fn mpihelp_divmod_1(
     } else {
         // SAFETY: `quot_ptr` writable for `dividend_size` limbs.
         unsafe { *quot_ptr.add(i as usize) = 0 };
-        i -= 1;
+        i = i.wrapping_sub(1);
     }
     while i >= 0 {
         // SAFETY: `i` in `0..dividend_size`.
@@ -296,7 +319,7 @@ pub unsafe extern "C" fn mpihelp_divmod_1(
         let (q, rr) = udiv_qrnnd(r, n0, divisor_limb);
         unsafe { *quot_ptr.add(i as usize) = q };
         r = rr;
-        i -= 1;
+        i = i.wrapping_sub(1);
     }
     r
 }
@@ -335,32 +358,32 @@ pub unsafe extern "C" fn mpihelp_divrem(
             // SAFETY: `dp` readable for 1 limb (`dsize == 1`).
             let d = unsafe { *dp };
             // SAFETY: `nsize >= dsize == 1`, so index `nsize - 1` is valid.
-            let mut n1 = unsafe { *np.add((nsize - 1) as usize) };
+            let mut n1 = unsafe { *np.add((nsize.wrapping_sub(1)) as usize) };
 
             if n1 >= d {
-                n1 -= d;
+                n1 = n1.wrapping_sub(d);
                 most_significant_q_limb = 1;
             }
 
             // SAFETY: `qp` writable for `nsize - 1 + qextra_limbs` limbs
             // starting here (caller contract).
             let qp_shifted = unsafe { qp.add(qextra_limbs as usize) };
-            let mut i = nsize - 2;
+            let mut i = nsize.wrapping_sub(2);
             while i >= 0 {
                 // SAFETY: `i` in `0..nsize - 1`.
                 let n0 = unsafe { *np.add(i as usize) };
                 let (q, r) = udiv_qrnnd(n1, n0, d);
                 unsafe { *qp_shifted.add(i as usize) = q };
                 n1 = r;
-                i -= 1;
+                i = i.wrapping_sub(1);
             }
-            let mut i = qextra_limbs - 1;
+            let mut i = qextra_limbs.wrapping_sub(1);
             while i >= 0 {
                 let (q, r) = udiv_qrnnd(n1, 0, d);
                 // SAFETY: `qp` writable for `qextra_limbs` limbs here.
                 unsafe { *qp.add(i as usize) = q };
                 n1 = r;
-                i -= 1;
+                i = i.wrapping_sub(1);
             }
             // SAFETY: `np` writable for at least 1 limb.
             unsafe { *np = n1 };
@@ -369,7 +392,7 @@ pub unsafe extern "C" fn mpihelp_divrem(
         2 => {
             // SAFETY: `nsize >= dsize == 2`, so this stays within `np`'s
             // `nsize` limbs.
-            let mut np = unsafe { np.add((nsize - 2) as usize) };
+            let mut np = unsafe { np.add((nsize.wrapping_sub(2)) as usize) };
             // SAFETY: `dp` readable for 2 limbs.
             let (d1, d0) = unsafe { (*dp.add(1), *dp) };
             // SAFETY: `np` (after the offset above) readable for 2 limbs.
@@ -382,7 +405,7 @@ pub unsafe extern "C" fn mpihelp_divrem(
                 most_significant_q_limb = 1;
             }
 
-            let mut i = qextra_limbs + nsize - 2 - 1;
+            let mut i = qextra_limbs.wrapping_add(nsize).wrapping_sub(2).wrapping_sub(1);
             'outer: while i >= 0 {
                 let q;
                 let mut r;
@@ -413,7 +436,7 @@ pub unsafe extern "C" fn mpihelp_divrem(
                         n0 = sl;
                         // SAFETY: `qp` writable at index `i`.
                         unsafe { *qp.add(i as usize) = qq };
-                        i -= 1;
+                        i = i.wrapping_sub(1);
                         continue 'outer;
                     }
                     n1 = d0.wrapping_sub((d0 != 0) as c_ulong);
@@ -436,7 +459,7 @@ pub unsafe extern "C" fn mpihelp_divrem(
                     if !(n1 > r || (n1 == r && n0 > n2)) {
                         break;
                     }
-                    q -= 1;
+                    q = q.wrapping_sub(1);
                     let (sh, sl) = sub_ddmmss(n1, n0, 0, d0);
                     n1 = sh;
                     n0 = sl;
@@ -453,7 +476,7 @@ pub unsafe extern "C" fn mpihelp_divrem(
                 n1 = sh;
                 n0 = sl;
 
-                i -= 1;
+                i = i.wrapping_sub(1);
             }
             // SAFETY: `np` valid for 2 limbs.
             unsafe {
@@ -464,24 +487,24 @@ pub unsafe extern "C" fn mpihelp_divrem(
 
         _ => {
             // SAFETY: `nsize >= dsize`, so this stays within `np`'s range.
-            let mut np = unsafe { np.add((nsize - dsize) as usize) };
+            let mut np = unsafe { np.add((nsize.wrapping_sub(dsize)) as usize) };
             // SAFETY: `dp` readable for `dsize` limbs.
-            let dx = unsafe { *dp.add((dsize - 1) as usize) };
-            let d1 = unsafe { *dp.add((dsize - 2) as usize) };
+            let dx = unsafe { *dp.add((dsize.wrapping_sub(1)) as usize) };
+            let d1 = unsafe { *dp.add((dsize.wrapping_sub(2)) as usize) };
             // SAFETY: `np` (after the offset) readable for `dsize` limbs.
-            let mut n0 = unsafe { *np.add((dsize - 1) as usize) };
+            let mut n0 = unsafe { *np.add((dsize.wrapping_sub(1)) as usize) };
 
             if n0 >= dx {
                 // SAFETY: `np`, `dp` each readable for `dsize - 1` limbs.
-                if n0 > dx || unsafe { mpihelp_cmp(np, dp, dsize - 1) } >= 0 {
+                if n0 > dx || unsafe { mpihelp_cmp(np, dp, dsize.wrapping_sub(1)) } >= 0 {
                     // SAFETY: `np`, `dp` each valid for `dsize` limbs.
                     unsafe { mpihelp_sub_n(np, np, dp, dsize) };
-                    n0 = unsafe { *np.add((dsize - 1) as usize) };
+                    n0 = unsafe { *np.add((dsize.wrapping_sub(1)) as usize) };
                     most_significant_q_limb = 1;
                 }
             }
 
-            let mut i = qextra_limbs + nsize - dsize - 1;
+            let mut i = qextra_limbs.wrapping_add(nsize).wrapping_sub(dsize).wrapping_sub(1);
             while i >= 0 {
                 let q;
                 let n2;
@@ -494,15 +517,15 @@ pub unsafe extern "C" fn mpihelp_divrem(
                     n2 = unsafe { *np.add(dsize as usize) };
                 } else {
                     // SAFETY: `np` readable for `dsize` limbs here.
-                    n2 = unsafe { *np.add((dsize - 1) as usize) };
+                    n2 = unsafe { *np.add((dsize.wrapping_sub(1)) as usize) };
                     // MPN_COPY_DECR(np + 1, np, dsize - 1): shift the
                     // buffer up by one limb, highest index first -- safe
                     // for this direction of overlap.
-                    let mut j = dsize - 2;
+                    let mut j = dsize.wrapping_sub(2);
                     while j >= 0 {
                         // SAFETY: both indices in `0..dsize` here.
-                        unsafe { *np.add((j + 1) as usize) = *np.add(j as usize) };
-                        j -= 1;
+                        unsafe { *np.add((j.wrapping_add(1)) as usize) = *np.add(j as usize) };
+                        j = j.wrapping_sub(1);
                     }
                     // SAFETY: `np[0]` writable.
                     unsafe { *np = 0 };
@@ -512,7 +535,7 @@ pub unsafe extern "C" fn mpihelp_divrem(
                     q = !0 as c_ulong;
                 } else {
                     // SAFETY: `np` readable for `dsize` limbs.
-                    let np_dsize_1 = unsafe { *np.add((dsize - 1) as usize) };
+                    let np_dsize_1 = unsafe { *np.add((dsize.wrapping_sub(1)) as usize) };
                     let (qq, r0) = udiv_qrnnd(n0, np_dsize_1, dx);
                     let (nh, nl) = umul_ppmm(d1, qq);
                     let mut n1 = nh;
@@ -522,12 +545,12 @@ pub unsafe extern "C" fn mpihelp_divrem(
 
                     // SAFETY: `np` readable for `dsize` limbs (`dsize >= 3`
                     // here, so index `dsize - 2` is valid).
-                    let np_dsize_2 = unsafe { *np.add((dsize - 2) as usize) };
+                    let np_dsize_2 = unsafe { *np.add((dsize.wrapping_sub(2)) as usize) };
                     loop {
                         if !(n1 > r || (n1 == r && n0_inner > np_dsize_2)) {
                             break;
                         }
-                        qq -= 1;
+                        qq = qq.wrapping_sub(1);
                         let (rr, carry) = r.overflowing_add(dx);
                         r = rr;
                         if carry {
@@ -547,15 +570,15 @@ pub unsafe extern "C" fn mpihelp_divrem(
                 if n2 != cy_limb {
                     // SAFETY: as above.
                     unsafe { mpihelp_add_n(np, np, dp, dsize) };
-                    q -= 1;
+                    q = q.wrapping_sub(1);
                 }
 
                 // SAFETY: `qp` writable at index `i`.
                 unsafe { *qp.add(i as usize) = q };
                 // SAFETY: `np` readable for `dsize` limbs.
-                n0 = unsafe { *np.add((dsize - 1) as usize) };
+                n0 = unsafe { *np.add((dsize.wrapping_sub(1)) as usize) };
 
-                i -= 1;
+                i = i.wrapping_sub(1);
             }
         }
     }

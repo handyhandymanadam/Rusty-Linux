@@ -7,9 +7,15 @@
  * errors about console_printk etc... on ARM */
 #define _LINUX_KERNEL_H
 
+#ifdef INFLATE_BOOT_RUST
+/* The engine is lib/zlib_inflate/*_rs.rs, built for the stub by
+ * arch/x86/boot/compressed/Makefile; inflate_thunk.c is its C entry layer. */
+#include "zlib_inflate/inflate_thunk.c"
+#else
 #include "zlib_inflate/inftrees.c"
 #include "zlib_inflate/inffast.c"
 #include "zlib_inflate/inflate.c"
+#endif
 #ifdef CONFIG_ZLIB_DFLTCC
 #include "zlib_dfltcc/dfltcc.c"
 #include "zlib_dfltcc/dfltcc_inflate.c"
@@ -32,6 +38,46 @@
 #include <linux/decompress/mm.h>
 
 #define GZIP_IOBUF_SIZE (16*1024)
+
+#ifdef INFLATE_DRIVER_BOOT_RUST
+/*
+ * RUSTY-LINUX, the only edit in this arm: INFLATE_DRIVER_BOOT_RUST (set by
+ * arch/x86/boot/compressed/Makefile when CONFIG_RUST) replaces nofill() and
+ * __gunzip() below with lib/decompress_inflate_rs.rs built for the stub; its
+ * gunzip_preboot() is the same driver the running kernel uses, with the extra
+ * out_len argument __decompress() passes. Only what must be the stub's own
+ * stays here: the boot malloc, reached through the symbols the Rust calls,
+ * and __decompress() at the bottom.
+ */
+int gunzip_preboot(unsigned char *buf, long len,
+		   long (*fill)(void*, unsigned long),
+		   long (*flush)(void*, unsigned long),
+		   unsigned char *out_buf, long out_len,
+		   long *pos,
+		   void(*error)(char *x));
+
+void *decompress_inflate_alloc(unsigned long size);
+void *decompress_inflate_alloc(unsigned long size)
+{
+	return malloc(size);
+}
+
+unsigned long decompress_inflate_state_size(void);
+unsigned long decompress_inflate_state_size(void)
+{
+	return sizeof(struct inflate_state);
+}
+
+/* kfree is a real function to the Rust; free() is the stub's. Parenthesised
+ * so a macro of the same name cannot expand. */
+void (kfree)(const void *objp);
+void (kfree)(const void *objp)
+{
+	if (objp != NULL)
+		free((void *)objp);
+}
+
+#else /* !INFLATE_DRIVER_BOOT_RUST: the original C driver */
 
 static long INIT nofill(void *buffer, unsigned long len)
 {
@@ -196,6 +242,8 @@ gunzip_nomem1:
 	return rc; /* returns Z_OK (0) if successful */
 }
 
+#endif /* INFLATE_DRIVER_BOOT_RUST */
+
 #ifndef PREBOOT
 STATIC int INIT gunzip(unsigned char *buf, long len,
 		       long (*fill)(void*, unsigned long),
@@ -214,6 +262,10 @@ STATIC int INIT __decompress(unsigned char *buf, long len,
 			   long *pos,
 			   void (*error)(char *x))
 {
+#ifdef INFLATE_DRIVER_BOOT_RUST
+	return gunzip_preboot(buf, len, fill, flush, out_buf, out_len, pos, error);
+#else
 	return __gunzip(buf, len, fill, flush, out_buf, out_len, pos, error);
+#endif
 }
 #endif

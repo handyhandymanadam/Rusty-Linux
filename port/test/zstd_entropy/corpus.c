@@ -14,7 +14,7 @@
  * first byte for HUF_readStats -- while leaving everything past the gate
  * random. main.c counts how many inputs each shape drives to a SUCCESSFUL
  * return and prints it, because a corpus that only ever exercises the error
- * paths is a corpus that has not tested the decoder (STATUS.md lesson 9).
+ * paths is a corpus that has not tested the decoder (notes/STATUS.md lesson 9).
  */
 #include "corpus.h"
 
@@ -87,7 +87,7 @@ size_t gen_ncount(uint64_t *s, uint8_t *buf, size_t cap, int shape)
  *
  * Only the direct form is generated. The FSE-compressed form would need an
  * FSE ENCODER, and a corpus encoder that does not round-trip is the fault
- * STATUS.md lesson 12 records; the FSE weight path is covered instead by the
+ * notes/STATUS.md lesson 12 records; the FSE weight path is covered instead by the
  * end-to-end layer, which gets its headers from real zstd frames.
  */
 static size_t gen_hufstats_valid(uint64_t *s, uint8_t *buf, size_t cap)

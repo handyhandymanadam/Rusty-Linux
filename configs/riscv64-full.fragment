@@ -1,0 +1,104 @@
+# config-riscv64-full -- riscv defconfig + configs/full.fragment with the x86-only console lines removed
+# (riscv defconfig already carries the 8250 console, virtio PCI and the virt platform). Survey instrument for
+# logs/riscv64.md: a much wider riscv64 compile of the ported files than configs/riscv64.fragment gives.
+# config-full -- the authoritative instrument (notes/SCOPE.md §3).
+# Base: x86_64_defconfig. This fragment is the delta, and every line is here
+# for a stated reason.
+
+# --- Criterion 4: the ABI holds. Without these it is not weaker, it is
+# --- unmeasurable.
+CONFIG_MODULES=y
+CONFIG_MODVERSIONS=y
+
+# --- The PRIOR-ART §2 trap. CONFIG_RUST depends on
+# ---   !MODVERSIONS || GENDWARFKSYMS
+# --- so with MODVERSIONS=y above, GENDWARFKSYMS is what keeps RUST alive.
+# --- GENDWARFKSYMS in turn needs full DEBUG_INFO, no split, no reduced, no LTO.
+CONFIG_GENDWARFKSYMS=y
+CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT=y
+# CONFIG_DEBUG_INFO_REDUCED is not set
+# CONFIG_DEBUG_INFO_SPLIT is not set
+# CONFIG_DEBUG_INFO_BTF is not set
+CONFIG_LTO_NONE=y
+
+# --- Rust itself, plus the constraints CONFIG_RUST refuses to coexist with.
+CONFIG_RUST=y
+# CONFIG_RANDSTRUCT_FULL is not set
+# CONFIG_CFI is not set
+
+# --- A built-in Rust module that PRINTS AT BOOT. This is the toolchain's
+# --- criterion-5 rehearsal: it distinguishes "Rust is configured" from
+# --- "Rust ran", before a single line of lib/ is ported.
+CONFIG_SAMPLES=y
+CONFIG_SAMPLES_RUST=y
+CONFIG_SAMPLE_RUST_PRINT=y
+
+# --- Boot surface for qemu: virtio root, serial console, 9p for a host rootfs.
+CONFIG_VIRTIO_PCI=y
+CONFIG_VIRTIO_BLK=y
+CONFIG_VIRTIO_NET=y
+CONFIG_VIRTIO_CONSOLE=y
+CONFIG_SCSI_VIRTIO=y
+CONFIG_NET_9P=y
+CONFIG_NET_9P_VIRTIO=y
+CONFIG_9P_FS=y
+CONFIG_9P_FS_POSIX_ACL=y
+CONFIG_EXT4_FS=y
+CONFIG_BLK_DEV_INITRD=y
+CONFIG_DEVTMPFS=y
+CONFIG_DEVTMPFS_MOUNT=y
+CONFIG_OVERLAY_FS=y
+
+# --- lib/glob: the first ported module. GLOB is already =y here (defconfig
+# --- selects it via ATA and ftrace). The self-test is the proof caller.
+CONFIG_GLOB=y
+CONFIG_GLOB_SELFTEST=y
+
+# --- lib/math: int_pow, int_sqrt. The proof caller is lib/math/mathtest.c,
+# --- ours, because lib/math had no non-KUnit self-test to borrow.
+CONFIG_MATH_SELFTEST=y
+
+# --- lib/math/rational: already =y here via defconfig's drivers.
+CONFIG_RATIONAL=y
+
+# --- lib/{base64,memweight,net_utils,union_find}: the next ported batch, and
+# --- lib/libtest.c, their proof caller. GENERIC_NET_UTILS and UNION_FIND are
+# --- select-only upstream; port/tree/lib/Kconfig gives them prompts, for the
+# --- same reason CONFIG_GLOB has one.
+CONFIG_GENERIC_NET_UTILS=y
+CONFIG_UNION_FIND=y
+CONFIG_LIB_SELFTEST=y
+
+# --- lib/crc/crc16: select-only upstream, prompt added in
+# --- port/tree/lib/crc/Kconfig for the same reason as CONFIG_GLOB.
+CONFIG_CRC16=y
+
+# --- lib/{clz_ctz,crc/crc-ccitt,crypto/arc4}: the next ported batch.
+CONFIG_CRC_CCITT=y
+CONFIG_CRYPTO_LIB_ARC4=y
+
+# --- lib/crypto/{utils,chacha-block-generic}: __crypto_xor and the ChaCha core.
+CONFIG_CRYPTO_LIB_UTILS=y
+
+# --- lib/ucs2_string: UTF-16 to UTF-8, seven functions.
+CONFIG_UCS2_STRING=y
+
+# --- lib/hexdump: UPSTREAM'S OWN TEST, not one of ours. lib/test_hexdump.c is
+# --- a plain module_init (no KUnit dependency), and its corpus is every
+# --- rowsize x groupsize x ascii combination plus every buffer length from 0
+# --- to the full line, driven through hex_dump_to_buffer() -- which is
+# --- precisely the fiddly part of that port and far better than vectors we
+# --- would have written. Same reasoning as CONFIG_GLOB_SELFTEST; notes/SCOPE.md §4
+# --- asks for the cheapest thing that satisfies criterion 5, and here the
+# --- cheapest thing already existed.
+# RUNTIME_TESTING_MENU is a menuconfig gate, `default y`, and allnoconfig
+# turns it off; without it TEST_HEXDUMP has no prompt and olddefconfig drops
+# it silently -- which rig/config.sh caught by reading the built .config back.
+CONFIG_RUNTIME_TESTING_MENU=y
+CONFIG_TEST_HEXDUMP=y
+
+# --- lib/xarray: upstream's own test (lib/test_xarray.c). It caught six real
+# --- lost-WARN/behaviour bugs in the xarray port (notes/STATUS.md, 2026-09-06), so the
+# --- ratchet (notes/GOALS.md §6) is satisfied: a defect earned it. Built in (=y), so
+# --- it runs at boot and prints "XArray: N of N tests passed".
+CONFIG_TEST_XARRAY=y

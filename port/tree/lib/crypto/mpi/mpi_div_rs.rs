@@ -81,10 +81,10 @@ fn count_leading_zeros(x: c_ulong) -> u32 {
 unsafe fn mpn_normalize(d: *const c_ulong, mut n: c_int) -> c_int {
     while n > 0 {
         // SAFETY: `n > 0`, so index `n - 1` is in bounds.
-        if unsafe { *d.add((n - 1) as usize) } != 0 {
+        if unsafe { *d.add((n.wrapping_sub(1)) as usize) } != 0 {
             break;
         }
-        n -= 1;
+        n = n.wrapping_sub(1);
     }
     n
 }
@@ -193,14 +193,14 @@ pub unsafe extern "C" fn mpi_tdiv_qr(
     // Ensure space is enough for quotient and remainder. We need space
     // for an extra limb in the remainder, because it's up-shifted
     // (normalized) below.
-    let mut rsize = nsize + 1;
+    let mut rsize = nsize.wrapping_add(1);
     // SAFETY: `rem` valid.
     let err = unsafe { mpi_resize(rem, rsize as c_uint) };
     if err != 0 {
         return err;
     }
 
-    let mut qsize = rsize - dsize; // qsize cannot be bigger than this.
+    let mut qsize = rsize.wrapping_sub(dsize); // qsize cannot be bigger than this.
     if qsize <= 0 {
         if num != rem {
             // SAFETY: `rem`, `num` valid, distinct.
@@ -254,7 +254,7 @@ pub unsafe extern "C" fn mpi_tdiv_qr(
             rlimb = unsafe { mpihelp_divmod_1(qp, np, nsize, d0) };
             // SAFETY: `qsize >= 1` here (checked above), so index
             // `qsize - 1` is in bounds.
-            qsize -= (unsafe { *qp.add((qsize - 1) as usize) } == 0) as c_int;
+            qsize = qsize.wrapping_sub((unsafe { *qp.add((qsize.wrapping_sub(1)) as usize) } == 0) as c_int);
             unsafe {
                 (*quot).nlimbs = qsize;
                 (*quot).sign = sign_quotient;
@@ -293,7 +293,7 @@ pub unsafe extern "C" fn mpi_tdiv_qr(
                 // SAFETY: allocating fresh scratch space.
                 let p = unsafe { mpi_alloc_limb_space(nsize as c_uint) };
                 marker[markidx] = p;
-                markidx += 1;
+                markidx = markidx.wrapping_add(1);
                 if p.is_null() {
                     err = -ENOMEM;
                     break;
@@ -312,7 +312,7 @@ pub unsafe extern "C" fn mpi_tdiv_qr(
         }
 
         // SAFETY: `dp` readable for `dsize` limbs.
-        let normalization_steps = count_leading_zeros(unsafe { *dp.add((dsize - 1) as usize) });
+        let normalization_steps = count_leading_zeros(unsafe { *dp.add((dsize.wrapping_sub(1)) as usize) });
 
         // Normalize the denominator, i.e. make its most significant bit
         // set by shifting it `normalization_steps` bits to the left. Also
@@ -322,7 +322,7 @@ pub unsafe extern "C" fn mpi_tdiv_qr(
             // SAFETY: allocating fresh scratch space.
             let tp = unsafe { mpi_alloc_limb_space(dsize as c_uint) };
             marker[markidx] = tp;
-            markidx += 1;
+            markidx = markidx.wrapping_add(1);
             if tp.is_null() {
                 err = -ENOMEM;
                 break;
@@ -341,7 +341,7 @@ pub unsafe extern "C" fn mpi_tdiv_qr(
             if nlimb != 0 {
                 // SAFETY: `rp` has room for `nsize + 1` limbs.
                 unsafe { *rp.add(nsize as usize) = nlimb };
-                rsize = nsize + 1;
+                rsize = nsize.wrapping_add(1);
             } else {
                 rsize = nsize;
             }
@@ -355,7 +355,7 @@ pub unsafe extern "C" fn mpi_tdiv_qr(
                 // SAFETY: allocating fresh scratch space.
                 let tp = unsafe { mpi_alloc_limb_space(dsize as c_uint) };
                 marker[markidx] = tp;
-                markidx += 1;
+                markidx = markidx.wrapping_add(1);
                 if tp.is_null() {
                     err = -ENOMEM;
                     break;
@@ -378,13 +378,13 @@ pub unsafe extern "C" fn mpi_tdiv_qr(
         let q_limb = unsafe { mpihelp_divrem(qp, 0, rp, rsize, dp, dsize) };
 
         if !quot.is_null() {
-            let mut qsize2 = rsize - dsize;
+            let mut qsize2 = rsize.wrapping_sub(dsize);
             if q_limb != 0 {
                 // SAFETY: `qp` has room for one more limb here (the
                 // C's own comment: "the most significant limb of the
                 // quotient, this is always 0 or 1").
                 unsafe { *qp.add(qsize2 as usize) = q_limb };
-                qsize2 += 1;
+                qsize2 = qsize2.wrapping_add(1);
             }
             // SAFETY: `quot` valid.
             unsafe {
@@ -400,8 +400,8 @@ pub unsafe extern "C" fn mpi_tdiv_qr(
         if normalization_steps != 0 && rsize2 != 0 {
             // SAFETY: `rp` valid for `rsize2` limbs.
             unsafe { mpihelp_rshift(rp, rp, rsize2, normalization_steps) };
-            let last = unsafe { *rp.add((rsize2 - 1) as usize) };
-            rsize2 -= (last == 0) as c_int;
+            let last = unsafe { *rp.add((rsize2.wrapping_sub(1)) as usize) };
+            rsize2 = rsize2.wrapping_sub((last == 0) as c_int);
         }
 
         // SAFETY: `rem` valid.

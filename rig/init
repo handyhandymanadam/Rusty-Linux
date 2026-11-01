@@ -46,7 +46,7 @@ fi
 
 # --- Ported modules. One block per module, and each reports what it READ
 # --- from the ring buffer or from kallsyms -- never that it ran something.
-# --- This is the GOALS.md §3 extension point: test tooling hooks in here.
+# --- This is the notes/GOALS.md §3 extension point: test tooling hooks in here.
 
 # lib/glob -- proof caller is the in-tree CONFIG_GLOB_SELFTEST (lib/globtest.c),
 # which prints "glob: N self-tests passed, M failed" from an initcall.
@@ -91,6 +91,52 @@ else
         echo "RIG: hexdump ABSENT -- no self-test line in the ring buffer"
 fi
 
+# lib/xarray -- proof caller is the in-tree CONFIG_TEST_XARRAY
+# (lib/test_xarray.c), which prints "XArray: N of M tests passed" at boot.
+# PASS only when N == M and M > 0.
+dmesg | grep 'XArray:' | sed 's/^/RIG: xarray-log /'
+xa=$(dmesg | sed -n 's/.*XArray: \([0-9]*\) of \([0-9]*\) tests passed.*/\1 \2/p' | tail -1)
+if [ -z "$xa" ]; then
+        echo "RIG: xarray ABSENT -- no self-test line in the ring buffer"
+elif [ "${xa% *}" = "${xa#* }" ] && [ "${xa% *}" -gt 0 ]; then
+        echo "RIG: xarray PASS"
+else
+        echo "RIG: xarray FAIL -- the self-test reported failures ($xa)"
+fi
+
+# lib/maple_tree -- proof caller is the in-tree CONFIG_TEST_MAPLE_TREE (lib/test_maple_tree.c), which prints
+# "maple_tree: N of M tests passed" at boot. PASS only when N == M and M > 0.
+dmesg | grep 'maple_tree:' | sed 's/^/RIG: maple-log /'
+mp=$(dmesg | sed -n 's/.*maple_tree: \([0-9]*\) of \([0-9]*\) tests passed.*/\1 \2/p' | tail -1)
+if [ -z "$mp" ]; then
+        echo "RIG: maple_tree ABSENT -- no self-test line in the ring buffer"
+elif [ "${mp% *}" = "${mp#* }" ] && [ "${mp% *}" -gt 0 ]; then
+        echo "RIG: maple_tree PASS"
+else
+        echo "RIG: maple_tree FAIL -- the self-test reported failures ($mp)"
+fi
+
+# lib/bitmap -- proof caller is the in-tree CONFIG_TEST_BITMAP (lib/test_bitmap.c): "test_bitmap: all N tests passed"
+# or "test_bitmap: failed X out of N tests".
+dmesg | grep 'test_bitmap:' | sed 's/^/RIG: bitmap-log /'
+if dmesg | grep -q 'test_bitmap: all [0-9]* tests passed'; then
+        echo "RIG: bitmap PASS"
+elif dmesg | grep -q 'test_bitmap: failed'; then
+        echo "RIG: bitmap FAIL -- the self-test reported failures"
+else
+        echo "RIG: bitmap ABSENT -- no self-test line in the ring buffer"
+fi
+
+# lib/random32 -- proof caller is the in-tree CONFIG_RANDOM32_SELFTEST: "prandom: seed boundary self test passed" and "prandom: N self tests passed".
+dmesg | grep 'prandom:' | sed 's/^/RIG: prandom-log /'
+if dmesg | grep -q 'prandom: seed boundary self test passed' && dmesg | grep -q 'prandom: [0-9]* self tests passed'; then
+        echo "RIG: prandom PASS"
+elif dmesg | grep -q 'prandom: .*failed'; then
+        echo "RIG: prandom FAIL -- the self-test reported failures"
+else
+        echo "RIG: prandom ABSENT -- no self-test line in the ring buffer"
+fi
+
 # KUnit -- upstream's own corpora for ported modules. lib/tests/ carries them
 # for siphash, cmdline, seq_buf, string, checksum, usercopy, iov_iter and
 # xarray, and CONFIG_TEST_HEXDUMP already showed what that is worth against a
@@ -115,6 +161,26 @@ fi
 # Criterion 4 machinery: are symbol CRCs present at all.
 if [ -f /proc/kallsyms ]; then
         echo "RIG: kallsyms $(wc -l < /proc/kallsyms) symbols"
+fi
+# --- CPU oracle (rig/phase-e/cpu_boot_compare.sh). Only with `rig_cpuinfo` on the kernel command line, so ordinary boots print nothing new:
+# the boot CPU's identification as /proc/cpuinfo and sysfs show it (vendor, family, model, stepping, flags, bugs, address sizes, cache alignment),
+# i.e. what early_cpu_init() / get_cpu_cap() / cpu_set_bug_bits() computed, and the mitigation state the bug bits drove.
+if grep -q rig_cpuinfo /proc/cmdline; then
+        awk 'BEGIN{RS=""} NR==1' /proc/cpuinfo | grep -E '^(vendor_id|cpu family|model[[:space:]]|stepping|flags|bugs|address sizes|clflush size|cache_alignment)' | sed 's/^/RIG: cpuinfo /'
+        for f in /sys/devices/system/cpu/vulnerabilities/*; do echo "RIG: vuln $(basename $f): $(cat $f)"; done
+fi
+# lib/bootconfig.c: the boot config rig/boot.sh appended to this initramfs, as /proc/bootconfig renders it, and the kernel command line built from its
+# "kernel." keys. rig/boot.sh compares them with rig/bootconfig.expected.
+if [ -r /proc/bootconfig ]; then
+        echo "RIG: bc-begin"
+        sed 's/^/RIG: bc /' /proc/bootconfig
+        echo "RIG: bc-end"
+        echo "RIG: cmdline $(cat /proc/cmdline)"
+fi
+# rig/disk-check.sh: with a disk attached (`rig_disk` on the command line) print the partition table the kernel found.
+if grep -q rig_disk /proc/cmdline; then
+        sleep 1
+        sed 's/^/RIG: part /' /proc/partitions
 fi
 echo "RIG: done"
 sync

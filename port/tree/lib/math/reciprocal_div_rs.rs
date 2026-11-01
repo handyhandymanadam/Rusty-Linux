@@ -12,6 +12,20 @@
 //! field order and widths of the C declarations in
 //! `include/linux/reciprocal_div.h`, and that is not ours to tidy.
 //!
+//! # `d == 0` becomes a clean panic, not the C's `do_div()` fault
+//!
+//! Neither `reciprocal_value()` nor `reciprocal_value_adv()` has ever
+//! checked `d != 0` -- the pristine C computes `do_div(m, d)`
+//! unconditionally (`do_div` lowers to a hardware `div`/`idiv`, and
+//! dividing by zero on x86 is a `#DE` exception, not something the C
+//! catches or defines). `rig/uaccess-panic-check.sh` found the checked
+//! divisions in this file live (`panic_const_div_by_zero`); they are the
+//! same precondition the C always had, just replacing an unconditional
+//! CPU fault with a clean Rust panic, exactly the reasoning
+//! `mpih_div_rs.rs`'s module doc gives for its own `dsize == 0` case.
+//! There is no `wrapping_div` to route around this with -- division has
+//! no wraparound semantics to fall back to -- so both stay checked.
+//!
 //! Replaces: lib/math/reciprocal_div.c
 
 /// Mirrors `struct reciprocal_value` in `include/linux/reciprocal_div.h`.

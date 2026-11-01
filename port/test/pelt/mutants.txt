@@ -1,0 +1,40 @@
+dec_cut2~if n > LOAD_AVG_PERIOD * 63 {~if n > LOAD_AVG_PERIOD * 62 {
+dec_ge~if local_n >= LOAD_AVG_PERIOD as u32 {~if local_n > LOAD_AVG_PERIOD as u32 {
+dec_shift~val >>= local_n / LOAD_AVG_PERIOD as u32;~val >>= local_n / LOAD_AVG_PERIOD as u32 + 1;
+dec_mod~local_n %= LOAD_AVG_PERIOD as u32;~local_n = 0;
+dec_mul~((val as u128 * inv[local_n as usize] as u128) >> 32) as u64~((val as u128 * inv[local_n as usize] as u128) >> 31) as u64
+dec_trunc~((val as u128 * inv[local_n as usize] as u128) >> 32) as u64~(((val as u128 * inv[local_n as usize] as u128) >> 32) as u32) as u64
+seg_c1~let c1 = decay_load(d1 as u64, periods, inv) as u32;~let c1 = decay_load(d3 as u64, periods, inv) as u32;
+seg_c2~wrapping_sub(decay_load(LOAD_AVG_MAX, periods, inv)).wrapping_sub(1024)~wrapping_sub(decay_load(LOAD_AVG_MAX, periods, inv)).wrapping_sub(1023)
+seg_c3~let c3 = d3; // y^0 == 1~let c3 = 0u32; // y^0 == 1
+seg_sum~c1.wrapping_add(c2).wrapping_add(c3)~c1.wrapping_add(c2)
+acc_contrib~let mut contrib = delta as u32; // p == 0 -> delta < 1024~let mut contrib = 0u32; // p == 0 -> delta < 1024
+acc_add~delta += sa.period_contrib as u64;~delta += 0;
+acc_periods~let periods = delta / 1024; // A period~let periods = delta / 1023; // A period
+acc_load~sa.load_sum = decay_load(sa.load_sum, periods, inv);~sa.load_sum = sa.load_sum;
+acc_run~sa.runnable_sum = decay_load(sa.runnable_sum, periods, inv);~sa.runnable_sum = decay_load(sa.load_sum, periods, inv);
+acc_util~sa.util_sum = decay_load(sa.util_sum as u64, periods, inv) as u32;~sa.util_sum = sa.util_sum;
+acc_mod~delta %= 1024;~delta %= 1023;
+acc_loadchk~if load != 0 {<NL>            // This relies~if load == 0 {<NL>            // This relies
+acc_seg~contrib = accumulate_pelt_segments(periods, 1024 - sa.period_contrib, delta as u32, inv);~contrib = accumulate_pelt_segments(periods, sa.period_contrib, delta as u32, inv);
+acc_seg2~contrib = accumulate_pelt_segments(periods, 1024 - sa.period_contrib, delta as u32, inv);~contrib = accumulate_pelt_segments(periods, 1024 - sa.period_contrib, 0, inv);
+acc_contrib_store~sa.period_contrib = delta as u32;~sa.period_contrib = 0;
+acc_lsum~sa.load_sum = sa.load_sum.wrapping_add(load.wrapping_mul(contrib as u64));~sa.load_sum = sa.load_sum.wrapping_add(contrib as u64);
+acc_rsum~sa.runnable_sum.wrapping_add(runnable.wrapping_mul(contrib as u64) << SCHED_CAPACITY_SHIFT)~sa.runnable_sum.wrapping_add(runnable.wrapping_mul(contrib as u64))
+acc_rchk~if runnable != 0 {~if runnable == 0 {
+acc_usum~sa.util_sum = sa.util_sum.wrapping_add(contrib << SCHED_CAPACITY_SHIFT);~sa.util_sum = sa.util_sum.wrapping_add(contrib);
+acc_uchk~if running != 0 {~if running == 0 {
+acc_ret~    periods<NL>}<NL><NL>/// `___update_load_sum()`~    periods + 1<NL>}<NL><NL>/// `___update_load_sum()`
+us_neg2~sa.last_update_time = now;<NL>            return 0;~return 0;
+us_shift~delta >>= 10;~delta >>= 9;
+us_zero~if delta == 0 {~if delta == 1 {
+us_last~sa.last_update_time = sa.last_update_time.wrapping_add(delta << 10);~sa.last_update_time = now;
+us_load0~if load == 0 {<NL>            load_runnable = 0;~if load == 1 {<NL>            load_runnable = 0;
+us_load0b~load_runnable = 0;<NL>            load_running = 0;~load_runnable = 0;
+us_acc~if accumulate_sum(delta, sa, load, load_runnable, load_running, inv) == 0 {~if accumulate_sum(delta, sa, load, runnable, running, inv) == 0 {
+us_ret~        1<NL>    }<NL>}<NL><NL>/// `___update_load_avg()`~        0<NL>    }<NL>}<NL><NL>/// `___update_load_avg()`
+av_div~let divider = PELT_MIN_DIVIDER.wrapping_add(sa.period_contrib) as u64;~let divider = PELT_MIN_DIVIDER as u64;
+av_load~sa.load_avg = load.wrapping_mul(sa.load_sum) / divider;~sa.load_avg = sa.load_sum / divider;
+av_run~sa.runnable_avg = sa.runnable_sum / divider;~sa.runnable_avg = sa.load_sum / divider;
+av_util~sa.util_avg = sa.util_sum as u64 / divider;~sa.util_avg = sa.runnable_sum / divider;
+av_const~const PELT_MIN_DIVIDER: u32 = (LOAD_AVG_MAX - 1024) as u32;~const PELT_MIN_DIVIDER: u32 = (LOAD_AVG_MAX - 1023) as u32;

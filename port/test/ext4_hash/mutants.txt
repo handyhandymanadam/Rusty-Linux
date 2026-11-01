@@ -1,0 +1,51 @@
+tea_delta~const DELTA: u32 = 0x9E37_79B9;~const DELTA: u32 = 0x9E37_79B8;
+tea_rounds~    for _ in 0..16 {~    for _ in 0..15 {
+tea_b0~        b0 = b0.wrapping_add((b1 << 4).wrapping_add(a) ^ b1.wrapping_add(sum) ^ (b1 >> 5).wrapping_add(b));~        b0 = b0.wrapping_add((b1 << 4).wrapping_add(a) ^ b1.wrapping_add(sum) ^ (b1 >> 4).wrapping_add(b));
+tea_b1~        b1 = b1.wrapping_add((b0 << 4).wrapping_add(c) ^ b0.wrapping_add(sum) ^ (b0 >> 5).wrapping_add(d));~        b1 = b1.wrapping_add((b0 << 4).wrapping_add(d) ^ b0.wrapping_add(sum) ^ (b0 >> 5).wrapping_add(c));
+tea_out0~    buf[0] = buf[0].wrapping_add(b0);~    buf[0] = b0;
+tea_out1~    buf[1] = buf[1].wrapping_add(b1);~    buf[1] = buf[1].wrapping_add(b0);
+f_fn~    z ^ (x & (y ^ z))~    z ^ (x | (y ^ z))
+g_fn~    (x & y).wrapping_add((x ^ y) & z)~    (x & y).wrapping_add((x | y) & z)
+h_fn~    x ^ y ^ z~    x ^ y | z
+k2~const K2: u32 = 0o13240474631;~const K2: u32 = 0o13240474630;
+k3~const K3: u32 = 0o15666365641;~const K3: u32 = 0o15666365640;
+r1_a~    round!(f, a, b, c, d, inp[0].wrapping_add(K1), 3);~    round!(f, a, b, c, d, inp[0].wrapping_add(K1), 4);
+r1_in~    round!(f, d, a, b, c, inp[1].wrapping_add(K1), 7);~    round!(f, d, a, b, c, inp[2].wrapping_add(K1), 7);
+r1_b~    round!(f, b, c, d, a, inp[7].wrapping_add(K1), 19);~    round!(f, b, c, d, a, inp[7].wrapping_add(K1), 18);
+r2_in~    round!(g, c, d, a, b, inp[5].wrapping_add(K2), 9);~    round!(g, c, d, a, b, inp[4].wrapping_add(K2), 9);
+r2_rot~    round!(g, d, a, b, c, inp[3].wrapping_add(K2), 5);~    round!(g, d, a, b, c, inp[3].wrapping_add(K2), 6);
+r2_last~    round!(g, b, c, d, a, inp[6].wrapping_add(K2), 13);~    round!(g, b, c, d, a, inp[6].wrapping_add(K2), 12);
+r3_in~    round!(h, d, a, b, c, inp[7].wrapping_add(K3), 9);~    round!(h, d, a, b, c, inp[6].wrapping_add(K3), 9);
+r3_rot~    round!(h, c, d, a, b, inp[2].wrapping_add(K3), 11);~    round!(h, c, d, a, b, inp[2].wrapping_add(K3), 10);
+r3_last~    round!(h, b, c, d, a, inp[4].wrapping_add(K3), 15);~    round!(h, b, c, d, a, inp[4].wrapping_add(K3), 14);
+r3_a~    round!(h, a, b, c, d, inp[1].wrapping_add(K3), 3);~    round!(h, a, b, c, d, inp[1].wrapping_add(K3), 2);
+hm_out~    buf[2] = buf[2].wrapping_add(c);~    buf[2] = c;
+hm_out3~    buf[3] = buf[3].wrapping_add(d);~    buf[3] = buf[3].wrapping_add(c);
+ch_sign~        b as i8 as i32 as u32~        b as u32
+dx_mul~c.wrapping_mul(7152373)~c.wrapping_mul(7152374)
+dx_seed0~    let mut hash0: u32 = 0x12a3fe2d;~    let mut hash0: u32 = 0x12a3fe2c;
+dx_seed1~    let mut hash1: u32 = 0x37abe8f9;~    let mut hash1: u32 = 0x37abe8f8;
+dx_hi~        if hash & 0x8000_0000 != 0 {~        if hash & 0x4000_0000 != 0 {
+dx_sub~            hash = hash.wrapping_sub(0x7fff_ffff);~            hash = hash.wrapping_sub(0x7fff_fffe);
+dx_shl~    hash0 << 1~    hash0 << 2
+s2_pad~    let mut pad: u32 = (len as u32) | ((len as u32) << 8);~    let mut pad: u32 = (len as u32) | ((len as u32) << 7);
+s2_pad2~    pad |= pad << 16;~    pad |= pad << 15;
+s2_val~        val = unsafe { ch(msg, i, signed) }.wrapping_add(val << 8);~        val = unsafe { ch(msg, i, signed) }.wrapping_add(val << 7);
+s2_mod~        if i % 4 == 3 {~        if i % 4 == 2 {
+s2_pad_rest~        buf[out] = pad;~        buf[out] = val;
+s2_tail~    num -= 1;<NL>    if num >= 0 {~    num -= 2;<NL>    if num >= 0 {
+dh_seed~                if *seed.add(i) != 0 {~                if *seed.add(i) == 0 {
+dh_seed_all~            for i in 0..4 {~            for i in 0..3 {
+dh_seed_copy~                    for k in 0..4 {~                    for k in 0..3 {
+dh_init0~        let mut buf: [u32; 4] = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476];~        let mut buf: [u32; 4] = [0x67452300, 0xefcdab89, 0x98badcfe, 0x10325476];
+dh_init3~        let mut buf: [u32; 4] = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476];~        let mut buf: [u32; 4] = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325477];
+dh_leg_u~                *hash = dx_hack_hash(name, len, false);~                *hash = dx_hack_hash(name, len, true);
+dh_leg_s~                *hash = dx_hack_hash(name, len, true);<NL>                *minor_hash = 0;~                *hash = dx_hack_hash(name, len, false);<NL>                *minor_hash = 0;
+dh_md4_sign~                let signed = version == DX_HASH_HALF_MD4;~                let signed = version != DX_HASH_HALF_MD4;
+dh_md4_adv~                    len -= 32;<NL>                    p = p.add(32);~                    len -= 32;<NL>                    p = p.add(16);
+dh_md4_len~                    len -= 32;~                    len -= 31;
+dh_md4_out~                *minor_hash = buf[2];<NL>                *hash = buf[1];~                *minor_hash = buf[1];<NL>                *hash = buf[2];
+dh_tea_sign~                let signed = version == DX_HASH_TEA;~                let signed = version != DX_HASH_TEA;
+dh_tea_adv~                    len -= 16;<NL>                    p = p.add(16);~                    len -= 16;<NL>                    p = p.add(8);
+dh_tea_out~                *hash = buf[0];<NL>                *minor_hash = buf[1];~                *hash = buf[1];<NL>                *minor_hash = buf[0];
+dh_loop~                while len > 0 {<NL>                    str2hashbuf(p, len, &mut inp, 8, signed);~                while len > 1 {<NL>                    str2hashbuf(p, len, &mut inp, 8, signed);

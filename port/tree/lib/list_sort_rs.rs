@@ -248,7 +248,7 @@ pub unsafe extern "C" fn list_sort(
             pending = list;
             list = (*list).next;
             (*pending).next = core::ptr::null_mut();
-            count += 1;
+            count = count.wrapping_add(1);
 
             if list.is_null() {
                 break;

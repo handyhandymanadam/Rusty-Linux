@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Append a run to logs/quick-perf.tsv, rig-stamped.
 
-NOT CITABLE. GOALS.md §4: this file is a development instrument. Its rows
+NOT CITABLE. notes/GOALS.md §4: this file is a development instrument. Its rows
 are comparable to each other on one rig and to nothing else -- above all not
 to logs/system-perf.tsv.
 """

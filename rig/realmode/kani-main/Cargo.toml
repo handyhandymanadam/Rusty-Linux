@@ -1,0 +1,12 @@
+# Kani proofs for main_rs.rs (real-mode setup):  rig/realmode/run-main-kani.sh
+[package]
+name = "main_rs_kani"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "../../../port/tree/arch/x86/boot/main_rs.rs"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)", "cfg(host_mock)"] }

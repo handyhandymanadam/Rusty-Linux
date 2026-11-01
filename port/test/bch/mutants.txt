@@ -1,0 +1,129 @@
+enc_swap~let tmp = swap_bits(b, *data) as u32;~let tmp = *data as u32;
+enc_unal_mask~(((*ecc) >> 24) ^ tmp) & 0xff)~(((*ecc) >> 24) ^ tmp) & 0x7f)
+enc_unal_shift~*ecc.add(i) = ((*ecc.add(i) << 8) | (*ecc.add(i + 1) >> 24)) ^ *p;~*ecc.add(i) = ((*ecc.add(i) << 7) | (*ecc.add(i + 1) >> 24)) ^ *p;
+enc_unal_last~*ecc.add(l) = (*ecc.add(l) << 8) ^ *p;~*ecc.add(l) = (*ecc.add(l) << 7) ^ *p;
+load_shift~| ((swap_bits(b, *src.add(1)) as u32) << 16)~| ((swap_bits(b, *src.add(1)) as u32) << 15)
+load_pad~(ecc_bytes_of(b) as usize) - 4 * nwords);<NL>        *dst.add(nwords)~((ecc_bytes_of(b) as usize) - 4 * nwords).min(1));<NL>        *dst.add(nwords)
+store_shift~*dst.add(2) = swap_bits(b, (s >> 8) as u8);~*dst.add(2) = swap_bits(b, (s >> 9) as u8);
+store_pad~pad[1] = swap_bits(b, (s >> 16) as u8);~pad[1] = swap_bits(b, (s >> 17) as u8);
+enc_mlen~let mlen = if len < 4 - m { len } else { 4 - m };~let mlen = if len < 4 - m { len + 1 } else { 4 - m };
+enc_be~let mut w = (*pdata).swap_bytes();~let mut w = *pdata;
+enc_swapw~| ((swap_bits(b, (w >> 8) as u8) as u32) << 8)~| ((swap_bits(b, (w >> 8) as u8) as u32) << 9)
+enc_xor~w ^= r[0];~w ^= r[1];
+enc_p1~let p1 = tab1.add((l + 1) * (((w >> 8) & 0xff) as usize));~let p1 = tab1.add((l + 1) * (((w >> 9) & 0xff) as usize));
+enc_p3~r[i] = r[i + 1] ^ *p0.add(i) ^ *p1.add(i) ^ *p2.add(i) ^ *p3.add(i);~r[i] = r[i + 1] ^ *p0.add(i) ^ *p1.add(i) ^ *p2.add(i);
+enc_rl~r[l] = *p0.add(l) ^ *p1.add(l) ^ *p2.add(l) ^ *p3.add(l);~r[l] = *p0.add(l) ^ *p1.add(l) ^ *p2.add(l);
+enc_tail~if len != 0 {<NL>            bch_encode_unaligned(b, data, len, b.ecc_buf);~if len > 1 {<NL>            bch_encode_unaligned(b, data, len, b.ecc_buf);
+modulo_shift~v = (v & n) + (v >> b.m);~v = (v & n) + (v >> (b.m + 1));
+mod_s_le~    if v < n {<NL>        v~    if v <= n {<NL>        v
+deg_off~32 - poly.leading_zeros() as i32 - 1~32 - poly.leading_zeros() as i32
+parity_k~x = (x & 0x1111_1111).wrapping_mul(0x1111_1111);~x = (x & 0x1111_1111).wrapping_mul(0x1111_1110);
+mul_or~if a != 0 && c != 0 {~if a != 0 || c != 0 {
+sqr_k~pw(b, mod_s(b, 2u32.wrapping_mul(lg(b, a))))~pw(b, mod_s(b, 3u32.wrapping_mul(lg(b, a))))
+div_n~lg(b, a).wrapping_add(b.n).wrapping_sub(lg(b, c))~lg(b, a).wrapping_sub(lg(b, c))
+inv_n~unsafe { pw(b, b.n.wrapping_sub(lg(b, a))) }~unsafe { pw(b, lg(b, a)) }
+ilog_n~unsafe { mod_s(b, b.n.wrapping_sub(lg(b, x))) }~unsafe { lg(b, x) }
+syn_mask~let m = (s as u32) & 31;~let m = (s as u32) & 15;
+syn_clear~&= !((1u32 << (32 - m)) - 1);~&= !((1u32 << (31 - m)) - 1);
+syn_loop~if s <= 0 {<NL>                break;~if s < 0 {<NL>                break;
+syn_pow~a_pow(b, ((j + 1).wrapping_mul(i.wrapping_add(s))) as u32)~a_pow(b, ((j + 1).wrapping_mul(i.wrapping_add(s).wrapping_add(1))) as u32)
+syn_sqr~*syn.add(2 * j + 1) = gf_sqr(b, *syn.add(j));~*syn.add(2 * j + 1) = gf_sqr(b, *syn.add(j)) ^ 1;
+bm_pd~let mut pd: u32 = 1;~let mut pd: u32 = 2;
+bm_k~let k = (2u32.wrapping_mul(i).wrapping_sub(pp as u32)) as i32;~let k = (2u32.wrapping_mul(i).wrapping_sub(pp as u32).wrapping_add(1)) as i32;
+bm_tmp~let mut tmp = lg(b, d).wrapping_add(n).wrapping_sub(lg(b, pd));~let mut tmp = lg(b, d).wrapping_add(n).wrapping_add(lg(b, pd));
+bm_gt~if tmp > (*elp).deg {~if tmp >= (*elp).deg {
+bm_pp~pp = (2u32.wrapping_mul(i)) as i32;~pp = (2u32.wrapping_mul(i) + 1) as i32;
+bm_last~if i < t.wrapping_sub(1) {~if i < t {
+bm_d~*syn.add((2 * i + 2).wrapping_sub(j) as usize));~*syn.add((2 * i + 2).wrapping_sub(j).wrapping_add(1) as usize));
+bm_cond~while i < t && (*elp).deg <= t {~while i < t && (*elp).deg < t {
+bm_ret~if (*elp).deg > t {<NL>            -1~if (*elp).deg >= t {<NL>            -1
+sol_mask~let mut mask: u32 = 1u32.wrapping_shl(m as u32);~let mut mask: u32 = 1u32.wrapping_shl(m as u32 - 1);
+sol_find~if *rows.add(r as usize) & mask != 0 {<NL>                    if r != p {~if *rows.add(r as usize) & mask == 0 {<NL>                    if r != p {
+sol_rem~rem = r + 1;~rem = r;
+sol_nosol~if r > m - 1 - k && *rows.add(r as usize) != 0 {~if r >= m - 1 - k && *rows.add(r as usize) != 0 {
+sol_fake~*rows.add(r as usize) = 1u32.wrapping_shl((m - r) as u32);~*rows.add(r as usize) = 1u32.wrapping_shl((m - r + 1) as u32);
+sol_nsol~if nsol != (1 << k) {~if nsol > (1 << k) {
+sol_param~*rows.add(idx) = (*rows.add(idx) & !1) | (((p >> c) & 1) as u32);~*rows.add(idx) = (*rows.add(idx) & !2) | (((p >> c) & 1) as u32);
+sol_tmp~tmp |= parity(mask) << (m - r);~tmp |= parity(mask) << (m - r + 1);
+sol_out~*sol.add(p as usize) = tmp >> 1;~*sol.add(p as usize) = tmp >> 2;
+aff_mask~let mut mask: u32 = 0xff;~let mut mask: u32 = 0xf;
+aff_row0~rows[0] = c;~rows[0] = c ^ 1;
+aff_pow~rows[i + 1] = pw(b, 4 * i as u32)~rows[i + 1] = pw(b, 4 * i as u32 + 1)
+aff_k~k += 2;~k += 3;
+aff_next~k = (k + j + 1) & !j;~k = (k + j + 1) & !0;
+d1_sign~*roots.add(n) = mod_s(b, b.n.wrapping_sub(lg(b, *c)).wrapping_add(lg(b, *c.add(1))));~*roots.add(n) = mod_s(b, b.n.wrapping_sub(lg(b, *c)).wrapping_sub(lg(b, *c.add(1))));
+d2_cond~if *c != 0 && *c.add(1) != 0 {~if *c != 0 || *c.add(1) != 0 {
+d2_u~.wrapping_add(2u32.wrapping_mul(b.n.wrapping_sub(l1))));~.wrapping_add(2u32.wrapping_mul(l1)));
+d2_xi~r ^= *b.xi_tab.add(i as usize);~r ^= *b.xi_tab.add(i as usize) ^ 1;
+d2_verify~if (gf_sqr(b, r) ^ r) == u {~if (gf_sqr(b, r) ^ r) != u {
+d2_r1~lg(b, r ^ 1)~lg(b, r)
+d3_b2~let b2 = gf_div(b, *c.add(1), e3);~let b2 = gf_div(b, *c.add(2), e3);
+d3_bb~let bb = gf_mul(b, a2, b2) ^ c2; // b = a2b2 + c2~let bb = gf_mul(b, a2, b2); // b = a2b2 + c2
+d3_aa~let aa = gf_sqr(b, a2) ^ b2; // a = a2^2 + b2~let aa = gf_sqr(b, a2); // a = a2^2 + b2
+d3_skip~if tmp[i] != a2 {~if tmp[i] == a2 {
+d3_ilog~*roots.add(n) = a_ilog(b, tmp[i]);~*roots.add(n) = tmp[i];
+d4_zero~if *c == 0 {<NL>            return 0;~if *c == 1 {<NL>            return 0;
+d4_a~let a = gf_div(b, *c.add(3), e4);~let a = gf_div(b, *c.add(2), e4);
+d4_l~l = l.wrapping_add(if l & 1 != 0 { b.n } else { 0 });~l = l.wrapping_add(if l & 1 != 0 { 0 } else { 0 });
+d4_e~e = a_pow(b, l / 2);~e = a_pow(b, l / 2 + 1);
+d4_d~d = a_pow(b, 2u32.wrapping_mul(l)) ^ gf_mul(b, bb, f) ^ d;~d = a_pow(b, 2u32.wrapping_mul(l)) ^ gf_mul(b, bb, f);
+d4_b~bb = gf_mul(b, a, e) ^ bb;~bb = gf_mul(b, a, e);
+d4_dzero~if d == 0 {<NL>                // assume all roots have multiplicity 1~if d == 1 {<NL>                // assume all roots have multiplicity 1
+d4_c2~c2 = gf_inv(b, d);~c2 = d;
+d4_a2~a2 = gf_div(b, bb, d);~a2 = bb;
+d4_post~let f = if a != 0 { gf_inv(b, *roots.add(i)) } else { *roots.add(i) };~let f = *roots.add(i);
+d4_post2~*roots.add(i) = a_ilog(b, f ^ e);~*roots.add(i) = a_ilog(b, f ^ (e & 0));
+rep_l~let l = b.n.wrapping_sub(lg(b, *c.add((*a).deg as usize))) as i32;~let l = b.n.wrapping_sub(lg(b, *c.add((*a).deg as usize))).wrapping_add(1) as i32;
+rep_neg~lg(b, *c.add(i)).wrapping_add(l as u32)) as i32 } else { -1 };~lg(b, *c.add(i)).wrapping_add(l as u32)) as i32 } else { 0 };
+mod_lt~if (*a).deg < d {<NL>            return;~if (*a).deg <= d {<NL>            return;
+mod_p~let mut p = j.wrapping_sub(d) as i32;~let mut p = j.wrapping_sub(d).wrapping_add(1) as i32;
+mod_m~if m >= 0 {~if m > 0 {
+mod_deg~(*a).deg = d.wrapping_sub(1);~(*a).deg = d;
+mod_trim~while *c.add((*a).deg as usize) == 0 && (*a).deg != 0 {~while *c.add((*a).deg as usize) == 0 && (*a).deg > 1 {
+div_deg~(*q).deg = (*a).deg - (*bp).deg;~(*q).deg = (*a).deg - (*bp).deg + 1;
+div_copy~pc(a).add((*bp).deg as usize) as *const u32~pc(a).add((*bp).deg as usize + 1) as *const u32
+trace_z~*zc.add(1) = pw(b, k as u32);~*zc.add(1) = pw(b, k as u32 + 1);
+trace_last~if i < m - 1 {~if i < m {
+trace_deg~(*z).deg *= 2;~(*z).deg *= 3;
+trace_zero~*zc.add(2 * j as usize + 1) = 0;~*zc.add(2 * j as usize + 1) = 1;
+fac_lt~if (*gcd).deg < (*f).deg {~if (*gcd).deg <= (*f).deg {
+fac_h~GF_POLY_DEG1_SZ * (*gcd).deg as usize~(GF_POLY_DEG1_SZ - 4) * (*gcd).deg as usize
+roots_k~if (*poly).deg != 0 && k <= b.m {~if (*poly).deg != 0 && k < b.m {
+roots_k1~cnt += find_poly_roots(b, k + 1, f1, roots);~cnt += find_poly_roots(b, k, f1, roots);
+roots_cnt~roots.add(cnt as usize)~roots
+dec_len~if 8u32.wrapping_mul(len) > b.n.wrapping_sub(b.ecc_bits) {~if 8u32.wrapping_mul(len) >= b.n.wrapping_sub(b.ecc_bits) {
+dec_null~if data.is_null() || recv_ecc.is_null() {~if data.is_null() && recv_ecc.is_null() {
+dec_sum~if sum == 0 {~if sum == 1 {
+dec_err~if err != nroots {~if err > nroots {
+dec_nbits~if *errloc.add(i) >= nbits {~if *errloc.add(i) > nbits {
+dec_loc~*errloc.add(i) = nbits - 1 - *errloc.add(i);~*errloc.add(i) = nbits - *errloc.add(i);
+dec_swap~(*errloc.add(i) & !7) | (7 - (*errloc.add(i) & 7))~(*errloc.add(i) & !3) | (7 - (*errloc.add(i) & 7))
+dec_ret~if err >= 0 {<NL>            err~if err > 0 {<NL>            err
+gf_k~let k: u32 = 1u32.wrapping_shl(deg(poly) as u32);~let k: u32 = 1u32.wrapping_shl(deg(poly) as u32 + 1);
+gf_prim~if i != 0 && x == 1 {~if x == 1 {
+gf_red~if x & k != 0 {<NL>                x ^= poly;~if x & k == 0 {<NL>                x ^= poly;
+gf_pown~*b.a_pow_tab.add(b.n as usize) = 1;~*b.a_pow_tab.add(b.n as usize) = 0;
+gf_log0~*b.a_log_tab = 0;~*b.a_log_tab = 1;
+m8_plen~let plen = ((b.ecc_bits + 1) + 31) / 32;~let plen = (b.ecc_bits + 31) / 32;
+m8_data~data ^= *g >> (31 - d);~data ^= (*g >> (31 - d)) & !1;
+m8_lo~let lo = if (j as u32) + 1 < plen {~let lo = if (j as u32) + 1 <= plen {
+b2_sum~sum ^= a_pow(b, (i.wrapping_mul(1 << j)) as u32);~sum ^= a_pow(b, (i.wrapping_mul(2 << j)) as u32);
+b2_ak~ak = pw(b, i as u32);~ak = pw(b, i as u32 + 1);
+b2_x~while x <= b.n && remaining != 0 {~while x < b.n && remaining != 0 {
+b2_r~if y != 0 && r < m && xi[r as usize] == 0 {~if y != 0 && r < m && xi[r as usize] == 1 {
+b2_y~y ^= ak;~y ^= ak ^ 1;
+gen_r~let mut r = 2 * i + 1;~let mut r = 2 * i;
+gen_r2~r = mod_s(b, 2u32.wrapping_mul(r));~r = mod_s(b, 3u32.wrapping_mul(r));
+gen_root~let r = pw(b, i);~let r = pw(b, i + 1);
+gen_mul~gf_mul(b, *gc.add(j as usize), r) ^ *gc.add(j as usize - 1);~gf_mul(b, *gc.add(j as usize), r);
+gen_c0~*gc = gf_mul(b, *gc, r);~*gc = r;
+gen_nbits~let nbits = if n > 32 { 32 } else { n };~let nbits = if n > 31 { 31 } else { n };
+gen_bits~b.ecc_bits = (*g).deg;~b.ecc_bits = (*g).deg + 1;
+init_m~if m < min_m || m > BCH_MAX_M as c_int {~if m <= min_m || m > BCH_MAX_M as c_int {
+init_t~if t > BCH_MAX_T {~if t >= BCH_MAX_T {
+init_mt~m.wrapping_mul(t) >= ((1 << m) - 1)~m.wrapping_mul(t) > ((1 << m) - 1)
+init_words~let words = (b.m * b.t + 31) / 32;~let words = (b.m * b.t) / 32;
+init_bytes~b.ecc_bytes = (b.m * b.t + 7) / 8;~b.ecc_bytes = (b.m * b.t + 8) / 8;
+init_leak~if err != 0 {<NL>                rust_bch_free(bch);<NL>                return null_mut();~if err != 0 {<NL>                return null_mut();
+free_syn~rust_bchw_kfree(b.syn as *mut c_void);~let _ = b.syn;
+free_poly~for i in 0..4 {<NL>                rust_bchw_kfree(b.poly_2t[i] as *mut c_void);~for i in 0..3 {<NL>                rust_bchw_kfree(b.poly_2t[i] as *mut c_void);

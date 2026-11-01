@@ -159,7 +159,7 @@ static unsigned long mismatches;
 static unsigned long checks;
 static unsigned long ops_applied;
 
-/* Per-stage accounting. STATUS.md standing guard 9: "read the case count --
+/* Per-stage accounting. notes/STATUS.md standing guard 9: "read the case count --
  * whatever number says work happened -- and ask whether it is plausible."
  * A single total cannot say that a stage ran at all. */
 static unsigned long stage_checks_at_start;

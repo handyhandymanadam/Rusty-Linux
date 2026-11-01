@@ -1,0 +1,13 @@
+# Kani proofs for arch/x86/lib/cmdline_rs.rs:  cd rig/x86-cmdline-kani && cargo kani
+# (the harnesses are the `#[cfg(kani)] mod proofs` at the bottom of cmdline_rs.rs itself).
+[package]
+name = "x86_cmdline_rs_kani"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "../../port/tree/arch/x86/lib/cmdline_rs.rs"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }

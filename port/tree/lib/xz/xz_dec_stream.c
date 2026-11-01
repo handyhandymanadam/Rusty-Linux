@@ -28,7 +28,7 @@
 #include "xz_private.h"
 #include "xz_stream.h"
 
-#ifdef STATIC
+#if defined(STATIC) && !defined(XZ_BOOT_RUST)
 
 /* ---------------------------------------------------------------------
  * Pre-boot. The original C, unchanged. lib/decompress_unxz.c textually

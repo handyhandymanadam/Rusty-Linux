@@ -33,7 +33,7 @@
 #include "xz_private.h"
 #include "xz_lzma2.h"
 
-#ifdef STATIC
+#if defined(STATIC) && !defined(XZ_BOOT_RUST)
 
 /* ---------------------------------------------------------------------
  * Pre-boot. The original C, unchanged. lib/decompress_unxz.c textually

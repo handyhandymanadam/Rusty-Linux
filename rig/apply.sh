@@ -17,7 +17,7 @@
 # WHAT IT REPORTS
 #   The sha256 it READ BACK from the kernel tree after copying, alongside the
 #   sha256 of the source. Not "copied 3 files". A tool reporting success is
-#   not evidence that it worked (PRIOR-ART.md §3).
+#   not evidence that it worked (notes/PRIOR-ART.md §3).
 #
 #   --check  compare only; copy nothing. Exit 1 if the tree differs.
 set -euo pipefail
@@ -74,7 +74,8 @@ printf '%-8s %-16s %-16s %s\n' STATE PRISTINE INTREE 'PATH (CONFIG_RUST=n arm)'
 n_nr=0
 while IFS= read -r -d '' f; do
     rel=${f#"$pristine"/}
-    case "$rel" in lib/*) ;; *) continue;; esac
+    # lib/ plus the step-4 directories outside it (arch/x86/lib, fs/nls, crypto).
+    case "$rel" in lib/*|arch/x86/lib/*|fs/nls/*|crypto/*|kernel/time/*|kernel/range.c|fs/fs_types.c|fs/fs_parser.c|block/partitions/efi.c|kernel/groups.c|kernel/user_namespace.c|kernel/notifier.c|kernel/resource.c|kernel/ucount.c|kernel/sysctl.c|kernel/kallsyms.c|kernel/auditfilter.c|fs/ext4/hash.c|security/selinux/ss/ebitmap.c|security/selinux/ss/avtab.c|security/selinux/ss/hashtab.c|security/selinux/ss/symtab.c|security/selinux/ss/conditional.c|security/selinux/ss/mls.c|net/ethtool/bitset.c|kernel/sched/pelt.c|kernel/sched/loadavg.c|kernel/sched/cputime.c|net/ipv4/tcp_cubic.c|net/ipv4/tcp_bic.c|net/ipv4/tcp_illinois.c|net/ipv4/tcp_htcp.c|fs/unicode/utf8-norm.c|fs/unicode/utf8-core.c|net/core/utils.c|arch/x86/kernel/cpu/scattered.c) ;; *) continue;; esac
     dir=$(dirname "$rel"); bn=$(basename "$rel" .c)
     dst="$tree/$dir/${bn}_norust.c"
     a=$(sha256sum "$f" | cut -c1-16)

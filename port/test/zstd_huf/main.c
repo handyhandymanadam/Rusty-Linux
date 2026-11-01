@@ -329,7 +329,7 @@ int main(int argc, char **argv)
 	       n_clean, n_mut, n_formmatch, n_gooddesc);
 	printf("comparisons: %lu   mismatches: %lu\n", dt_checks, dt_fails);
 
-	/* STATUS.md lesson 9: a clean result with an implausible volume has not
+	/* notes/STATUS.md lesson 9: a clean result with an implausible volume has not
 	 * checked anything. */
 	if (runs >= 2000) {
 		unsigned dead = 0;

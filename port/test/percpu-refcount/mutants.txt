@@ -1,0 +1,49 @@
+init_force~rust_prw_set_force_atomic(data, flags & PERCPU_REF_INIT_ATOMIC != 0);~rust_prw_set_force_atomic(data, flags & PERCPU_REF_INIT_DEAD != 0);
+init_reinit~rust_prw_set_allow_reinit(data, flags & PERCPU_REF_ALLOW_REINIT != 0);~rust_prw_set_allow_reinit(data, flags & (PERCPU_REF_ALLOW_REINIT >> 1) != 0);
+init_either~if flags & (PERCPU_REF_INIT_ATOMIC | PERCPU_REF_INIT_DEAD) != 0 {~if flags & PERCPU_REF_INIT_ATOMIC != 0 {
+init_allow~rust_prw_set_allow_reinit(data, true);~rust_prw_set_allow_reinit(data, false);
+init_bias~start_count = start_count.wrapping_add(PERCPU_COUNT_BIAS);~start_count = start_count.wrapping_add(0);
+init_dead~if flags & PERCPU_REF_INIT_DEAD != 0 {<NL>            (*r).percpu_count_ptr |= PERCPU_REF_DEAD;~if flags & PERCPU_REF_INIT_DEAD != 0 {<NL>            (*r).percpu_count_ptr |= PERCPU_REF_ATOMIC;
+init_one~start_count = start_count.wrapping_add(1);~start_count = start_count.wrapping_add(2);
+init_count~(*data).count.store(start_count as i64, Ordering::Relaxed);~(*data).count.store(start_count as i64 + 1, Ordering::Relaxed);
+init_clear~            (*r).percpu_count_ptr = 0;<NL>            return -ENOMEM;~            let _ = 0;<NL>            return -ENOMEM;
+init_free~rust_prw_free_percpu((*r).percpu_count_ptr);<NL>            (*r).percpu_count_ptr = 0;~let _ = rust_prw_free_percpu as *const ();<NL>            (*r).percpu_count_ptr = 0;
+ex_if~if percpu_count != 0 {~if percpu_count == 0 {
+ex_flag~(*r).percpu_count_ptr = PERCPU_REF_ATOMIC_DEAD;~(*r).percpu_count_ptr = PERCPU_REF_ATOMIC;
+ex_warn~rust_prw_warn_exit_switching(!(*r).data.is_null() && (*(*r).data).confirm_switch.is_some());~rust_prw_warn_exit_switching(!(*r).data.is_null() || (*(*r).data).confirm_switch.is_some());
+exit_pack~as usize) << PERCPU_REF_FLAG_BITS;~as usize) << 1;
+exit_data~(*r).data = null_mut();~{ let _ = null_mut::<u8>(); } (*r).data = (*r).data.wrapping_add(0);
+exit_kfree~rust_prw_kfree(data as *mut c_void);~let _ = (data, rust_prw_kfree as *const ());
+exit_null~if data.is_null() {<NL>            return;~if !data.is_null() {<NL>            return;
+cc_clear~(*data).confirm_switch = None;<NL><NL>        rust_prw_wake_all();~rust_prw_wake_all();
+cc_reinit~if !rust_prw_get_allow_reinit(data) {~if rust_prw_get_allow_reinit(data) {
+cc_put~// drop ref from percpu_ref_switch_to_atomic()<NL>        rust_prw_put(r);~// drop ref from percpu_ref_switch_to_atomic()<NL>        rust_prw_get(r);
+cc_wake~        rust_prw_wake_all();<NL><NL>        if !rust_prw_get_allow_reinit(data) {~        let _ = rust_prw_wake_all as *const ();<NL><NL>        if !rust_prw_get_allow_reinit(data) {
+rcu_add~(*data).count.fetch_add(count.wrapping_sub(PERCPU_COUNT_BIAS) as i64, Ordering::Relaxed);~(*data).count.fetch_add(count as i64, Ordering::Relaxed);
+rcu_sum~let count = rust_prw_sum_percpu(percpu_count) as u64;~let count = rust_prw_sum_percpu(percpu_count) as u64 + 1;
+sa_atomic~if (*r).percpu_count_ptr & PERCPU_REF_ATOMIC != 0 {<NL>            if let Some(f) = confirm_switch {~if (*r).percpu_count_ptr & PERCPU_REF_DEAD != 0 {<NL>            if let Some(f) = confirm_switch {
+sa_confirm~if let Some(f) = confirm_switch {<NL>                f(r);<NL>            }<NL>            return;~if let Some(_f) = confirm_switch {<NL>                ();<NL>            }<NL>            return;
+sa_set~(*r).percpu_count_ptr |= PERCPU_REF_ATOMIC;<NL><NL>        // Non-NULL~<NL><NL>        // Non-NULL
+sa_noop~Some(confirm_switch.unwrap_or(percpu_ref_noop_confirm_switch))~{ let _ = percpu_ref_noop_confirm_switch as *const (); confirm_switch }
+sa_get~rust_prw_get(r); // put after confirmation~let _ = 0; // put after confirmation
+sp_atomic~if (*r).percpu_count_ptr & PERCPU_REF_ATOMIC == 0 {<NL>            return;~if (*r).percpu_count_ptr & PERCPU_REF_ATOMIC != 0 {<NL>            return;
+sp_warn~rust_prw_warn_no_reinit(!rust_prw_get_allow_reinit((*r).data))~rust_prw_warn_no_reinit(rust_prw_get_allow_reinit((*r).data))
+sp_bias~(*(*r).data).count.fetch_add(PERCPU_COUNT_BIAS as i64, Ordering::Relaxed);~(*(*r).data).count.fetch_add(0, Ordering::Relaxed);
+sp_zero~        rust_prw_zero_percpu(percpu_count);~        let _ = rust_prw_zero_percpu as *const ();
+sp_clear~ro(p) & !PERCPU_REF_ATOMIC, Ordering::Release~ro(p) & !PERCPU_REF_DEAD, Ordering::Release
+sm_force~if rust_prw_get_force_atomic(data) || is_dying(r) {~if rust_prw_get_force_atomic(data) && is_dying(r) {
+sm_wait~        rust_prw_wait_switched(data);~        let _ = rust_prw_wait_switched as *const ();
+ta_force~rust_prw_set_force_atomic((*r).data, true);~rust_prw_set_force_atomic((*r).data, false);
+tas_wait~        rust_percpu_ref_switch_to_atomic(r, None);<NL>        rust_prw_wait_switched_sync(r);~        rust_percpu_ref_switch_to_atomic(r, None);<NL>        let _ = rust_prw_wait_switched_sync as *const ();
+tp_force~rust_prw_set_force_atomic((*r).data, false);~rust_prw_set_force_atomic((*r).data, true);
+kill_dead~(*r).percpu_count_ptr |= PERCPU_REF_DEAD;<NL><NL>        percpu_ref_switch_mode(r, confirm_kill);~(*r).percpu_count_ptr |= PERCPU_REF_ATOMIC;<NL><NL>        percpu_ref_switch_mode(r, confirm_kill);
+kill_put~percpu_ref_switch_mode(r, confirm_kill);<NL><NL>        rust_prw_put(r);~percpu_ref_switch_mode(r, confirm_kill);<NL><NL>        let _ = 0;
+iz_percpu~if rust_prw_is_percpu(r) {<NL>            return false;~if !rust_prw_is_percpu(r) {<NL>            return false;
+iz_pack~((*r).percpu_count_ptr >> PERCPU_REF_FLAG_BITS) as u64~((*r).percpu_count_ptr >> 1) as u64
+iz_ret~rust_prw_unlock_irqrestore(flags);<NL><NL>        count == 0~rust_prw_unlock_irqrestore(flags);<NL><NL>        count <= 1
+re_res~rust_prw_warn_not_zero(!rust_percpu_ref_is_zero(r));<NL>        rust_percpu_ref_resurrect(r);~rust_prw_warn_not_zero(!rust_percpu_ref_is_zero(r));
+rs_dead~(*r).percpu_count_ptr &= !PERCPU_REF_DEAD;<NL>        rust_prw_get(r);~(*r).percpu_count_ptr &= !PERCPU_REF_ATOMIC;<NL>        rust_prw_get(r);
+rs_get~rust_prw_get(r);<NL>        percpu_ref_switch_mode(r, None);~let _ = 0;<NL>        percpu_ref_switch_mode(r, None);
+dying~unsafe { (*r).percpu_count_ptr & PERCPU_REF_DEAD != 0 }~unsafe { (*r).percpu_count_ptr & PERCPU_REF_ATOMIC != 0 }
+pcp~unsafe { (*r).percpu_count_ptr & !PERCPU_REF_ATOMIC_DEAD }~unsafe { (*r).percpu_count_ptr & !PERCPU_REF_DEAD }
+dof~(rcu as *mut u8).sub(DATA_OFF_RCU) as *mut PercpuRefData~(rcu as *mut u8).sub(DATA_OFF_RCU - 8) as *mut PercpuRefData

@@ -1,0 +1,75 @@
+cmp_swap_first~let first = if key.map_up { el.lower_first } else { el.first };~let first = if key.map_up { el.first } else { el.lower_first };
+cmp_id2_noadj~let id2 = key.id.wrapping_add(key.count).wrapping_sub(1);~let id2 = key.id.wrapping_add(key.count);
+cmp_last_noadj~let last = first.wrapping_add(el.count).wrapping_sub(1);~let last = first.wrapping_add(el.count);
+cmp_first_strict~if key.id >= first && key.id <= last && (id2 >= first && id2 <= last) {<NL>        return 0;~if key.id > first && key.id <= last && (id2 >= first && id2 <= last) {<NL>        return 0;
+cmp_id2_only_low~key.id <= last && (id2 >= first && id2 <= last) {<NL>        return 0;~key.id <= last && (id2 >= first) {<NL>        return 0;
+cmp_neg_and~if key.id < first || id2 < first {~if key.id < first && id2 < first {
+cmp_neg_idonly~if key.id < first || id2 < first {~if key.id < first {
+base_swap_up~let first = if up { e.lower_first } else { e.first };~let first = if up { e.first } else { e.lower_first };
+base_last_noadj~let last = first.wrapping_add(e.count).wrapping_sub(1);<NL>        if id >= first~let last = first.wrapping_add(e.count);<NL>        if id >= first
+base_id2_noadj~let id2 = id.wrapping_add(count).wrapping_sub(1);<NL>    for idx~let id2 = id.wrapping_add(count);<NL>    for idx
+base_id2_lt~if id >= first && id <= last && (id2 >= first && id2 <= last) {<NL>            return e;~if id >= first && id <= last && (id2 >= first && id2 < last) {<NL>            return e;
+base_skip_id~if id >= first && id <= last && (id2 >= first && id2 <= last) {<NL>            return e;~if (id2 >= first && id2 <= last) {<NL>            return e;
+find_thresh_lt~if extents <= MAX_BASE_EXTENTS {<NL>        unsafe { find_base~if extents < MAX_BASE_EXTENTS {<NL>        unsafe { find_base
+find_key_up_flip~let key = Key { map_up: up, id, count };~let key = Key { map_up: !up, id, count };
+find_base_swap~let base = if up { unsafe { map.reverse() } } else { unsafe { map.forward() } };~let base = if up { unsafe { map.forward() } } else { unsafe { map.reverse() } };
+find_num_off~base as *const c_void, extents as usize, cmp_map_id~base as *const c_void, extents as usize - 1, cmp_map_id
+down_swap~unsafe { id.wrapping_sub((*e).first).wrapping_add((*e).lower_first) }~unsafe { id.wrapping_sub((*e).lower_first).wrapping_add((*e).first) }
+up_swap~unsafe { id.wrapping_sub((*e).lower_first).wrapping_add((*e).first) }~unsafe { id.wrapping_sub((*e).first).wrapping_add((*e).lower_first) }
+down_miss_zero~if e.is_null() {<NL>        u32::MAX<NL>    } else {<NL>        unsafe { id.wrapping_sub((*e).first)~if e.is_null() {<NL>        0<NL>    } else {<NL>        unsafe { id.wrapping_sub((*e).first)
+up_miss_zero~if e.is_null() {<NL>        u32::MAX<NL>    } else {<NL>        unsafe { id.wrapping_sub((*e).lower_first)~if e.is_null() {<NL>        0<NL>    } else {<NL>        unsafe { id.wrapping_sub((*e).lower_first)
+down_count2~map_id_range_down(&*map, id, 1)~map_id_range_down(&*map, id, 2)
+up_count2~rust_map_id_range_up(map, id, 1)~rust_map_id_range_up(map, id, 2)
+ov_upper_last~let upper_last = upper_first.wrapping_add(extent.count).wrapping_sub(1);~let upper_last = upper_first.wrapping_add(extent.count);
+ov_lower_last~let lower_last = lower_first.wrapping_add(extent.count).wrapping_sub(1);~let lower_last = lower_first.wrapping_add(extent.count);
+ov_prev_upper_last~let prev_upper_last = prev_upper_first.wrapping_add(prev.count).wrapping_sub(1);~let prev_upper_last = prev_upper_first.wrapping_add(prev.count);
+ov_prev_lower_last~let prev_lower_last = prev_lower_first.wrapping_add(prev.count).wrapping_sub(1);~let prev_lower_last = prev_lower_first.wrapping_add(prev.count);
+ov_upper_lt~if prev_upper_first <= upper_last && prev_upper_last >= upper_first {~if prev_upper_first < upper_last && prev_upper_last >= upper_first {
+ov_upper_gt~if prev_upper_first <= upper_last && prev_upper_last >= upper_first {~if prev_upper_first <= upper_last && prev_upper_last > upper_first {
+ov_lower_lt~if prev_lower_first <= lower_last && prev_lower_last >= lower_first {~if prev_lower_first < lower_last && prev_lower_last >= lower_first {
+ov_lower_gt~if prev_lower_first <= lower_last && prev_lower_last >= lower_first {~if prev_lower_first <= lower_last && prev_lower_last > lower_first {
+ov_no_lower~if prev_lower_first <= lower_last && prev_lower_last >= lower_first {~if false {
+ov_prev_thresh~new_map.nr_extents <= MAX_BASE_EXTENTS { &new_map.extent[idx] }~new_map.nr_extents < MAX_BASE_EXTENTS { &new_map.extent[idx] }
+ins_ge~if map.nr_extents == MAX_BASE_EXTENTS {~if map.nr_extents >= MAX_BASE_EXTENTS {
+ins_copy_short~copy_nonoverlapping(map.extent.as_ptr(), forward, map.nr_extents as usize)~copy_nonoverlapping(map.extent.as_ptr(), forward, 4)
+ins_rev_keep~map.set_reverse(null_mut());~
+ins_dest_le~if map.nr_extents < MAX_BASE_EXTENTS { unsafe { map.extent.as_mut_ptr()~if map.nr_extents <= MAX_BASE_EXTENTS { unsafe { map.extent.as_mut_ptr()
+ins_nocount~map.nr_extents += 1;<NL>    0~map.nr_extents += 0;<NL>    0
+ins_nonull~if forward.is_null() {<NL>            return -ENOMEM;~if false {<NL>            return -ENOMEM;
+cmpf_flip~if e1.first < e2.first {<NL>        return -1;~if e1.first > e2.first {<NL>        return -1;
+cmpr_flip~if e1.lower_first < e2.lower_first {<NL>        return -1;~if e1.lower_first > e2.lower_first {<NL>        return -1;
+cmpf_use_lower~if e1.first < e2.first {<NL>        return -1;<NL>    }<NL>    if e1.first > e2.first {~if e1.lower_first < e2.lower_first {<NL>        return -1;<NL>    }<NL>    if e1.lower_first > e2.lower_first {
+sort_thresh_lt~if map.nr_extents <= MAX_BASE_EXTENTS {<NL>        return 0;~if map.nr_extents < MAX_BASE_EXTENTS {<NL>        return 0;
+sort_dup_rev~rust_un_dup_extents(map.forward(), n)~rust_un_dup_extents(map.reverse(), n)
+sort_dup_nocheck~if rev.is_null() {<NL>        return -ENOMEM;~if false {<NL>        return -ENOMEM;
+sort_fwd_cmp~Some(cmp_extents_forward), core::ptr::null()) };<NL>    let rev~Some(cmp_extents_reverse), core::ptr::null()) };<NL>    let rev
+sort_rev_cmp~Some(cmp_extents_reverse), core::ptr::null()) };<NL>    0~Some(cmp_extents_forward), core::ptr::null()) };<NL>    0
+sort_enomem_sign~if rev.is_null() {<NL>        return -ENOMEM;~if rev.is_null() {<NL>        return ENOMEM;
+parse_nl_space~strchr(pos, b'\n' as c_int)~strchr(pos, b' ' as c_int)
+parse_nl_last~if unsafe { *next_line } == 0 {~if unsafe { *next_line } != 0 {
+parse_no_nl_clear~unsafe { *next_line = 0 };<NL>~<NL>
+parse_sp1~let first = unsafe { simple_strtoul(pos, &mut pos, 10) } as u32;<NL>        if !unsafe { rust_un_isspace(*pos) } {~let first = unsafe { simple_strtoul(pos, &mut pos, 10) } as u32;<NL>        if false {
+parse_sp2~let lower_first = unsafe { simple_strtoul(pos, &mut pos, 10) } as u32;<NL>        if !unsafe { rust_un_isspace(*pos) } {~let lower_first = unsafe { simple_strtoul(pos, &mut pos, 10) } as u32;<NL>        if false {
+parse_sp3~if unsafe { *pos } != 0 && !unsafe { rust_un_isspace(*pos) } {~if false {
+parse_sp3_nonul~if unsafe { *pos } != 0 && !unsafe { rust_un_isspace(*pos) } {~if !unsafe { rust_un_isspace(*pos) } {
+parse_trailing~if unsafe { *pos } != 0 {<NL>            return -EINVAL;<NL>        }<NL>        // Verify we have~if false {<NL>            return -EINVAL;<NL>        }<NL>        // Verify we have
+parse_skip1~pos = unsafe { skip_spaces(pos) };<NL>        let first~let first
+parse_max_first_only~if first == u32::MAX || lower_first == u32::MAX {~if first == u32::MAX {
+parse_max_lower_only~if first == u32::MAX || lower_first == u32::MAX {~if lower_first == u32::MAX {
+parse_wrap_first~if first.wrapping_add(count) <= first {~if first.wrapping_add(count) < first {
+parse_wrap_lower~if lower_first.wrapping_add(count) <= lower_first {~if lower_first.wrapping_add(count) < lower_first {
+parse_limit_off~if new_map.nr_extents + 1 == MAX_EXTENTS && !next_line.is_null() {~if new_map.nr_extents + 1 == MAX_EXTENTS + 1 && !next_line.is_null() {
+parse_limit_nonl~if new_map.nr_extents + 1 == MAX_EXTENTS && !next_line.is_null() {~if new_map.nr_extents + 1 == MAX_EXTENTS {
+parse_insert_err~if r < 0 {<NL>            return r;~if r < 0 {<NL>            return -EINVAL;
+parse_one_line~pos = next_line;<NL>    }~pos = null_mut();<NL>    }
+parse_empty_ok~if new_map.nr_extents == 0 {<NL>        return -EINVAL;~if false {<NL>        return -EINVAL;
+parse_trunc_sat~let first = unsafe { simple_strtoul(pos, &mut pos, 10) } as u32;~let first = unsafe { simple_strtoul(pos, &mut pos, 10) }.min(0xffff_ffff) as u32;
+errno_einval~const EINVAL: c_int = 22;~const EINVAL: c_int = 21;
+errno_enomem~const ENOMEM: c_int = 12;~const ENOMEM: c_int = 11;
+errno_eperm~const EPERM: c_int = 1;~const EPERM: c_int = 2;
+remap_errno~if lower_first == u32::MAX {<NL>            return -EPERM;~if lower_first == u32::MAX {<NL>            return -EINVAL;
+remap_no_fail~if lower_first == u32::MAX {<NL>            return -EPERM;~if false {<NL>            return -EPERM;
+remap_thresh~let e = if new_map.nr_extents <= MAX_BASE_EXTENTS { unsafe { new_map.extent~let e = if new_map.nr_extents < MAX_BASE_EXTENTS { unsafe { new_map.extent
+remap_noassign~unsafe { (*e).lower_first = lower_first };~unsafe { (*e).lower_first = (*e).lower_first };
+remap_count1~map_id_range_down(&*parent_map, (*e).lower_first, (*e).count)~map_id_range_down(&*parent_map, (*e).lower_first, 1)
+remap_first~map_id_range_down(&*parent_map, (*e).lower_first, (*e).count)~map_id_range_down(&*parent_map, (*e).first, (*e).count)

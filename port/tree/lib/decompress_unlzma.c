@@ -41,6 +41,52 @@
 #define	MIN(a, b) (((a) < (b)) ? (a) : (b))
 #endif
 
+#ifdef LZMA_BOOT_RUST
+/*
+ * RUSTY-LINUX, the only edit in this arm: LZMA_BOOT_RUST (set by
+ * arch/x86/boot/compressed/Makefile when CONFIG_RUST) replaces the whole C
+ * engine below -- read_int() through unlzma() -- with lib/decompress_unlzma_rs.rs
+ * built for the stub and linked in. That file's unlzma() is the same function
+ * the running kernel uses. Only what must be the stub's own stays here: the
+ * boot malloc, reached through the four symbols the Rust calls, and
+ * __decompress() at the bottom.
+ */
+int unlzma(unsigned char *buf, long in_len,
+	   long (*fill)(void*, unsigned long),
+	   long (*flush)(void*, unsigned long),
+	   unsigned char *output,
+	   long *posp,
+	   void(*error)(char *x));
+
+void *decompress_unlzma_alloc(unsigned long size);
+void *decompress_unlzma_alloc(unsigned long size)
+{
+	return malloc(size);
+}
+
+void *decompress_unlzma_large_alloc(unsigned long size);
+void *decompress_unlzma_large_alloc(unsigned long size)
+{
+	return large_malloc(size);
+}
+
+/* kfree/vfree are real functions to the Rust; free()/large_free() are the
+ * stub's. Parenthesised so a macro of the same name cannot expand. */
+void (kfree)(const void *objp);
+void (kfree)(const void *objp)
+{
+	if (objp != NULL)
+		free((void *)objp);
+}
+
+void (vfree)(const void *addr);
+void (vfree)(const void *addr)
+{
+	if (addr != NULL)
+		large_free((void *)addr);
+}
+#else /* !LZMA_BOOT_RUST: the original C engine */
+
 static long long INIT read_int(unsigned char *ptr, int size)
 {
 	int i;
@@ -667,6 +713,8 @@ exit_1:
 exit_0:
 	return ret;
 }
+
+#endif /* LZMA_BOOT_RUST */
 
 #ifdef PREBOOT
 STATIC int INIT __decompress(unsigned char *buf, long in_len,

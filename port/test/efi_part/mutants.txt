@@ -1,0 +1,47 @@
+sig~const MSDOS_MBR_SIGNATURE: u16 = 0xaa55;~const MSDOS_MBR_SIGNATURE: u16 = 0xaa56;
+pm_os~if *part.add(R_OS_TYPE) != EFI_PMBR_OSTYPE_EFI_GPT {~if *part.add(R_OS_TYPE) == EFI_PMBR_OSTYPE_EFI_GPT {
+pm_lba~if rd32(part, R_STARTING_LBA) != GPT_PRIMARY_PARTITION_TABLE_LBA {~if rd32(part, R_STARTING_LBA) > GPT_PRIMARY_PARTITION_TABLE_LBA {
+pm_null~if mbr.is_null() || rd16(mbr, MBR_SIGNATURE) != MSDOS_MBR_SIGNATURE {~if rd16(mbr, MBR_SIGNATURE) != MSDOS_MBR_SIGNATURE {
+pm_sig~if mbr.is_null() || rd16(mbr, MBR_SIGNATURE) != MSDOS_MBR_SIGNATURE {~if mbr.is_null() {
+pm_loop~for i in 0..4 {<NL>            ret = pmbr_part_valid~for i in 0..3 {<NL>            ret = pmbr_part_valid
+pm_found~if !found {<NL>            return ret;~if found {<NL>            return ret;
+pm_hyb~if os_type != EFI_PMBR_OSTYPE_EFI_GPT && os_type != 0x00 {~if os_type != EFI_PMBR_OSTYPE_EFI_GPT {
+pm_hyb2~if os_type != EFI_PMBR_OSTYPE_EFI_GPT && os_type != 0x00 {~if os_type != 0x00 {
+pm_rec~mbr.add(MBR_PARTITION_RECORD + i * MBR_RECORD_SIZE + R_OS_TYPE)~mbr.add(MBR_PARTITION_RECORD + i * MBR_RECORD_SIZE + R_OS_TYPE + 1)
+hd_sig~if rd64(gpt, H_SIGNATURE) != GPT_HEADER_SIGNATURE {~if rd64(gpt, H_SIGNATURE) == 0 {
+hd_big~if rd32(gpt, H_HEADER_SIZE) > ssz {~if rd32(gpt, H_HEADER_SIZE) >= ssz {
+hd_small~if rd32(gpt, H_HEADER_SIZE) < GPT_HEADER_SIZE {~if rd32(gpt, H_HEADER_SIZE) <= GPT_HEADER_SIZE {
+hd_crc0~(gpt.add(H_HEADER_CRC32) as *mut u32).write_unaligned(0);~
+hd_crc_len~let crc = rust_efi_crc32(gpt as *const c_void, rd32(gpt, H_HEADER_SIZE));~let crc = rust_efi_crc32(gpt as *const c_void, GPT_HEADER_SIZE);
+hd_crc_cmp~if crc != origcrc {<NL>            return 4;~if crc == origcrc {<NL>            return 4;
+hd_restore~(gpt.add(H_HEADER_CRC32) as *mut u32).write_unaligned(origcrc.to_le());~
+hd_my~if rd64(gpt, H_MY_LBA) != lba {~if rd64(gpt, H_MY_LBA) > lba {
+hd_first~if rd64(gpt, H_FIRST_USABLE_LBA) > lastlba {~if rd64(gpt, H_FIRST_USABLE_LBA) >= lastlba {
+hd_last~if rd64(gpt, H_LAST_USABLE_LBA) > lastlba {~if rd64(gpt, H_LAST_USABLE_LBA) >= lastlba {
+hd_order~if rd64(gpt, H_LAST_USABLE_LBA) < rd64(gpt, H_FIRST_USABLE_LBA) {~if rd64(gpt, H_LAST_USABLE_LBA) <= rd64(gpt, H_FIRST_USABLE_LBA) {
+hd_entry~if rd32(gpt, H_ENTRY_SIZE) != GPT_ENTRY_SIZE {~if rd32(gpt, H_ENTRY_SIZE) < GPT_ENTRY_SIZE {
+pte_null~if null_guid || rd64(pte, E_STARTING_LBA) > lastlba || rd64(pte, E_ENDING_LBA) > lastlba {~if rd64(pte, E_STARTING_LBA) > lastlba || rd64(pte, E_ENDING_LBA) > lastlba {
+pte_guid~if *pte.add(E_TYPE_GUID + i) != 0 {<NL>                null_guid = false;~if i == 0 && *pte.add(E_TYPE_GUID + i) != 0 {<NL>                null_guid = false;
+pte_start~rd64(pte, E_STARTING_LBA) > lastlba~rd64(pte, E_STARTING_LBA) >= lastlba
+pte_end~rd64(pte, E_ENDING_LBA) > lastlba~rd64(pte, E_ENDING_LBA) >= lastlba
+pte_ret~        1<NL>    }<NL>}<NL><NL>/// `compare_gpts()`~        0<NL>    }<NL>}<NL><NL>/// `compare_gpts()`
+cg_null~if pgpt.is_null() || agpt.is_null() {~if pgpt.is_null() && agpt.is_null() {
+cg_a~if rd64(pgpt, H_MY_LBA) != rd64(agpt, H_ALTERNATE_LBA) {~if rd64(pgpt, H_MY_LBA) > rd64(agpt, H_ALTERNATE_LBA) {
+cg_b~if rd64(pgpt, H_ALTERNATE_LBA) != rd64(agpt, H_MY_LBA) {~if rd64(pgpt, H_ALTERNATE_LBA) < rd64(agpt, H_MY_LBA) {
+cg_c~if rd64(pgpt, H_FIRST_USABLE_LBA) != rd64(agpt, H_FIRST_USABLE_LBA) {~if rd64(pgpt, H_FIRST_USABLE_LBA) > rd64(agpt, H_FIRST_USABLE_LBA) {
+cg_d~if rd64(pgpt, H_LAST_USABLE_LBA) != rd64(agpt, H_LAST_USABLE_LBA) {~if rd64(pgpt, H_LAST_USABLE_LBA) < rd64(agpt, H_LAST_USABLE_LBA) {
+cg_guid~core::slice::from_raw_parts(pgpt.add(H_DISK_GUID), 16) != core::slice::from_raw_parts(agpt.add(H_DISK_GUID), 16)~core::slice::from_raw_parts(pgpt.add(H_DISK_GUID), 15) != core::slice::from_raw_parts(agpt.add(H_DISK_GUID), 15)
+cg_num~if rd32(pgpt, H_NUM_ENTRIES) != rd32(agpt, H_NUM_ENTRIES) {~if rd32(pgpt, H_NUM_ENTRIES) > rd32(agpt, H_NUM_ENTRIES) {
+cg_size~if rd32(pgpt, H_ENTRY_SIZE) != rd32(agpt, H_ENTRY_SIZE) {~if rd32(pgpt, H_ENTRY_SIZE) < rd32(agpt, H_ENTRY_SIZE) {
+cg_crc~if rd32(pgpt, H_ENTRY_ARRAY_CRC32) != rd32(agpt, H_ENTRY_ARRAY_CRC32) {~if rd32(pgpt, H_ENTRY_ARRAY_CRC32) > rd32(agpt, H_ENTRY_ARRAY_CRC32) {
+cg_p_end~if rd64(pgpt, H_ALTERNATE_LBA) != lastlba {~if rd64(pgpt, H_ALTERNATE_LBA) > lastlba {
+cg_a_end~if rd64(agpt, H_MY_LBA) != lastlba {~if rd64(agpt, H_MY_LBA) < lastlba {
+cg_parted~if error_found != 0 {<NL>            rust_efi_warn(10, 0, 0);~if error_found > 1 {<NL>            rust_efi_warn(10, 0, 0);
+cg_arg~rust_efi_warn(2, rd64(pgpt, H_FIRST_USABLE_LBA), rd64(agpt, H_FIRST_USABLE_LBA));~rust_efi_warn(2, rd64(agpt, H_FIRST_USABLE_LBA), rd64(pgpt, H_FIRST_USABLE_LBA));
+cg_msg~rust_efi_warn(7, rd32(pgpt, H_ENTRY_ARRAY_CRC32) as u64, rd32(agpt, H_ENTRY_ARRAY_CRC32) as u64);~rust_efi_warn(6, rd32(pgpt, H_ENTRY_ARRAY_CRC32) as u64, rd32(agpt, H_ENTRY_ARRAY_CRC32) as u64);
+u16_nul~*out.add(size as usize) = 0;~
+u16_mask~let mut c = (u16::from_le(inp.add(i).read_unaligned()) & 0x7f) as u8;~let mut c = (u16::from_le(inp.add(i).read_unaligned()) & 0xff) as u8;
+u16_print~if c != 0 && !(0x20..0x7f).contains(&c) {~if !(0x20..0x7f).contains(&c) {
+u16_range~if c != 0 && !(0x20..0x7f).contains(&c) {~if c != 0 && !(0x20..=0x7f).contains(&c) {
+u16_range2~if c != 0 && !(0x20..0x7f).contains(&c) {~if c != 0 && !(0x21..0x7f).contains(&c) {
+u16_bang~c = b'!';~c = b'?';

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# candidates.sh -- compute the port candidate set from GOALS.md §8's rule.
+# candidates.sh -- compute the port candidate set from notes/GOALS.md §8's rule.
 #
 # The rule: everything in lib/ that is a SELF-CONTAINED ALGORITHM OVER BUFFERS,
 # at any depth. Excludes code reaching into sched/mm/fs/device/per-CPU state,
@@ -16,7 +16,7 @@ LIB=/home/adam/Rusty-Linux/src/linux/lib
 cd "$LIB" || exit 1
 
 # Coupling markers. A file mentioning any of these is reaching outside a buffer.
-COUPLED='task_struct|current->|\bsched_|\bcpu_online|get_cpu\(|put_cpu\(|\bper_cpu|\bDEFINE_PER_CPU|\bkmalloc|\bkfree|\bvmalloc|\balloc_pages|\bstruct page\b|\bfile_operations|\bplatform_device|\bstruct device\b|\bdebugfs_|\bproc_create|\bsysfs_|\bmodule_init|\brequest_irq|\bmutex_lock|\bspin_lock|\bwait_event|\bschedule\(\)'
+COUPLED='task_struct|current->|\bsched_|\bcpu_online|get_cpu\(|put_cpu\(|\bper_cpu|\bDEFINE_PER_CPU|\bkmalloc|\bkfree|\bvmalloc|\bmempool_|\balloc_pages|\bstruct page\b|\bfile_operations|\bplatform_device|\bstruct device\b|\bdebugfs_|\bproc_create|\bsysfs_|\bmodule_init|\brequest_irq|\bmutex_lock|\bspin_lock|\bwait_event|\bschedule\(\)'
 
 # Test modules, benchmarks, fault injection and the kunit harness itself.
 is_test() {
@@ -37,7 +37,7 @@ case "${1:---count}" in
     --list)     printf '%s\n' "${inc[@]}" ;;
     --excluded) printf '%s\n' "${exc[@]}" ;;
     *)
-        echo "candidate set, per GOALS.md §8, computed $(date +%Y-%m-%d)"
+        echo "candidate set, per notes/GOALS.md §8, computed $(date +%Y-%m-%d)"
         echo "  tree            $(readlink -f "$LIB")"
         echo "  all lib/*.c     $(find . -name '*.c' | wc -l)  (recursive)"
         echo "  candidates      ${#inc[@]}"

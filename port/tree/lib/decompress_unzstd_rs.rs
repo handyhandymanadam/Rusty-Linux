@@ -482,3 +482,23 @@ pub unsafe extern "C" fn unzstd(
 ) -> c_int {
     unsafe { __unzstd(buf, len, fill, flush, out_buf, 0, pos, error) }
 }
+
+/// The pre-boot entry, `__decompress()`'s call into the driver
+/// (`lib/decompress_unzstd.c`, `UNZSTD_PREBOOT` arm): the same `__unzstd()`
+/// but with the caller's real `out_len` (`unzstd()` always passes 0). Built
+/// only for the x86 boot stub (`--cfg=boot_driver`, arch/x86/boot/compressed/
+/// Makefile), so the running kernel's object is unchanged.
+#[cfg(boot_driver)]
+#[no_mangle]
+pub unsafe extern "C" fn unzstd_boot(
+    buf: *mut u8,
+    len: c_long,
+    fill: Option<FillFn>,
+    flush: Option<FlushFn>,
+    out_buf: *mut u8,
+    out_len: c_long,
+    pos: *mut c_long,
+    error: Option<ErrorFn>,
+) -> c_int {
+    unsafe { __unzstd(buf, len, fill, flush, out_buf, out_len, pos, error) }
+}

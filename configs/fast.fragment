@@ -1,4 +1,4 @@
-# config-fast -- the ITERATION instrument (SCOPE.md §3).
+# config-fast -- the ITERATION instrument (notes/SCOPE.md §3).
 # Base: allnoconfig. Every line below is something a boot, a module load, or a
 # ported lib/ function actually needs. Nothing is here "in case".
 #
@@ -40,9 +40,9 @@ CONFIG_SHMEM=y
 CONFIG_BLK_DEV_INITRD=y
 CONFIG_RD_GZIP=y
 
-# --- Criterion 4 is unmeasurable without these (SCOPE.md §3), and the
+# --- Criterion 4 is unmeasurable without these (notes/SCOPE.md §3), and the
 # --- MODVERSIONS/GENDWARFKSYMS pair is what keeps CONFIG_RUST from being
-# --- silently dropped (PRIOR-ART.md §2).
+# --- silently dropped (notes/PRIOR-ART.md §2).
 CONFIG_MODULES=y
 CONFIG_MODULE_UNLOAD=y
 CONFIG_MODVERSIONS=y
@@ -64,7 +64,7 @@ CONFIG_SAMPLE_RUST_PRINT=y
 
 # --- lib/glob: the first ported module. GLOB has no prompt upstream (it is
 # --- select-only), so port/tree/lib/Kconfig uncomments upstream's own commented
-# --- prompt; see the note there. GLOB_SELFTEST is the SCOPE.md §4 class-A proof
+# --- prompt; see the note there. GLOB_SELFTEST is the notes/SCOPE.md §4 class-A proof
 # --- caller and is not ours -- it ships in lib/globtest.c with a 63-case
 # --- corpus, and it is the reason this port needs no proof caller written for
 # --- it. It prints "glob: N self-tests passed, M failed" at boot.
@@ -106,7 +106,7 @@ CONFIG_UCS2_STRING=y
 # --- rowsize x groupsize x ascii combination plus every buffer length from 0
 # --- to the full line, driven through hex_dump_to_buffer() -- which is
 # --- precisely the fiddly part of that port and far better than vectors we
-# --- would have written. Same reasoning as CONFIG_GLOB_SELFTEST; SCOPE.md §4
+# --- would have written. Same reasoning as CONFIG_GLOB_SELFTEST; notes/SCOPE.md §4
 # --- asks for the cheapest thing that satisfies criterion 5, and here the
 # --- cheapest thing already existed.
 # RUNTIME_TESTING_MENU is a menuconfig gate, `default y`, and allnoconfig
@@ -114,6 +114,16 @@ CONFIG_UCS2_STRING=y
 # it silently -- which rig/config.sh caught by reading the built .config back.
 CONFIG_RUNTIME_TESTING_MENU=y
 CONFIG_TEST_HEXDUMP=y
+
+# --- lib/xarray: upstream's own test (lib/test_xarray.c). It caught six real
+# --- lost-WARN/behaviour bugs in the xarray port (notes/STATUS.md, 2026-09-06), so the
+# --- ratchet (notes/GOALS.md §6) is satisfied: a defect earned it. Built in (=y), so
+# --- it runs at boot and prints "XArray: N of N tests passed".
+CONFIG_TEST_XARRAY=y
+
+# --- lib/maple_tree: upstream's own test (lib/test_maple_tree.c), the oracle the maple_tree port (2026-10-24) is boot-checked against.
+# --- Built in (=y), runs at boot and prints "maple_tree: N of N tests passed"; the mm VMA tree is also exercised by every boot.
+CONFIG_TEST_MAPLE_TREE=y
 
 # --- KUNIT, and it is here for a reason that outlives any one port.
 # --- lib/tests/ carries upstream's own corpora for siphash, cmdline, seq_buf,
@@ -141,3 +151,19 @@ CONFIG_CRYPTO_LIB_BLAKE2S_KUNIT_TEST=y
 # --- checked against memchr_inv() as the independent oracle -- exactly the
 # --- corpus this port would otherwise have to hand-write, and better.
 CONFIG_USERCOPY_KUNIT_TEST=y
+
+# --- lib/bitmap: upstream's own test (lib/test_bitmap.c), the oracle the bitmap port (2026-10-24) is boot-checked against.
+# --- Same reasoning as TEST_XARRAY/TEST_HEXDUMP: the cheapest thing that satisfies criterion 5 already existed. Built in (=y),
+# --- runs at boot and prints "test_bitmap: all N tests passed".
+CONFIG_TEST_BITMAP=y
+
+# --- lib/random32: upstream's own selftest (inside lib/random32.c, kept in the C glue): 4 boundary seeds + 100 seed/iteration vectors from the
+# --- L'Ecuyer reference; runs at boot and prints "prandom: 100 self tests passed". The cheapest check for the Tausworthe port.
+CONFIG_RANDOM32_SELFTEST=y
+
+# --- lib/string: upstream's own KUnit corpus (lib/tests/string_kunit.c: strcpy/strncpy/strcat/strncat/strchr/strnchr/strlen/strnlen/
+# --- strstr/strspn/... against hand-written expectations), the oracle for the Rust string port (2026-10-24).
+CONFIG_STRING_KUNIT_TEST=y
+
+# lib/bootconfig.c is ported (bootconfig_rs.rs): the boot rig appends a boot config to the initramfs (rig/boot.sh) and checks /proc/bootconfig and /proc/cmdline.
+CONFIG_BOOT_CONFIG=y

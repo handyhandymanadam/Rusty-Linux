@@ -142,8 +142,8 @@ pub extern "C" fn hex_to_bin(ch: c_uchar) -> c_int {
     let cu = ch & 0xdf;
 
     // (ch - '9' - 1) & ('0' - 1 - ch), as unsigned, >> 8.
-    let dmask = (((ch - 0x39 - 1) & (0x30 - 1 - ch)) as u32 >> 8) as c_int;
-    let umask = (((cu - 0x46 - 1) & (0x41 - 1 - cu)) as u32 >> 8) as c_int;
+    let dmask = ((ch.wrapping_sub(0x39).wrapping_sub(1) & 0x30i32.wrapping_sub(1).wrapping_sub(ch)) as u32 >> 8) as c_int;
+    let umask = ((cu.wrapping_sub(0x46).wrapping_sub(1) & 0x41i32.wrapping_sub(1).wrapping_sub(cu)) as u32 >> 8) as c_int;
 
     (-1i32)
         .wrapping_add((ch - 0x30 + 1) & dmask)
@@ -272,7 +272,7 @@ pub unsafe extern "C" fn hex_dump_to_buffer(
     // `is_power_of_2()` is `n != 0 && (n & (n - 1)) == 0` on an UNSIGNED
     // value; groupsize is a signed int, so a negative one is not a power of
     // two and falls back to 1, exactly as in the C.
-    if !(groupsize > 0 && (groupsize & (groupsize - 1)) == 0) || groupsize > 8 {
+    if !(groupsize > 0 && (groupsize & (groupsize.wrapping_sub(1))) == 0) || groupsize > 8 {
         groupsize = 1;
     }
     // No mixed size output.
@@ -281,14 +281,14 @@ pub unsafe extern "C" fn hex_dump_to_buffer(
     }
 
     let ngroups = (len / groupsize as usize) as c_int;
-    let ascii_column = rowsize * 2 + rowsize / groupsize + 1;
+    let ascii_column = rowsize.wrapping_mul(2).wrapping_add(rowsize / groupsize).wrapping_add(1);
 
     // The value both overflow paths return.
     let overflow1 = || -> c_int {
         if ascii {
-            ascii_column + len as c_int
+            ascii_column.wrapping_add(len as c_int)
         } else {
-            (groupsize * 2 + 1) * ngroups - 1
+            (groupsize.wrapping_mul(2).wrapping_add(1)).wrapping_mul(ngroups).wrapping_sub(1)
         }
     };
 
@@ -311,9 +311,9 @@ pub unsafe extern "C" fn hex_dump_to_buffer(
                 // maintained by the check below, so the destination is in
                 // bounds for `linebuflen - lx`.
                 let ret = unsafe {
-                    let at = ptr.add(j * groupsize as usize);
+                    let at = ptr.add(j.wrapping_mul(groupsize as usize));
                     let dst = linebuf.add(lx);
-                    let cap = linebuflen - lx;
+                    let cap = linebuflen.wrapping_sub(lx);
                     match groupsize {
                         8 => snprintf(dst, cap, c"%s%16.16llx".as_ptr(), sep,
                                       (at as *const u64).read_unaligned()),
@@ -323,46 +323,46 @@ pub unsafe extern "C" fn hex_dump_to_buffer(
                                       (at as *const u16).read_unaligned() as u32),
                     }
                 };
-                if ret as usize >= linebuflen - lx {
+                if ret as usize >= linebuflen.wrapping_sub(lx) {
                     return overflow1();
                 }
-                lx += ret as usize;
+                lx = lx.wrapping_add(ret as usize);
             }
         } else {
             for j in 0..len {
                 // SAFETY: `j < len` and `lx + 2 <= linebuflen` is checked
                 // before every write, so both pointers are in bounds.
                 unsafe {
-                    if linebuflen < lx + 2 {
+                    if linebuflen < lx.wrapping_add(2) {
                         return overflow2(linebuf, lx, ascii, ascii_column, len,
                                          groupsize, ngroups);
                     }
                     let ch = *ptr.add(j);
                     *linebuf.add(lx) = hex_asc[((ch & 0xf0) >> 4) as usize];
-                    lx += 1;
-                    if linebuflen < lx + 2 {
+                    lx = lx.wrapping_add(1);
+                    if linebuflen < lx.wrapping_add(2) {
                         return overflow2(linebuf, lx, ascii, ascii_column, len,
                                          groupsize, ngroups);
                     }
                     *linebuf.add(lx) = hex_asc[(ch & 0x0f) as usize];
-                    lx += 1;
-                    if linebuflen < lx + 2 {
+                    lx = lx.wrapping_add(1);
+                    if linebuflen < lx.wrapping_add(2) {
                         return overflow2(linebuf, lx, ascii, ascii_column, len,
                                          groupsize, ngroups);
                     }
                     *linebuf.add(lx) = b' ' as c_char;
-                    lx += 1;
+                    lx = lx.wrapping_add(1);
                 }
             }
             // Drop the trailing space. `if (j)` in the C, and `j == len` there.
             if len != 0 {
-                lx -= 1;
+                lx = lx.wrapping_sub(1);
             }
         }
 
         if ascii {
             while (lx as c_int) < ascii_column {
-                if linebuflen < lx + 2 {
+                if linebuflen < lx.wrapping_add(2) {
                     // SAFETY: nothing has been written past `lx`, and
                     // overflow2 writes exactly one NUL there.
                     return unsafe {
@@ -372,10 +372,10 @@ pub unsafe extern "C" fn hex_dump_to_buffer(
                 }
                 // SAFETY: `lx + 2 <= linebuflen`, so `lx` is in bounds.
                 unsafe { *linebuf.add(lx) = b' ' as c_char };
-                lx += 1;
+                lx = lx.wrapping_add(1);
             }
             for j in 0..len {
-                if linebuflen < lx + 2 {
+                if linebuflen < lx.wrapping_add(2) {
                     // SAFETY: as above.
                     return unsafe {
                         overflow2(linebuf, lx, ascii, ascii_column, len,
@@ -391,7 +391,7 @@ pub unsafe extern "C" fn hex_dump_to_buffer(
                         b'.' as c_char
                     };
                 }
-                lx += 1;
+                lx = lx.wrapping_add(1);
             }
         }
     }
@@ -421,9 +421,9 @@ unsafe fn overflow2(
     // SAFETY: the caller has checked `linebuflen >= lx + 2`.
     unsafe { *linebuf.add(lx) = 0 };
     if ascii {
-        ascii_column + len as c_int
+        ascii_column.wrapping_add(len as c_int)
     } else {
-        (groupsize * 2 + 1) * ngroups - 1
+        (groupsize.wrapping_mul(2).wrapping_add(1)).wrapping_mul(ngroups).wrapping_sub(1)
     }
 }
 
@@ -465,7 +465,7 @@ pub unsafe extern "C" fn print_hex_dump(
 
     while i < len {
         let linelen = core::cmp::min(remaining, rowsize as isize) as usize;
-        remaining -= rowsize as isize;
+        remaining = remaining.wrapping_sub(rowsize as isize);
 
         // SAFETY: `i < len`, and `linelen` is clamped to what remains, so the
         // read is inside the caller's buffer. `linebuf` is ours and its
@@ -494,6 +494,6 @@ pub unsafe extern "C" fn print_hex_dump(
             }
         }
 
-        i += rowsize as usize;
+        i = i.wrapping_add(rowsize as usize);
     }
 }

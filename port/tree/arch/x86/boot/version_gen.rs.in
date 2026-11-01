@@ -1,0 +1,8 @@
+/* Preprocessed by the Makefile (CC -E -P; only the `pub const` lines are kept) into version_gen.rs, which version_rs.rs
+ * include!s. The string is version.c's expression, token for token, from the same generated headers
+ * (utsrelease.h, utsversion.h, compile.h): UTS_RELEASE " (" LINUX_COMPILE_BY "@" LINUX_COMPILE_HOST ") " UTS_VERSION. */
+#include <generated/utsversion.h>
+#include <generated/utsrelease.h>
+#include <generated/compile.h>
+
+pub const RM_KERNEL_VERSION: &str = concat!(UTS_RELEASE, " (", LINUX_COMPILE_BY, "@", LINUX_COMPILE_HOST, ") ", UTS_VERSION);

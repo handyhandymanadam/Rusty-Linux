@@ -3,7 +3,7 @@
 
 The corpus is the kernel's, not ours. Copying it by hand went wrong the first
 time it was tried here -- 63 cases transcribed against the tree's 64 -- which
-is the PRIOR-ART.md §2 stale-input-set shape in miniature. Deriving it every
+is the notes/PRIOR-ART.md §2 stale-input-set shape in miniature. Deriving it every
 run means it cannot drift.
 """
 import re

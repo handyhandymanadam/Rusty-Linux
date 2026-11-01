@@ -268,8 +268,8 @@ int main(int argc, char **argv)
 
 	load_file("port/tree/lib/lzo/lzo1x_decompress_safe_rs.rs");
 	load_file("port/pristine/lib/lzo/lzo1x_compress.c");
-	load_file("STATUS.md");
-	load_file("GOALS.md");
+	load_file("notes/STATUS.md");
+	load_file("notes/GOALS.md");
 	printf("  corpus: %d generators, encoder is the pristine in-tree one\n", NGEN);
 
 	rng_seed(seed);

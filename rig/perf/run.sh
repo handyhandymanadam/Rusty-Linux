@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The shared measuring rig (GOALS.md §4). ONE binary, both arms inside it.
+# The shared measuring rig (notes/GOALS.md §4). ONE binary, both arms inside it.
 #
 #   run.sh              measure the kerf, then take a series
 #   run.sh --kerf-only  measure the kerf and stop

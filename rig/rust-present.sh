@@ -94,11 +94,15 @@ while IFS= read -r rs; do
     [ -n "$syms" ] || { printf '%-52s %5s %6s %s\n' "$rel" 0 "-" \
         "*** OBJECT DEFINES NO GLOBALS"; fail=1; continue; }
 
+    # arch/x86/boot/startup/ objects are `.pi.o` (position independent, every symbol prefixed
+    # `__pi_` by llvm-objcopy; logs/phase-e-pi.md): vmlinux has `__pi_<sym>` and the archive
+    # member is `<name>.pi.o`.
+    pi=""; case "$rel" in arch/x86/boot/startup/*) pi="__pi_";; esac
     missing=""
     count=0
     while IFS= read -r s; do
         count=$((count + 1))
-        grep -qxF "$s" "$vmsyms" || missing="$missing $s"
+        grep -qxF "$pi$s" "$vmsyms" || missing="$missing $s"
     done <<< "$syms"
     n_syms=$((n_syms + count))
 
@@ -111,19 +115,30 @@ while IFS= read -r rs; do
     inar="no"
     d=$(dirname "$obj")
     want=${obj#"$build"/}
+    [ -n "$pi" ] && want="${want%.o}.pi.o"
     while [ "$d" != "$build" ] && [ "$d" != "/" ]; do
       for a in "$d/built-in.a" "$d/lib.a"; do
-        if [ -f "$a" ] && ar t "$a" 2>/dev/null | sed "s|^$build/||" \
-             | grep -qxF "$want"; then
-            inar=$(basename "$a" .a); break
+        # Capture the listing into a variable before grep -q sees it. Piping
+        # straight into `grep -q` lets grep exit (and close its read end) as
+        # soon as it finds a match, which can SIGPIPE `ar`/`sed` before they
+        # finish writing; under `set -o pipefail` that non-zero SIGPIPE
+        # status overrides grep's own success, so a member that IS in the
+        # archive intermittently reports as missing. Command substitution
+        # runs the pipeline to completion first, so there is nothing left to
+        # SIGPIPE.
+        if [ -f "$a" ]; then
+            members=$(ar t "$a" 2>/dev/null | sed "s|^$build/||")
+            if grep -qxF "$want" <<< "$members"; then
+                inar=$(basename "$a" .a); break
+            fi
         fi
       done
       [ "$inar" = no ] || break
       d=$(dirname "$d")
     done
     if [ "$inar" = no ] && [ -f "$build/built-in.a" ]; then
-        ar t "$build/built-in.a" 2>/dev/null | sed "s|^$build/||" \
-            | grep -qxF "$want" && inar="built-in"
+        members=$(ar t "$build/built-in.a" 2>/dev/null | sed "s|^$build/||")
+        grep -qxF "$want" <<< "$members" && inar="built-in"
     fi
 
     if [ -n "$missing" ]; then

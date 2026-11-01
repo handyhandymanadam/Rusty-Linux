@@ -1,0 +1,58 @@
+nents-count~nents = nents.wrapping_add(1);~nents = nents.wrapping_add(2);
+nfl-ge~if total >= len {~if total > len {
+nfl-total~total = total.wrapping_add((*sg).length as u64);~total = total.wrapping_add(1);
+nfl-empty~if len == 0 {<NL>            return 0;~if len == 1 {<NL>            return 0;
+last-walk~while i < nents {<NL>            ret = sg;~while i + 1 < nents {<NL>            ret = sg;
+init-size~rust_sgw_size().wrapping_mul(nents as usize));~rust_sgw_size().wrapping_mul((nents as usize).saturating_sub(1)));
+free-sgsize~sg_size = alloc_size.wrapping_sub(1);<NL>            } else {<NL>                sg_size = alloc_size;<NL>                next~sg_size = alloc_size;<NL>            } else {<NL>                sg_size = alloc_size;<NL>                next
+free-chain-index~sg_at(sgl, curr_max_ents.wrapping_sub(1) as usize)~sg_at(sgl, curr_max_ents as usize)
+free-gt~if alloc_size > curr_max_ents {<NL>                next~if alloc_size >= curr_max_ents {<NL>                next
+free-clear~(*table).sgl = core::ptr::null_mut();<NL>    }~let _ = 0;<NL>    }
+free-first~nents_first_chunk = 0;<NL>            } else {<NL>                free_fn~nents_first_chunk = 1;<NL>            } else {<NL>                free_fn
+alloc-zero~core::ptr::write_bytes(table, 0, 1);~let _ = 0;
+alloc-nents0~if nents == 0 {~if nents == 1 {
+alloc-gt~if alloc_size > curr_max_ents {<NL>                alloc_size = curr_max_ents;~if alloc_size >= curr_max_ents {<NL>                alloc_size = curr_max_ents;
+alloc-fail-adjust~(*table).orig_nents = (*table).orig_nents.wrapping_add(1);~(*table).orig_nents = (*table).orig_nents.wrapping_add(0);
+alloc-chain~rust_sgw_chain(prv, prv_max_ents, sg);~rust_sgw_chain(prv, prv_max_ents.wrapping_add(1), sg);
+alloc-markend~rust_sgw_mark_end(sg_at(sg, sg_size.wrapping_sub(1) as usize));~rust_sgw_mark_end(sg_at(sg, sg_size.wrapping_sub(2) as usize));
+alloc-prvmax~prv_max_ents = curr_max_ents;~prv_max_ents = max_ents;
+getnext-last~if !rust_sgw_is_last(next_sg) || needed_sges == 1 {~if !rust_sgw_is_last(next_sg) || needed_sges == 2 {
+getnext-total~(*table).total_nents.wrapping_add(alloc_size.wrapping_sub(1))~(*table).total_nents.wrapping_add(alloc_size)
+getnext-min~core::cmp::min(needed_sges, rust_sgw_max_single_alloc() as c_ulong)~core::cmp::max(needed_sges, rust_sgw_max_single_alloc() as c_ulong)
+append-align~max_segment &= !((PAGE_SIZE - 1) as c_uint);~max_segment &= !(((PAGE_SIZE - 1) as c_uint) >> 1);
+append-merge-limit~> max_segment as u64 {~>= max_segment as u64 {
+append-chunks~if seg_len >= max_segment || !rust_sgw_pages_mergeable(*pages.add(i as usize)~if seg_len > max_segment || !rust_sgw_pages_mergeable(*pages.add(i as usize)
+append-end~if seg_len >= max_segment || !rust_sgw_pages_mergeable(*pages.add(j as usize)~if seg_len > max_segment || !rust_sgw_pages_mergeable(*pages.add(j as usize)
+append-chunksize~chunk_size = (j.wrapping_sub(cur_page) << PAGE_SHIFT).wrapping_sub(offset);~chunk_size = (j.wrapping_sub(cur_page) << PAGE_SHIFT).wrapping_sub(0);
+append-left~chunks.wrapping_sub(i).wrapping_add(left_pages) as c_ulong~chunks.wrapping_sub(i) as c_ulong
+append-restore~(*(*sgt_append).prv).length = prv_len;~let _ = prv_len;
+append-nents~(*sgt_append).sgt.nents = (*sgt_append).sgt.nents.wrapping_add(added_nents);~(*sgt_append).sgt.nents = (*sgt_append).sgt.nents.wrapping_add(1);
+append-markend~if left_pages == 0 {<NL>            rust_sgw_mark_end(s);~if left_pages == 1 {<NL>            rust_sgw_mark_end(s);
+append-warn-offset~rust_sgw_warn_offset(offset != 0);~rust_sgw_warn_offset(false);
+append-warn-seg~rust_sgw_warn_max_segment(max_segment < PAGE_SIZE as c_uint);~rust_sgw_warn_max_segment(false);
+append-size~size = size.wrapping_sub(chunk_size as c_ulong);~size = size.wrapping_sub(0);
+sgl-psz~let psz = PAGE_SIZE.wrapping_shl(order);~let psz = PAGE_SIZE;
+sgl-overflow~if length > nent.wrapping_shl~if length >= nent.wrapping_shl
+sgl-chain~nalloc += 1;~nalloc += 2;
+sgl-elem~let elem_len = core::cmp::min(length, psz) as u32;~let elem_len = core::cmp::max(length, psz) as u32;
+sgl-free-order~sgl_free_order(sgl, order as c_int);~sgl_free_order(sgl, 0);
+sgl-nentp~*nent_p = nent;~*nent_p = nalloc;
+sgl-free-n~while i < nents {<NL>            if sg.is_null() {~while i <= nents {<NL>            if sg.is_null() {
+iter-start-advance~(*piter).pg_advance = 0;~(*piter).pg_advance = 1;
+iter-next-advance~(*piter).pg_advance = 1;~(*piter).pg_advance = 0;
+iter-count-wide~((sum.wrapping_add((PAGE_SIZE - 1) as c_uint) & !((PAGE_SIZE - 1) as c_uint)) >> PAGE_SHIFT) as c_int~((((sum as u64) + PAGE_SIZE - 1) & !(PAGE_SIZE - 1)) >> PAGE_SHIFT) as c_int
+iter-dma-len~rust_sgw_dma_len((*piter).sg)~(*(*piter).sg).length
+miter-min~core::cmp::min((*miter).remaining as c_ulong, PAGE_SIZE.wrapping_sub((*miter).offset as u64))~core::cmp::max((*miter).remaining as c_ulong, PAGE_SIZE.wrapping_sub((*miter).offset as u64))
+miter-offset~if (*miter).piter.sg_pgoffset != 0 { 0 } else { (*sg).offset }~(*sg).offset
+miter-skip~core::cmp::min(offset, (*miter).remaining as c_long)~core::cmp::min(offset, (*miter).remaining as c_long - 1)
+miter-flags~(*miter).flags = flags;~(*miter).flags = flags & !SG_MITER_LOCAL;
+miter-flush~if (*miter).flags & SG_MITER_TO_SG != 0 {~if (*miter).flags & SG_MITER_FROM_SG != 0 {
+miter-stop-offset~(*miter).offset = (*miter).offset.wrapping_add((*miter).consumed as c_uint);~(*miter).offset = (*miter).offset.wrapping_add(0);
+miter-reset~(*miter).consumed = 0;~let _ = 0;
+miter-warn~rust_sgw_warn_consumed((*miter).consumed > (*miter).length);~rust_sgw_warn_consumed((*miter).consumed >= (*miter).length);
+miter-warn-flags~rust_sgw_warn_miter_flags(flags & (SG_MITER_TO_SG | SG_MITER_FROM_SG) == 0);~rust_sgw_warn_miter_flags(false);
+copy-len~let len = core::cmp::min((*m).length, buflen.wrapping_sub(offset as usize)) as c_uint;~let len = (*m).length as c_uint;
+copy-dir~if to_buffer {<NL>                core~if !to_buffer {<NL>                core
+copy-skip~if !rust_scatterlist_miter_skip(m, skip) {<NL>            return 0;~if !rust_scatterlist_miter_skip(m, skip) {<NL>            return 1;
+zero-flag~let sg_flags = SG_MITER_LOCAL | SG_MITER_TO_SG;~let sg_flags = SG_MITER_LOCAL | SG_MITER_FROM_SG;
+zero-byte~core::ptr::write_bytes((*m).addr.cast::<u8>(), 0, len as usize);~core::ptr::write_bytes((*m).addr.cast::<u8>(), 1, len as usize);

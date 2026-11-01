@@ -1,0 +1,41 @@
+up_hz~<= (hz / 32) as i32~<= (hz / 16) as i32
+up_signed~(now.wrapping_sub(ca.last_time) as i32) <= (hz / 32) as i32~now.wrapping_sub(ca.last_time) <= hz / 32
+up_same~if ca.last_cwnd == cwnd && (now~if ca.last_cwnd != cwnd && (now
+up_lcwnd~ca.last_cwnd = cwnd;~
+up_ltime~ca.last_time = now;~
+up_epoch~if ca.epoch_start == 0 {~if ca.epoch_start != 0 {
+up_epoch_val~ca.epoch_start = now;~ca.epoch_start = 1;
+up_low~if cwnd <= low_window {~if cwnd < low_window {
+up_low_cnt~ca.cnt = cwnd;<NL>        return;~ca.cnt = cwnd + 1;<NL>        return;
+up_low_signed~let low_window = low_window as u32;~let low_window = low_window.max(0) as u32;
+up_dist~let dist = (ca.last_max_cwnd - cwnd) / BICTCP_B;~let dist = (ca.last_max_cwnd - cwnd) / 2;
+up_dist_gt~if dist > max_inc {~if dist >= max_inc {
+up_lin~ca.cnt = cwnd / max_inc;<NL>        } else if dist <= 1 {~ca.cnt = cwnd / (max_inc + 1);<NL>        } else if dist <= 1 {
+up_dist1~} else if dist <= 1 {~} else if dist < 1 {
+up_smooth1~ca.cnt = cwnd.wrapping_mul(smooth) / BICTCP_B;<NL>        } else {~ca.cnt = cwnd.wrapping_mul(smooth) / 2;<NL>        } else {
+up_dist_div~ca.cnt = cwnd / dist;~ca.cnt = cwnd / (dist + 1);
+up_ss~if cwnd < ca.last_max_cwnd.wrapping_add(BICTCP_B) {~if cwnd <= ca.last_max_cwnd.wrapping_add(BICTCP_B) {
+up_ss_cnt~ca.cnt = cwnd.wrapping_mul(smooth) / BICTCP_B;<NL>        } else if cwnd <~ca.cnt = cwnd.wrapping_mul(smooth) / 2;<NL>        } else if cwnd <
+up_lim~max_increment.wrapping_mul((BICTCP_B - 1) as i32)~max_increment.wrapping_mul(BICTCP_B as i32)
+up_mid~ca.cnt = cwnd.wrapping_mul(BICTCP_B - 1) / cwnd.wrapping_sub(ca.last_max_cwnd);~ca.cnt = cwnd.wrapping_mul(BICTCP_B) / cwnd.wrapping_sub(ca.last_max_cwnd);
+up_cap0~if ca.last_max_cwnd == 0 && ca.cnt > 20 {~if ca.last_max_cwnd == 0 && ca.cnt > 21 {
+up_cap_and~if ca.last_max_cwnd == 0 && ca.cnt > 20 {~if ca.cnt > 20 {
+up_cap_val~ca.cnt = 20;~ca.cnt = 21;
+up_shift~ca.cnt = (ca.cnt << ACK_RATIO_SHIFT) / ca.delayed_ack;~ca.cnt = (ca.cnt << 3) / ca.delayed_ack;
+up_shift_noda~ca.cnt = (ca.cnt << ACK_RATIO_SHIFT) / ca.delayed_ack;~ca.cnt = (ca.cnt << ACK_RATIO_SHIFT) / 32;
+up_zero~if ca.cnt == 0 {~if ca.cnt == 1 {
+up_zero_val~ca.cnt = 1;~ca.cnt = 2;
+ss_epoch~ca.epoch_start = 0; // end of epoch~
+ss_fc~if cwnd < ca.last_max_cwnd && fast_convergence != 0 {~if cwnd < ca.last_max_cwnd {
+ss_fc_cmp~if cwnd < ca.last_max_cwnd && fast_convergence != 0 {~if cwnd <= ca.last_max_cwnd && fast_convergence != 0 {
+ss_fc_formula~cwnd.wrapping_mul(BICTCP_BETA_SCALE.wrapping_add(beta)) / (2 * BICTCP_BETA_SCALE)~cwnd.wrapping_mul(BICTCP_BETA_SCALE.wrapping_add(beta)) / BICTCP_BETA_SCALE
+ss_fc_scale~(2 * BICTCP_BETA_SCALE)~(2 * BICTCP_BETA_SCALE + 1)
+ss_lmax~ca.last_max_cwnd = cwnd;<NL>    }~ca.last_max_cwnd = cwnd - 1;<NL>    }
+ss_low~if cwnd <= low_window as u32 {~if cwnd < low_window as u32 {
+ss_half~(cwnd >> 1).max(2)~(cwnd >> 2).max(2)
+ss_half_min~(cwnd >> 1).max(2)~(cwnd >> 1).max(1)
+ss_beta~(cwnd.wrapping_mul(beta) / BICTCP_BETA_SCALE).max(2)~(cwnd.wrapping_mul(beta) / BICTCP_BETA_SCALE).max(1)
+ss_beta_div~(cwnd.wrapping_mul(beta) / BICTCP_BETA_SCALE).max(2)~(cwnd.wrapping_mul(beta) / (BICTCP_BETA_SCALE + 1)).max(2)
+ss_signed~let beta = beta as u32;~let beta = beta.max(0) as u32;
+ak_shift~ca.delayed_ack >> ACK_RATIO_SHIFT~ca.delayed_ack >> 3
+ak_sub~pkts_acked.wrapping_sub(ca.delayed_ack >> ACK_RATIO_SHIFT)~pkts_acked

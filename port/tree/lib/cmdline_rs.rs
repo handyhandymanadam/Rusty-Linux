@@ -175,8 +175,8 @@ unsafe fn get_range(str_: *mut *mut c_char, pint: *mut c_int, n: c_int) -> c_int
             *p = x;
             p = p.add(1);
         }
-        x += 1;
-        n -= 1;
+        x = x.wrapping_add(1);
+        n = n.wrapping_sub(1);
     }
     inc
 }
@@ -217,7 +217,7 @@ pub unsafe extern "C" fn get_options(str_: *const c_char, nints: c_int, ints: *m
             break;
         }
         if res == 3 {
-            let n = if validate { 0 } else { nints - i };
+            let n = if validate { 0 } else { nints.wrapping_sub(i) };
             // SAFETY: as above; `n` is the room actually left.
             let range_nums = unsafe { get_range(&mut s, pint, n) };
             if range_nums < 0 {
@@ -225,15 +225,15 @@ pub unsafe extern "C" fn get_options(str_: *const c_char, nints: c_int, ints: *m
             }
             // One less than the span: the next iteration handles the upper
             // number in the range.
-            i += range_nums - 1;
+            i = i.wrapping_add(range_nums.wrapping_sub(1));
         }
-        i += 1;
+        i = i.wrapping_add(1);
         if res == 1 {
             break;
         }
     }
     // SAFETY: the caller guarantees at least one writable element.
-    unsafe { *ints = i - 1 };
+    unsafe { *ints = i.wrapping_sub(1) };
     s
 }
 
@@ -388,7 +388,7 @@ pub unsafe extern "C" fn next_arg(
         if c == b'"' {
             in_quote = !in_quote;
         }
-        i += 1;
+        i = i.wrapping_add(1);
     }
 
     // SAFETY: the caller guarantees `param` and `val` are writable.
@@ -401,13 +401,13 @@ pub unsafe extern "C" fn next_arg(
         // buffer; the buffer is writable by the caller's contract.
         unsafe {
             *args.add(equals) = 0;
-            *val = args.add(equals + 1);
+            *val = args.add(equals.wrapping_add(1));
 
             // Don't include quotes in value.
             if **val as u8 == b'"' {
                 *val = (*val).add(1);
-                if *args.add(i - 1) as u8 == b'"' {
-                    *args.add(i - 1) = 0;
+                if *args.add(i.wrapping_sub(1)) as u8 == b'"' {
+                    *args.add(i.wrapping_sub(1)) = 0;
                 }
             }
         }
@@ -415,8 +415,8 @@ pub unsafe extern "C" fn next_arg(
     if quoted && i > 0 {
         // SAFETY: `i - 1` is inside the buffer.
         unsafe {
-            if *args.add(i - 1) as u8 == b'"' {
-                *args.add(i - 1) = 0;
+            if *args.add(i.wrapping_sub(1)) as u8 == b'"' {
+                *args.add(i.wrapping_sub(1)) = 0;
             }
         }
     }
@@ -426,7 +426,7 @@ pub unsafe extern "C" fn next_arg(
     unsafe {
         if *args.add(i) != 0 {
             *args.add(i) = 0;
-            args = args.add(i + 1);
+            args = args.add(i.wrapping_add(1));
         } else {
             args = args.add(i);
         }

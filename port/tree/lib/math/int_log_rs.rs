@@ -48,11 +48,16 @@ static LOGTABLE: [u16; 256] = [
 #[no_mangle]
 pub extern "C" fn rust_intlog2(value: u32) -> u32 {
     // The C's `fls(value) - 1`, which is why value must be non-zero.
-    let msb = u32::BITS - 1 - value.leading_zeros();
+    let msb = (u32::BITS - 1).wrapping_sub(value.leading_zeros());
 
     // Shift so the msb lands in bit 31; the result is y * 2^31, and the top
     // nine bits (less the always-set one) index the table.
-    let significand = value << (31 - msb);
+    // `msb` is `0..=31` given `value != 0` (guaranteed by the retained C
+    // wrapper's zero-check before this is ever called), so the shift
+    // amount here is always `0..=31` too -- a valid shift for a 32-bit
+    // value. `wrapping_shl`, not `<<`, for the same "compiler can't see
+    // the contract" reason the subtraction above needed `wrapping_sub`.
+    let significand = value.wrapping_shl(31u32.wrapping_sub(msb));
     let logentry = ((significand >> 23) % LOGTABLE.len() as u32) as usize;
 
     // Interpolate between this table entry and the next. The `& 0xffff` in

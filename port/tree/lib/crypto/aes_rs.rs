@@ -46,6 +46,27 @@
 //! exactly as the C computes it rather than "fixed" to look more sensible;
 //! it is FIPS-197's key-schedule size arithmetic, not a mistake, and
 //! verified byte-for-byte against the real C via the differential.
+//!
+//! # `rig/uaccess-panic-check.sh`: `key_enc`/`key_dec` indexing stays checked
+//!
+//! Every index into `key_enc`/`key_dec` that depends on `ctx.key_length`
+//! (`aes_encrypt`'s and `aes_decrypt`'s `rounds`/`rkp`, both in the loop
+//! that walks the round-key schedule) is sized correctly for every value
+//! `aes_expandkey()` itself ever writes there (16/24/32, validated at its
+//! own entry, rejecting anything else with `-EINVAL`) -- the 60-`u32`
+//! arrays are exactly `AES_MAX_KEYLENGTH_U32`, sized for the `key_len==32`
+//! case's real maximum index (59). But `key_length` is a plain, publicly
+//! readable-and-writable field of `#[repr(C)]` `CryptoAesCtx`, same class
+//! as `seq_buf`'s `len`/`size` and `Arc4Ctx`'s `x`/`y` elsewhere in this
+//! session's panic-triage pass: nothing stops a caller from constructing a
+//! `crypto_aes_ctx` by hand, or corrupting one, with a `key_length` outside
+//! `{16,24,32}` and calling `aes_encrypt`/`aes_decrypt` directly (skipping
+//! `aes_expandkey`). If that ever happens, `rounds`/`rkp` walk past the
+//! schedule the array was actually sized for -- the C has the identical
+//! hazard (`ctx->key_enc[rkp]` on a plain C array with no bounds check at
+//! all), real UB there. Left checked here rather than silenced: the panic
+//! IS the catch, exactly the `logs/panic-triage.md` "never convert a real
+//! memory-safety catch back into a silent out-of-bounds read" case.
 
 use core::ffi::c_int;
 
@@ -234,7 +255,7 @@ pub unsafe extern "C" fn aes_expandkey(ctx: *mut CryptoAesCtx, in_key: *const u8
     while i < 10 {
         let rki_base = i * kwords;
         let rko_base = rki_base + kwords;
-        let rki_last = ctx.key_enc[rki_base + kwords - 1];
+        let rki_last = ctx.key_enc[rki_base.wrapping_add(kwords).wrapping_sub(1)];
 
         ctx.key_enc[rko_base] = subw(rki_last).rotate_right(8) ^ rc ^ ctx.key_enc[rki_base];
         ctx.key_enc[rko_base + 1] = ctx.key_enc[rko_base] ^ ctx.key_enc[rki_base + 1];
@@ -280,7 +301,7 @@ pub unsafe extern "C" fn aes_expandkey(ctx: *mut CryptoAesCtx, in_key: *const u8
         ctx.key_dec[i + 2] = inv_mix_columns(ctx.key_enc[j + 2]);
         ctx.key_dec[i + 3] = inv_mix_columns(ctx.key_enc[j + 3]);
         i += 4;
-        j -= 4;
+        j = j.wrapping_sub(4);
     }
 
     ctx.key_dec[i] = ctx.key_enc[0];
@@ -424,3 +445,15 @@ kernel::kabi_rule!("type_string", "t#u32",
     "typedef_type u32 { t#__u32 }");
 kernel::kabi_rule!("type_string", "t#u8",
     "typedef_type u8 { t#__u8 }");
+
+// Module build (logs/riscv64.md failure 3; riscv defconfig has this library =m): the C's
+// MODULE_DESCRIPTION()/MODULE_LICENSE() went away with the C file, and modpost refuses a module
+// without a license. UNPREFIXED tags, as md5_rs.rs. Built-in (=y, every x86 config) emits
+// nothing here, unchanged.
+#[cfg(MODULE)]
+core::arch::global_asm!(
+    ".section \".modinfo\",\"a\"",
+    ".asciz \"description=Generic AES library\"",
+    ".asciz \"license=GPL v2\"",
+    ".previous",
+);

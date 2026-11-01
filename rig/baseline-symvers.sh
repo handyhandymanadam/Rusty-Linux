@@ -38,13 +38,23 @@ source "$root/kbuild-env.sh"
 # build. Then every symbol that exists in one and not the other shows up as
 # added or removed, and the one comparison this file exists to make is buried
 # in noise. Same config, different code: that is the only useful baseline.
-echo "== installing port/pristine/ over the tree (Kconfig excluded, see above)"
-while IFS= read -r -d '' f; do
-    rel=${f#"$root"/port/pristine/}
-    case $(basename "$rel") in Kconfig) printf '  skipped   %s\n' "$rel"; continue;; esac
-    cp -- "$f" "$root/src/linux/$rel"
-    printf '  %s  %s\n' "$(sha256sum "$root/src/linux/$rel" | cut -c1-16)" "$rel"
-done < <(find "$root/port/pristine" -type f -print0 | sort -z)
+echo "== making the tree upstream's again (every port/tree file: tarball copy, or removed if upstream has none; Kconfig excluded, see above)"
+# 2026-10-27 repair: the old install copied only port/pristine/, which has no copy of kernel/Makefile, the composite Makefiles of later ports, or rust/kernel,
+# so the port's Makefile blocks and *_rs.rs files stayed in the build (`kabi_rule` not found) and the script died with the tree half pristine. The tarball is
+# the oracle for every file the port touches; port-only files are deleted; rig/apply.sh below puts all of it back.
+tarball="$root/src/linux-6.18.49.tar.xz"
+up=$(mktemp -d); trap 'rm -rf "$up"' EXIT
+mapfile -d '' ported < <(cd "$root/port/tree" && find . -type f -print0 | sort -z)
+list=(); for f in "${ported[@]}"; do list+=("linux-6.18.49/${f#./}"); done
+tar -C "$up" -xJf "$tarball" --ignore-failed-read "${list[@]}" 2>/dev/null || true
+nrep=0; ndel=0
+for f in "${ported[@]}"; do
+    rel=${f#./}
+    case $(basename "$rel") in Kconfig) continue;; esac
+    if [ -f "$up/linux-6.18.49/$rel" ]; then cp -- "$up/linux-6.18.49/$rel" "$root/src/linux/$rel"; nrep=$((nrep+1))
+    else rm -f -- "$root/src/linux/$rel"; ndel=$((ndel+1)); fi
+done
+echo "  $nrep files restored from the tarball, $ndel port-only files removed"
 
 # NOT a bare olddefconfig: the pristine Kconfigs lack the prompts the port
 # added, and olddefconfig will drop those symbols without a word. config.sh
@@ -53,7 +63,7 @@ done < <(find "$root/port/pristine" -type f -print0 | sort -z)
 # here is reported and tolerated, and the restore below is what must be clean.
 echo "== configuring the pristine build (drops are expected here)"
 "$root/rig/config.sh" "$name" || true
-kmake O="$root/$name" -j"$(nproc)" >/dev/null
+kmake O="$root/$name" -j"${KB_JOBS:-$(nproc)}" >/dev/null
 cp "$root/$name/Module.symvers" "$out"
 echo "== baseline recorded: $(wc -l < "$out") symbols -> logs/baseline/$(basename "$out")"
 
@@ -61,5 +71,5 @@ echo "== restoring the port"
 "$root/rig/apply.sh"
 echo "== restoring the config; THIS one must come back clean"
 "$root/rig/config.sh" "$name"
-kmake O="$root/$name" -j"$(nproc)" >/dev/null
+kmake O="$root/$name" -j"${KB_JOBS:-$(nproc)}" >/dev/null
 echo "== rebuilt with the port back in place"

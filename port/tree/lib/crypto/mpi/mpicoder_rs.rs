@@ -194,7 +194,7 @@ fn err_ptr(error: c_int) -> *mut c_void {
 /// `a` valid.
 unsafe fn mpi_get_size(a: *mut McGcryMpi) -> c_uint {
     // SAFETY: caller guarantees `a` valid.
-    unsafe { (*a).nlimbs as c_uint * BYTES_PER_MPI_LIMB as c_uint }
+    unsafe { ((*a).nlimbs as c_uint).wrapping_mul(BYTES_PER_MPI_LIMB as c_uint) }
 }
 
 /// `count_lzeros()` (`static` in the real file; no external caller).
@@ -204,17 +204,17 @@ unsafe fn mpi_get_size(a: *mut McGcryMpi) -> c_uint {
 unsafe fn count_lzeros(a: *mut McGcryMpi) -> c_int {
     let mut lzeros: c_int = 0;
     // SAFETY: caller guarantees `a` valid.
-    let mut i = unsafe { (*a).nlimbs } - 1;
+    let mut i = unsafe { (*a).nlimbs }.wrapping_sub(1);
     while i >= 0 {
         // SAFETY: `i` in `0..nlimbs`.
         let alimb = unsafe { *(*a).d.add(i as usize) };
         if alimb == 0 {
-            lzeros += BYTES_PER_MPI_LIMB as c_int;
+            lzeros = lzeros.wrapping_add(BYTES_PER_MPI_LIMB as c_int);
         } else {
-            lzeros += (count_leading_zeros(alimb) / 8) as c_int;
+            lzeros = lzeros.wrapping_add((count_leading_zeros(alimb) / 8) as c_int);
             break;
         }
-        i -= 1;
+        i = i.wrapping_sub(1);
     }
     lzeros
 }
@@ -237,8 +237,16 @@ kernel::kabi_rule!("type_string", "t#u8",
     "typedef_type u8 { t#__u8 }");
 kernel::kabi_rule!("type_string", "t#uint8_t",
     "typedef_type uint8_t { t#u8 }");
+// struct scatterlist has dma_length iff CONFIG_NEED_SG_DMA_LENGTH and dma_flags iff
+// CONFIG_NEED_SG_DMA_FLAGS (x86-64 defconfig and arm64 defconfig set both; the riscv
+// defconfig neither: logs/riscv64.md, crc-check CHANGED 2 on build-riscv64-full). Any other
+// combination has no rule here and fails the build/CRC loudly rather than silently.
+#[cfg(all(CONFIG_NEED_SG_DMA_LENGTH, CONFIG_NEED_SG_DMA_FLAGS))]
 kernel::kabi_rule!("type_string", "s#scatterlist",
     "structure_type scatterlist { member base_type unsigned long byte_size(8) encoding(7) page_link data_member_location(0) , member base_type unsigned int byte_size(4) encoding(7) offset data_member_location(8) , member base_type unsigned int byte_size(4) encoding(7) length data_member_location(12) , member t#dma_addr_t dma_address data_member_location(16) , member base_type unsigned int byte_size(4) encoding(7) dma_length data_member_location(24) , member base_type unsigned int byte_size(4) encoding(7) dma_flags data_member_location(28) } byte_size(32)");
+#[cfg(not(CONFIG_NEED_SG_DMA_LENGTH))]
+kernel::kabi_rule!("type_string", "s#scatterlist",
+    "structure_type scatterlist { member base_type unsigned long byte_size(8) encoding(7) page_link data_member_location(0) , member base_type unsigned int byte_size(4) encoding(7) offset data_member_location(8) , member base_type unsigned int byte_size(4) encoding(7) length data_member_location(12) , member t#dma_addr_t dma_address data_member_location(16) } byte_size(24)");
 kernel::kabi_rule!("type_string", "t#__u64",
     "typedef_type __u64 { base_type unsigned long long byte_size(8) encoding(7) }");
 kernel::kabi_rule!("type_string", "t#dma_addr_t",
@@ -266,10 +274,10 @@ pub unsafe extern "C" fn mpi_read_raw_data(xbuffer: *const c_void, nbytes_in: us
     // SAFETY: caller guarantees `nbytes_in` bytes readable at `xbuffer`.
     while nbytes > 0 && unsafe { *buffer } == 0 {
         buffer = unsafe { buffer.add(1) };
-        nbytes -= 1;
+        nbytes = nbytes.wrapping_sub(1);
     }
 
-    let mut nbits = (nbytes as u64 * 8) as c_uint;
+    let mut nbits = ((nbytes as u64).wrapping_mul(8)) as c_uint;
     if nbits > MAX_EXTERN_MPI_BITS {
         unsafe { _printk(c"\x016MPI: mpi too large (%u bits)\n".as_ptr(), nbits) };
         return core::ptr::null_mut();
@@ -277,10 +285,10 @@ pub unsafe extern "C" fn mpi_read_raw_data(xbuffer: *const c_void, nbytes_in: us
     if nbytes > 0 {
         // SAFETY: `nbytes > 0`, so `buffer[0]` is valid.
         let b0 = unsafe { *buffer } as c_ulong;
-        nbits -= count_leading_zeros(b0) - (BITS_PER_LONG - 8);
+        nbits = nbits.wrapping_sub(count_leading_zeros(b0).wrapping_sub(BITS_PER_LONG.wrapping_sub(8)));
     }
 
-    let nlimbs = ((nbytes + BYTES_PER_MPI_LIMB - 1) / BYTES_PER_MPI_LIMB) as c_uint;
+    let nlimbs = (nbytes.wrapping_add(BYTES_PER_MPI_LIMB).wrapping_sub(1) / BYTES_PER_MPI_LIMB) as c_uint;
     // SAFETY: FFI call; `mpi_alloc` has no preconditions beyond its own.
     let val = unsafe { mpi_alloc(nlimbs) };
     if val.is_null() {
@@ -294,7 +302,7 @@ pub unsafe extern "C" fn mpi_read_raw_data(xbuffer: *const c_void, nbytes_in: us
     }
 
     if nbytes > 0 {
-        let mut i = (BYTES_PER_MPI_LIMB - nbytes % BYTES_PER_MPI_LIMB) % BYTES_PER_MPI_LIMB;
+        let mut i = (BYTES_PER_MPI_LIMB.wrapping_sub(nbytes % BYTES_PER_MPI_LIMB)) % BYTES_PER_MPI_LIMB;
         let mut j = nlimbs as usize;
         while j > 0 {
             let mut a: c_ulong = 0;
@@ -307,12 +315,12 @@ pub unsafe extern "C" fn mpi_read_raw_data(xbuffer: *const c_void, nbytes_in: us
                 // each, minus the skip on the first iteration).
                 a |= unsafe { *buffer } as c_ulong;
                 buffer = unsafe { buffer.add(1) };
-                i += 1;
+                i = i.wrapping_add(1);
             }
             i = 0;
             // SAFETY: `val->d` writable for `nlimbs` limbs; `j - 1` valid.
-            unsafe { *(*val).d.add(j - 1) = a };
-            j -= 1;
+            unsafe { *(*val).d.add(j.wrapping_sub(1)) = a };
+            j = j.wrapping_sub(1);
         }
     }
     val
@@ -346,7 +354,7 @@ pub unsafe extern "C" fn mpi_read_from_buffer(xbuffer: *const c_void, ret_nread:
 
     let nbytes = nbits.div_ceil(8);
     // SAFETY: `ret_nread` valid.
-    if nbytes + 2 > unsafe { *ret_nread } {
+    if nbytes.wrapping_add(2) > unsafe { *ret_nread } {
         unsafe {
             _printk(
                 c"\x016MPI: mpi larger than buffer nbytes=%u ret_nread=%u\n".as_ptr(),
@@ -364,7 +372,7 @@ pub unsafe extern "C" fn mpi_read_from_buffer(xbuffer: *const c_void, ret_nread:
     }
 
     // SAFETY: `ret_nread` valid.
-    unsafe { *ret_nread = nbytes + 2 };
+    unsafe { *ret_nread = nbytes.wrapping_add(2) };
     val
 }
 
@@ -402,23 +410,23 @@ pub unsafe extern "C" fn mpi_read_buffer(
     let n = unsafe { mpi_get_size(a) };
     let lzeros = unsafe { count_lzeros(a) } as c_uint;
 
-    if buf_len < n - lzeros {
+    if buf_len < n.wrapping_sub(lzeros) {
         // SAFETY: `nbytes` valid.
-        unsafe { *nbytes = n - lzeros };
+        unsafe { *nbytes = n.wrapping_sub(lzeros) };
         return -EOVERFLOW;
     }
 
     let mut p = buf;
     // SAFETY: `nbytes` valid.
-    unsafe { *nbytes = n - lzeros };
+    unsafe { *nbytes = n.wrapping_sub(lzeros) };
 
     // SAFETY: `a` valid.
-    let mut i = unsafe { (*a).nlimbs } - 1 - (lzeros / BYTES_PER_MPI_LIMB as c_uint) as c_int;
+    let mut i = unsafe { (*a).nlimbs }.wrapping_sub(1).wrapping_sub((lzeros / BYTES_PER_MPI_LIMB as c_uint) as c_int);
     let mut lzeros = lzeros % BYTES_PER_MPI_LIMB as c_uint;
     while i >= 0 {
         // SAFETY: `a->d` readable at index `i`.
         let alimb = unsafe { *(*a).d.add(i as usize) }.to_be_bytes();
-        let take = BYTES_PER_MPI_LIMB - lzeros as usize;
+        let take = BYTES_PER_MPI_LIMB.wrapping_sub(lzeros as usize);
         // SAFETY: `p` writable for `take` bytes (the `buf_len` check
         // above guarantees the total across all iterations fits);
         // `alimb` is exactly `BYTES_PER_MPI_LIMB` bytes, `lzeros` of
@@ -429,7 +437,7 @@ pub unsafe extern "C" fn mpi_read_buffer(
             p = p.add(take);
         }
         lzeros = 0;
-        i -= 1;
+        i = i.wrapping_sub(1);
     }
     0
 }
@@ -455,7 +463,7 @@ pub unsafe extern "C" fn mpi_get_buffer(a: *mut McGcryMpi, nbytes: *mut c_uint, 
     // SAFETY: `a` valid.
     let mut n = unsafe { mpi_get_size(a) };
     if n == 0 {
-        n += 1;
+        n = n.wrapping_add(1);
     }
 
     // SAFETY: allocating a fresh `n`-byte buffer.
@@ -530,13 +538,13 @@ pub unsafe extern "C" fn mpi_write_to_sgl(
     let mut p2 = miter.addr as *mut u8;
 
     while nbytes > n {
-        let i = core::cmp::min((nbytes - n) as usize, buf_len);
+        let i = core::cmp::min((nbytes.wrapping_sub(n)) as usize, buf_len);
         // SAFETY: `p2` writable for `buf_len` bytes, `i <= buf_len`.
         unsafe { core::ptr::write_bytes(p2, 0, i) };
         p2 = unsafe { p2.add(i) };
-        nbytes -= i as c_uint;
+        nbytes = nbytes.wrapping_sub(i as c_uint);
 
-        buf_len -= i;
+        buf_len = buf_len.wrapping_sub(i);
         if buf_len == 0 {
             // SAFETY: `miter` valid.
             unsafe { sg_miter_next(&mut miter) };
@@ -546,7 +554,7 @@ pub unsafe extern "C" fn mpi_write_to_sgl(
     }
 
     // SAFETY: `a` valid.
-    let mut i = unsafe { (*a).nlimbs } - 1;
+    let mut i = unsafe { (*a).nlimbs }.wrapping_sub(1);
     while i >= 0 {
         // SAFETY: `a->d` readable at index `i`.
         let av = unsafe { *(*a).d.add(i as usize) };
@@ -559,8 +567,8 @@ pub unsafe extern "C" fn mpi_write_to_sgl(
             // room for the whole value).
             unsafe { *p2 = alimb[p] };
             p2 = unsafe { p2.add(1) };
-            p += 1;
-            buf_len -= 1;
+            p = p.wrapping_add(1);
+            buf_len = buf_len.wrapping_sub(1);
             if buf_len == 0 {
                 // SAFETY: `miter` valid.
                 unsafe { sg_miter_next(&mut miter) };
@@ -568,7 +576,7 @@ pub unsafe extern "C" fn mpi_write_to_sgl(
                 p2 = miter.addr as *mut u8;
             }
         }
-        i -= 1;
+        i = i.wrapping_sub(1);
     }
 
     // SAFETY: `miter` valid, started above.
@@ -620,8 +628,8 @@ pub unsafe extern "C" fn mpi_read_raw_from_sgl(sgl: *mut ScatterlistOpaque, mut 
             if unsafe { *buff } != 0 || lzeros >= nbytes {
                 break;
             }
-            lzeros += 1;
-            len -= 1;
+            lzeros = lzeros.wrapping_add(1);
+            len = len.wrapping_sub(1);
             buff = unsafe { buff.add(1) };
         }
 
@@ -634,14 +642,14 @@ pub unsafe extern "C" fn mpi_read_raw_from_sgl(sgl: *mut ScatterlistOpaque, mut 
         buff = miter.addr as *const u8;
         len = miter.length;
 
-        nbytes -= lzeros;
+        nbytes = nbytes.wrapping_sub(lzeros);
         lzeros = 0;
     }
 
     miter.consumed = lzeros as usize;
 
-    nbytes -= lzeros;
-    let mut nbits = nbytes * 8;
+    nbytes = nbytes.wrapping_sub(lzeros);
+    let mut nbits = nbytes.wrapping_mul(8);
     if nbits > MAX_EXTERN_MPI_BITS {
         // SAFETY: `miter` valid, started above.
         unsafe { sg_miter_stop(&mut miter) };
@@ -654,7 +662,7 @@ pub unsafe extern "C" fn mpi_read_raw_from_sgl(sgl: *mut ScatterlistOpaque, mut 
         // pointing at a real, non-zero byte (the break conditions both
         // require it).
         let b0 = unsafe { *buff } as c_ulong;
-        nbits -= count_leading_zeros(b0) - (BITS_PER_LONG - 8);
+        nbits = nbits.wrapping_sub(count_leading_zeros(b0).wrapping_sub(BITS_PER_LONG.wrapping_sub(8)));
     }
 
     // SAFETY: `miter` valid.
@@ -677,16 +685,16 @@ pub unsafe extern "C" fn mpi_read_raw_from_sgl(sgl: *mut ScatterlistOpaque, mut 
         return val;
     }
 
-    let mut j = (nlimbs - 1) as isize;
+    let mut j = (nlimbs.wrapping_sub(1)) as isize;
     let mut a: c_ulong = 0;
-    let mut z = (BYTES_PER_MPI_LIMB as c_uint - nbytes % BYTES_PER_MPI_LIMB as c_uint) % BYTES_PER_MPI_LIMB as c_uint;
+    let mut z = ((BYTES_PER_MPI_LIMB as c_uint).wrapping_sub(nbytes % BYTES_PER_MPI_LIMB as c_uint)) % BYTES_PER_MPI_LIMB as c_uint;
 
     // SAFETY: `miter` valid (stopped above, but sg_miter_next() safely
     // resumes it -- see the module doc comment).
     while unsafe { sg_miter_next(&mut miter) } {
         buff = miter.addr as *const u8;
         let this_len = core::cmp::min(miter.length, nbytes as usize);
-        nbytes -= this_len as c_uint;
+        nbytes = nbytes.wrapping_sub(this_len as c_uint);
 
         let mut x: usize = 0;
         while x < this_len {
@@ -695,16 +703,16 @@ pub unsafe extern "C" fn mpi_read_raw_from_sgl(sgl: *mut ScatterlistOpaque, mut 
             // readable here.
             a |= unsafe { *buff } as c_ulong;
             buff = unsafe { buff.add(1) };
-            if (z + x as c_uint + 1) % BYTES_PER_MPI_LIMB as c_uint == 0 {
+            if (z.wrapping_add(x as c_uint).wrapping_add(1)) % BYTES_PER_MPI_LIMB as c_uint == 0 {
                 // SAFETY: `val->d` writable for `nlimbs` limbs, `j >= 0`
                 // by the same accounting the C relies on.
                 unsafe { *(*val).d.offset(j) = a };
-                j -= 1;
+                j = j.wrapping_sub(1);
                 a = 0;
             }
-            x += 1;
+            x = x.wrapping_add(1);
         }
-        z += x as c_uint;
+        z = z.wrapping_add(x as c_uint);
     }
 
     val

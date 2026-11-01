@@ -59,7 +59,11 @@ pub unsafe extern "C" fn bsearch(
     let mut num = num;
 
     while num > 0 {
-        let pivot = unsafe { base.add((num >> 1) * size) };
+        // `(num >> 1) * size` is a byte offset within an array that, by
+        // its own existence, must fit in addressable memory -- provably
+        // safe in practice, though the compiler cannot see that from the
+        // types alone, so `wrapping_mul` rather than `*`.
+        let pivot = unsafe { base.add((num >> 1).wrapping_mul(size)) };
         // SAFETY: the caller guarantees `cmp` is callable and that `pivot`
         // is inside the array -- `num >> 1 < num` for every num > 0.
         let result = unsafe { cmp(key, pivot as *const c_void) };

@@ -1,0 +1,32 @@
+reg_dup_errno~if cur == n {<NL>                rust_nt_warn_dup(n);<NL>                return -EEXIST;~if cur == n {<NL>                rust_nt_warn_dup(n);<NL>                return -EBUSY;
+reg_dup_nowarn~rust_nt_warn_dup(n);<NL>                return -EEXIST;~return -EEXIST;
+reg_dup_skip~if cur == n {<NL>                rust_nt_warn_dup(n);<NL>                return -EEXIST;<NL>            }~if false {<NL>                return -EEXIST;<NL>            }
+reg_prio_ge~if (*n).priority > (*cur).priority {<NL>                break;~if (*n).priority >= (*cur).priority {<NL>                break;
+reg_prio_lt~if (*n).priority > (*cur).priority {<NL>                break;~if (*n).priority < (*cur).priority {<NL>                break;
+reg_unique_ne~if (*n).priority == (*cur).priority && unique_priority {~if (*n).priority != (*cur).priority && unique_priority {
+reg_unique_ignored~(*n).priority == (*cur).priority && unique_priority {~(*n).priority == (*cur).priority && false {
+reg_unique_errno~return -EBUSY;~return -EEXIST;
+reg_nolink~(*n).next.store(slot(nl).load(Ordering::Relaxed), Ordering::Relaxed);~(*n).next.store(core::ptr::null_mut(), Ordering::Relaxed);
+reg_notrace~slot(nl).store(n, Ordering::Release); // rcu_assign_pointer()<NL>        rust_nt_trace_register(n);~slot(nl).store(n, Ordering::Release);
+reg_trace_unreg~rust_nt_trace_register(n);<NL>    }<NL>    0~rust_nt_trace_unregister(n);<NL>    }<NL>    0
+unreg_notfound~return -ENOENT;~return -EEXIST;
+unreg_link~slot(nl).store((*n).next.load(Ordering::Relaxed), Ordering::Release);~slot(nl).store(core::ptr::null_mut(), Ordering::Release);
+unreg_notrace~slot(nl).store((*n).next.load(Ordering::Relaxed), Ordering::Release);<NL>                rust_nt_trace_unregister(n);~slot(nl).store((*n).next.load(Ordering::Relaxed), Ordering::Release);
+unreg_trace_reg~rust_nt_trace_unregister(n);<NL>                return 0;~rust_nt_trace_register(n);<NL>                return 0;
+call_done~let mut ret = NOTIFY_DONE;~let mut ret = NOTIFY_STOP_MASK;
+call_zero_budget~while !nb.is_null() && nr_to_call != 0 {~while !nb.is_null() && nr_to_call > 0 {
+call_budget_le~nr_to_call = nr_to_call.wrapping_sub(1);~nr_to_call = nr_to_call.wrapping_sub(2);
+call_nocount~*nr_calls += 1;~*nr_calls += 0;
+call_count_on_null~if !nr_calls.is_null() {<NL>                *nr_calls += 1;~if true {<NL>                *nr_calls += 1;
+call_nostop~if ret & NOTIFY_STOP_MASK != 0 {<NL>                break;<NL>            }<NL>            nb = next_nb;~nb = next_nb;
+call_stop_eq~if ret & NOTIFY_STOP_MASK != 0 {<NL>                break;<NL>            }<NL>            nb = next_nb;~if ret & NOTIFY_STOP_MASK != 0 {<NL>                nb = next_nb;<NL>                continue;<NL>            }<NL>            nb = next_nb;
+call_stop_const~const NOTIFY_STOP_MASK: c_int = 0x8000;~const NOTIFY_STOP_MASK: c_int = 0x4000;
+call_next_late~ret = rust_nt_call(nb, val, v);~ret = rust_nt_call(nb, val, v);<NL>            let next_nb = (*nb).next.load(Ordering::Relaxed);
+call_budget_after_stop~nb = next_nb;<NL>            nr_to_call = nr_to_call.wrapping_sub(1);~nb = next_nb;
+robust_nr_minus~nr.wrapping_sub(1), core::ptr::null_mut());~nr, core::ptr::null_mut());
+robust_down_val~rust_nt_call_chain(nl, val_down, v, nr.wrapping_sub(1)~rust_nt_call_chain(nl, val_up, v, nr.wrapping_sub(1)
+robust_always_down~if ret & NOTIFY_STOP_MASK != 0 {<NL>            rust_nt_call_chain(nl, val_down~if true {<NL>            rust_nt_call_chain(nl, val_down
+robust_never_down~if ret & NOTIFY_STOP_MASK != 0 {<NL>            rust_nt_call_chain(nl, val_down~if false {<NL>            rust_nt_call_chain(nl, val_down
+robust_up_budget~rust_nt_call_chain(nl, val_up, v, -1, &mut nr)~rust_nt_call_chain(nl, val_up, v, -1, core::ptr::null_mut())
+robust_ret~        ret<NL>    }<NL>}<NL>~        0<NL>    }<NL>}<NL>
+cb_not_ok_skip~if !rust_nt_callback_ok(nb) {<NL>                nb = next_nb;<NL>                continue;~if !rust_nt_callback_ok(nb) {<NL>                break;

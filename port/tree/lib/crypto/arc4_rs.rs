@@ -22,6 +22,32 @@
 //! property of ARC4, not of the port, and making the Rust constant-time
 //! would be a change nobody asked for to a cipher nobody should be using.
 //!
+//! # `rig/uaccess-panic-check.sh`: add-overflow wrapped, bounds checks kept
+//!
+//! Every arithmetic site feeding an `S[...]` index is masked with `& 0xff`
+//! either at the same statement or the one before, so every index used is
+//! provably `0..=255` -- exactly `S`'s length -- by construction, same
+//! category as this project's other "compiler can't prove it, wrap
+//! anyway" sites. `wrapping_add` throughout; nothing here relies on
+//! wraparound the way the C's own `& 0xff` masking already doesn't need
+//! checked arithmetic to begin with.
+//!
+//! The two exceptions, deliberately left as checked indexing rather than
+//! silenced: `arc4_crypt`'s FIRST two reads, `ctx.s[x as usize]` and
+//! `ctx.s[y as usize]` where `x`/`y` come straight from `ctx.x`/`ctx.y`
+//! (a plain, externally-settable pair of fields -- see `seq_buf_rs.rs`'s
+//! module doc for the general shape) with no mask applied yet in this
+//! call. The C has the identical hazard: `S[x]`/`S[y]` on a `struct
+//! arc4_ctx` whose `x`/`y` a caller corrupted is an out-of-bounds C array
+//! read, real UB, not something this port introduces. Every ordinary
+//! caller goes through `arc4_setkey` first (which sets `x = 1, y = 0`)
+//! and `arc4_crypt` always writes back masked values, so the invariant
+//! holds in practice -- but it is a CROSS-CALL invariant this function
+//! cannot see, unlike every other index here, which is masked in the same
+//! expression that uses it. Kept checked: exactly the "the Rust panicking
+//! here is the port catching something, not regressing" case
+//! `logs/panic-triage.md` warns not to silence.
+//!
 //! Replaces: lib/crypto/arc4.c
 
 use core::ffi::{c_int, c_uint};
@@ -87,7 +113,12 @@ pub unsafe extern "C" fn arc4_setkey(
     // SAFETY: the caller guarantees `ctx` is valid, writable and uniquely
     // borrowed, and that `key_len` bytes are readable at `in_key`.
     let ctx = unsafe { &mut *ctx };
-    let key = unsafe { core::slice::from_raw_parts(in_key, key_len as usize) };
+    // `(NULL, 0)` is legal C and `from_raw_parts` forbids a null pointer.
+    let key: &[u8] = if key_len == 0 {
+        &[]
+    } else {
+        unsafe { core::slice::from_raw_parts(in_key, key_len as usize) }
+    };
 
     ctx.x = 1;
     ctx.y = 0;
@@ -102,10 +133,10 @@ pub unsafe extern "C" fn arc4_setkey(
     for i in 0..256usize {
         let a = ctx.s[i];
 
-        j = (j + key[k] as u32 + a) & 0xff;
+        j = (j.wrapping_add(key[k] as u32).wrapping_add(a)) & 0xff;
         ctx.s[i] = ctx.s[j as usize];
         ctx.s[j as usize] = a;
-        k += 1;
+        k = k.wrapping_add(1);
         if k >= key.len() {
             k = 0;
         }
@@ -153,19 +184,19 @@ pub unsafe extern "C" fn arc4_crypt(
 
     let mut a = ctx.s[x as usize];
 
-    y = (y + a) & 0xff;
+    y = (y.wrapping_add(a)) & 0xff;
     let mut b = ctx.s[y as usize];
 
     // The C's software pipeline: read the next entries before writing the
     // current ones, so the loop has no load-after-store stall. Kept as it is.
     loop {
         ctx.s[y as usize] = a;
-        a = (a + b) & 0xff;
+        a = (a.wrapping_add(b)) & 0xff;
         ctx.s[x as usize] = b;
-        x = (x + 1) & 0xff;
+        x = (x.wrapping_add(1)) & 0xff;
 
         let ta = ctx.s[x as usize];
-        let ty = (y + ta) & 0xff;
+        let ty = (y.wrapping_add(ta)) & 0xff;
         let tb = ctx.s[ty as usize];
 
         // SAFETY: `i < len`, and the caller guarantees `len` bytes readable

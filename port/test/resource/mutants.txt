@@ -1,0 +1,96 @@
+next_skip~if !skip_children && !(*p).child.is_null() {~if !(*p).child.is_null() {
+next_noskipc~if !skip_children && !(*p).child.is_null() {~if skip_children && !(*p).child.is_null() {
+next_root_stop~if p == subtree_root {<NL>                return null_mut();~if false {<NL>                return null_mut();
+next_sib_cond~while (*p).sibling.is_null() && !(*p).parent.is_null() {~while (*p).sibling.is_null() && false {
+tm_flags~(p.flags & flags) == flags && (desc == IORES_DESC_NONE || desc == p.desc)~(p.flags & flags) != 0 && (desc == IORES_DESC_NONE || desc == p.desc)
+tm_desc~(desc == IORES_DESC_NONE || desc == p.desc)~(desc == IORES_DESC_NONE || desc != p.desc)
+tm_desc_none~(desc == IORES_DESC_NONE || desc == p.desc)~(desc == p.desc)
+rq_end_lt~if end < start {<NL>            return root;~if end <= start {<NL>            return root;
+rq_start~if start < (*root).start {~if start <= (*root).start {
+rq_end~if end > (*root).end {~if end >= (*root).end {
+rq_gt~if tmp.is_null() || (*tmp).start > end {~if tmp.is_null() || (*tmp).start >= end {
+rq_lt~if (*tmp).end < start {<NL>                continue;~if (*tmp).end <= start {<NL>                continue;
+rq_sib~(*new).sibling = tmp;<NL>                *p = new;~(*new).sibling = null_mut();<NL>                *p = new;
+rq_parent~(*new).parent = root;<NL>                return null_mut();~return null_mut();
+rl_child~if release_child || (*tmp).child.is_null() {~if release_child && (*tmp).child.is_null() {
+rl_child2~if release_child || (*tmp).child.is_null() {~if (*tmp).child.is_null() {
+rl_reparent~(*chd).parent = (*tmp).parent;~(*chd).parent = tmp;
+rl_tail~(*chd).sibling = (*tmp).sibling;~(*chd).sibling = null_mut();
+rl_clear_parent~(*old).parent = null_mut();<NL>                return 0;~return 0;
+rl_einval~        -EINVAL<NL>    }<NL>}<NL><NL>/// `__release_child~        -EBUSY<NL>    }<NL>}<NL><NL>/// `__release_child
+rc_nodbg~rust_res_dbg_release(tmp);~
+rc_norecurse~rust_res_release_children(tmp);~
+rc_size~let size = (*tmp).size();~let size = (*tmp).size() + 1;
+rc_end~(*tmp).end = size.wrapping_sub(1);~(*tmp).end = size;
+rc_noparent~(*tmp).parent = null_mut();<NL>            (*tmp).sibling = null_mut();<NL>            rust_res_release_children~(*tmp).sibling = null_mut();<NL>            rust_res_release_children
+fn_null~if res.is_null() {<NL>            return -EINVAL;~if false {<NL>            return -EINVAL;
+fn_start_ge~if start >= end {~if start > end {
+fn_gt~if (*p).start > end {~if (*p).start >= end {
+fn_lt~if (*p).end < start {~if (*p).end <= start {
+fn_skipflag~skip_children = false;<NL>            if is_type_match~if is_type_match
+fn_nodev~return -ENODEV;~return -EINVAL;
+fn_max~start: start.max((*p).start)~start: start.min((*p).start)
+fn_min~end: end.min((*p).end)~end: end.max((*p).end)
+fn_parent~parent: (*p).parent, ..Res::zero()~parent: null_mut(), ..Res::zero()
+fn_desc~flags: (*p).flags, desc: (*p).desc,~flags: (*p).flags, desc: 0,
+rg_type_cont~            if is_type_match(pr, flags, desc) {<NL>                ty += 1;<NL>                p = pr.sibling;<NL>                continue;~            if is_type_match(pr, flags, desc) {<NL>                p = pr.sibling;<NL>                continue;
+rg_overlap~            if !overlaps(pr, &res) {~            if false {
+rg_dbreak~if d.start > o_start {<NL>                        break;~if d.start >= o_start {<NL>                        break;
+rg_covered~if d.end >= o_end {~if d.end > o_end {
+rg_ostart~o_start = o_start.max(d.end.wrapping_add(1));~o_start = o_start.max(d.end);
+rg_other~            if !covered {<NL>                other += 1;~            if covered {<NL>                other += 1;
+rg_dp_overlap~if overlaps(d, &res) && is_type_match(d, flags, desc) {~if is_type_match(d, flags, desc) {
+rg_dp_type~if overlaps(d, &res) && is_type_match(d, flags, desc) {~if overlaps(d, &res) {
+rg_dp_next~dp = next_resource(dp, false, p);~dp = d.sibling;
+rg_size~end: start.wrapping_add(size as u64).wrapping_sub(1)~end: start.wrapping_add(size as u64)
+rg_ret_disjoint~if ty == 0 {<NL>            return REGION_DISJOINT;~if ty == 0 {<NL>            return REGION_INTERSECTS;
+rg_ret_inter~if other == 0 {<NL>            return REGION_INTERSECTS;~if other == 0 {<NL>            return REGION_MIXED;
+cl_min~if res.start < min {~if res.start <= min {
+cl_max~if res.end > max {~if res.end >= max {
+fs_zero_skip~if !this.is_null() && (*this).start == (*root).start {~if false {
+fs_old_start~tmp.start = if this == old { (*old).start } else { (*this).end.wrapping_add(1) };~tmp.start = (*this).end.wrapping_add(1);
+fs_end_old~if this == old {<NL>                        (*this).end<NL>                    } else {<NL>                        (*this).start.wrapping_sub(1)~if false {<NL>                        (*this).end<NL>                    } else {<NL>                        (*this).start.wrapping_sub(1)
+fs_end_root~} else {<NL>                    (*root).end<NL>                };~} else {<NL>                    (*root).end - 1<NL>                };
+fs_clip~resource_clip(&mut tmp, (*c).min, (*c).max);~
+fs_arch~rust_res_arch_remove_reservations(&mut tmp);~
+fs_mask~let mask = (*c).align.wrapping_sub(1);~let mask = (*c).align;
+fs_avail_ge~if avail.start >= tmp.start {~if avail.start > tmp.start {
+fs_flags~flags: (*new).flags & !IORESOURCE_UNSET, ..Res::zero() };<NL>                if avail~flags: (*new).flags, ..Res::zero() };<NL>                if avail
+fs_alloc_end~end: a_start.wrapping_add(size).wrapping_sub(1), flags: avail.flags~end: a_start.wrapping_add(size), flags: avail.flags
+fs_alloc_le~if alloc.start <= alloc.end && contains~if alloc.start < alloc.end && contains
+fs_contains~alloc.start <= alloc.end && contains(&avail, &alloc)~alloc.start <= alloc.end
+fs_alignf~let a_start = if !alignf.is_null() { rust_res_alignf(alignf, (*c).alignf_data, &avail, size, (*c).align) } else { avail.start };~let a_start = avail.start;
+fs_next_end~if this.is_null() || (*this).end == (*root).end {~if this.is_null() {
+fs_next_old~if this != old {<NL>                tmp.start = (*this).end.wrapping_add(1);~if true {<NL>                tmp.start = (*this).end.wrapping_add(1);
+fs_ebusy~        -EBUSY<NL>    }<NL>}<NL><NL>/// The body of `reallocate~        -EINVAL<NL>    }<NL>}<NL><NL>/// The body of `reallocate
+fs_tmp_end_lt~if tmp.end < tmp.start {<NL>                    break 'next;~if tmp.end <= tmp.start {<NL>                    break 'next;
+ra_contains_new~if contains(&new, &*old) {~if contains(&*old, &new) {
+ra_child~if !(*old).child.is_null() {<NL>            return -EBUSY;~if false {<NL>            return -EBUSY;
+ra_contains_old~if contains(&*old, &new) {<NL>            (*old).start~if false {<NL>            (*old).start
+ra_bug~if !conflict.is_null() {<NL>                rust_res_bug();~if false {<NL>                rust_res_bug();
+ra_release~rust_res_release(old, true);<NL>            write(old, new);~write(old, new);
+in_warn~rust_res_warn_dup(); // WARN_ON(first == new): duplicated insertion<NL>                return first;~return first;
+in_parent~if first == parent {<NL>                return first;~if false {<NL>                return first;
+in_break1~if (*first).start > (*new).start || (*first).end < (*new).end {~if (*first).start >= (*new).start || (*first).end < (*new).end {
+in_break2~if (*first).start == (*new).start && (*first).end == (*new).end {~if false {
+in_next_start~if (*next).start < (*new).start || (*next).end > (*new).end {~if (*next).start < (*new).start {
+in_next_end~if (*next).start < (*new).start || (*next).end > (*new).end {~if (*next).end > (*new).end {
+in_sib_gt~if (*(*next).sibling).start > (*new).end {~if (*(*next).sibling).start >= (*new).end {
+in_child~(*new).child = first;~(*new).child = null_mut();
+in_reparent~(*next).parent = new;<NL>            next = (*next).sibling;~next = (*next).sibling;
+in_cut~(*next).sibling = null_mut();<NL>        next = first;~next = first;
+in_parent_child~if (*parent).child == first {<NL>            (*parent).child = new;~if (*parent).child == first {<NL>            (*parent).child = first;
+in_prev_sib~(*next).sibling = new;<NL>        }<NL>        null_mut()~}<NL>        null_mut()
+in_sibling~(*new).sibling = (*next).sibling;~(*new).sibling = null_mut();
+ad_start~if start < (*parent).start || end > (*parent).end {~if start <= (*parent).start || end > (*parent).end {
+ad_end~if start < (*parent).start || end > (*parent).end {~if start < (*parent).start || end >= (*parent).end {
+ad_sib~if !(*res).sibling.is_null() && (*(*res).sibling).start <= end {~if !(*res).sibling.is_null() && (*(*res).sibling).start < end {
+ad_prev~if start <= (*tmp).end {<NL>                    return -EBUSY;~if start < (*tmp).end {<NL>                    return -EBUSY;
+ad_first~if tmp != res {~if false {
+ad_child_s~if (*tmp).start < start || (*tmp).end > end {~if (*tmp).start <= start || (*tmp).end > end {
+ad_child_e~if (*tmp).start < start || (*tmp).end > end {~if (*tmp).start < start || (*tmp).end >= end {
+ad_skip~if parent.is_null() {<NL>            skip = true;~if parent.is_null() {<NL>            return -EBUSY;
+ad_set~(*res).start = start;<NL>        (*res).end = end;~(*res).start = start;
+al_size~IORESOURCE_SIZEALIGN => (*res).size(),~IORESOURCE_SIZEALIGN => (*res).start,
+al_start~IORESOURCE_STARTALIGN => (*res).start,~IORESOURCE_STARTALIGN => (*res).size(),
+al_default~_ => 0,~_ => 1,

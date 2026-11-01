@@ -67,7 +67,7 @@ unsafe fn mpihelp_add_1(
 
     if s2_limb < x0 {
         loop {
-            s1_size -= 1;
+            s1_size = s1_size.wrapping_sub(1);
             if s1_size == 0 {
                 return 1;
             }
@@ -84,7 +84,7 @@ unsafe fn mpihelp_add_1(
 
     if (res_ptr as *const c_ulong) != s1_ptr {
         // SAFETY: `s1_size - 1` limbs remain readable/writable.
-        for i in 0..(s1_size - 1) as usize {
+        for i in 0..(s1_size.wrapping_sub(1)) as usize {
             unsafe { *res_ptr.add(i) = *s1_ptr.add(i) };
         }
     }
@@ -110,7 +110,7 @@ unsafe fn mpihelp_sub_1(
 
     if s2_limb_out > x0 {
         loop {
-            s1_size -= 1;
+            s1_size = s1_size.wrapping_sub(1);
             if s1_size == 0 {
                 return 1;
             }
@@ -127,7 +127,7 @@ unsafe fn mpihelp_sub_1(
 
     if (res_ptr as *const c_ulong) != s1_ptr {
         // SAFETY: as `mpihelp_add_1`.
-        for i in 0..(s1_size - 1) as usize {
+        for i in 0..(s1_size.wrapping_sub(1)) as usize {
             unsafe { *res_ptr.add(i) = *s1_ptr.add(i) };
         }
     }
@@ -178,7 +178,7 @@ pub unsafe extern "C" fn mpi_sub_ui(
     }
 
     // SAFETY: `w` valid.
-    if unsafe { mpi_resize(w, (u_nlimbs + 1) as c_uint) } != 0 {
+    if unsafe { mpi_resize(w, u_nlimbs.wrapping_add(1) as c_uint) } != 0 {
         return -ENOMEM;
     }
 
@@ -190,7 +190,7 @@ pub unsafe extern "C" fn mpi_sub_ui(
         // SAFETY: `w` has room for `u_nlimbs + 1` limbs.
         unsafe {
             *(*w).d.add(u_nlimbs as usize) = cy;
-            (*w).nlimbs = u_nlimbs + cy as c_int;
+            (*w).nlimbs = u_nlimbs.wrapping_add(cy as c_int);
             (*w).sign = 1;
         }
     } else {
@@ -199,7 +199,7 @@ pub unsafe extern "C" fn mpi_sub_ui(
         if u_nlimbs == 1 && u_d0 < vval {
             // SAFETY: `w` has room for at least 1 limb.
             unsafe {
-                *(*w).d = vval - u_d0;
+                *(*w).d = vval.wrapping_sub(u_d0);
                 (*w).nlimbs = 1;
                 (*w).sign = 1;
             }
@@ -208,9 +208,9 @@ pub unsafe extern "C" fn mpi_sub_ui(
             unsafe { mpihelp_sub_1((*w).d, (*u).d, u_nlimbs, vval) };
             // SAFETY: `u_nlimbs >= 1` here, so index `u_nlimbs - 1` is
             // in bounds of `w`'s just-written limbs.
-            let last = unsafe { *(*w).d.add((u_nlimbs - 1) as usize) };
+            let last = unsafe { *(*w).d.add((u_nlimbs.wrapping_sub(1)) as usize) };
             unsafe {
-                (*w).nlimbs = u_nlimbs - (last == 0) as c_int;
+                (*w).nlimbs = u_nlimbs.wrapping_sub((last == 0) as c_int);
                 (*w).sign = 0;
             }
         }

@@ -63,12 +63,26 @@ extern "C" {
     fn vfree(addr: *const c_void);
     /// `lib/lz4/lz4_decompress_rs.rs`. Already Rust; called exactly as the
     /// C wrapper this replaces already called it.
+    #[cfg(not(boot_preboot))]
     fn LZ4_decompress_safe(
         source: *const c_char,
         dest: *mut c_char,
         compressed_size: c_int,
         max_decompressed_size: c_int,
     ) -> c_int;
+}
+
+// RUSTY-LINUX preboot: `--cfg boot_preboot` (set only by
+// arch/x86/boot/compressed/Makefile for the boot stub) selects the C
+// `#ifdef PREBOOT` arm of unlz4(), which calls LZ4_decompress_fast() and not
+// LZ4_decompress_safe(). So LZ4_decompress_safe is cfg'd out above and not
+// referenced, and the stub link does not need it. The kernel build never sets
+// the cfg and is unchanged.
+#[cfg(boot_preboot)]
+extern "C" {
+    /// `lib/lz4/lz4_decompress_rs.rs`, built for the stub.
+    fn LZ4_decompress_fast(source: *const c_char, dest: *mut c_char, original_size: c_int)
+        -> c_int;
 }
 
 /// `LZ4_COMPRESSBOUND()`, `include/linux/lz4.h` -- a `static inline` with no
@@ -112,6 +126,12 @@ pub unsafe extern "C" fn unlz4(
             unsafe { e(msg.as_ptr() as *mut c_char) };
         }
     };
+
+    // RUSTY-LINUX preboot: mirrors the C `#ifdef PREBOOT` initialiser
+    // `size_t out_len = get_unaligned_le32(input + in_len);` -- the stub
+    // appends the uncompressed length 4 bytes after the input.
+    #[cfg(boot_preboot)]
+    let mut out_len: usize = unsafe { get_unaligned_le32(input.offset(in_len as isize)) } as usize;
 
     let uncomp_chunksize = LZ4_DEFAULT_UNCOMPRESSED_CHUNK_SIZE;
 
@@ -263,28 +283,57 @@ pub unsafe extern "C" fn unlz4(
                 }
             }
 
-            let dest_len_cap = uncomp_chunksize as c_int;
-            let ret = unsafe {
-                LZ4_decompress_safe(
-                    inp as *const c_char,
-                    outp as *mut c_char,
-                    chunksize as c_int,
-                    dest_len_cap,
-                )
-            };
-            if ret < 0 {
-                call_error(b"Decoding failed\0");
-                // Recorded fix: C's `ret` still holds LZ4_decompress_safe's
-                // own negative error code here (`goto exit_2` falls all the
-                // way to `return ret;` unchanged) -- an earlier version of
-                // this line discarded it as a hardcoded -1, found by
-                // adversarial review. No in-tree caller distinguishes LZ4's
-                // error codes from a plain -1 (init/initramfs.c and
-                // do_mounts_rd.c only test `if (res)`), but the C is the
-                // reference and this is otherwise a silent behavior change.
-                break 'body ret;
+            // RUSTY-LINUX preboot: the C `#ifdef PREBOOT` arm. dest_len is
+            // the remaining output (capped at one chunk) and the engine is
+            // LZ4_decompress_fast(); chunksize becomes its return value
+            // (input bytes consumed), as the C assigns `chunksize = ret`.
+            #[cfg(boot_preboot)]
+            let dest_len: c_long;
+            #[cfg(boot_preboot)]
+            {
+                if out_len >= uncomp_chunksize {
+                    dest_len = uncomp_chunksize as c_long;
+                    out_len -= uncomp_chunksize;
+                } else {
+                    dest_len = out_len as c_long;
+                }
+                let ret = unsafe {
+                    LZ4_decompress_fast(inp as *const c_char, outp as *mut c_char, dest_len as c_int)
+                };
+                if ret < 0 {
+                    call_error(b"Decoding failed\0");
+                    break 'body ret;
+                }
+                chunksize = ret as u32;
             }
-            let dest_len = ret as c_long;
+            // Kernel arm (non-preboot): unchanged.
+            #[cfg(not(boot_preboot))]
+            let dest_len: c_long;
+            #[cfg(not(boot_preboot))]
+            {
+                let dest_len_cap = uncomp_chunksize as c_int;
+                let ret = unsafe {
+                    LZ4_decompress_safe(
+                        inp as *const c_char,
+                        outp as *mut c_char,
+                        chunksize as c_int,
+                        dest_len_cap,
+                    )
+                };
+                if ret < 0 {
+                    call_error(b"Decoding failed\0");
+                    // Recorded fix: C's `ret` still holds LZ4_decompress_safe's
+                    // own negative error code here (`goto exit_2` falls all the
+                    // way to `return ret;` unchanged) -- an earlier version of
+                    // this line discarded it as a hardcoded -1, found by
+                    // adversarial review. No in-tree caller distinguishes LZ4's
+                    // error codes from a plain -1 (init/initramfs.c and
+                    // do_mounts_rd.c only test `if (res)`), but the C is the
+                    // reference and this is otherwise a silent behavior change.
+                    break 'body ret;
+                }
+                dest_len = ret as c_long;
+            }
 
             if let Some(f) = flush {
                 if unsafe { f(outp as *mut c_void, dest_len as c_ulong) } != dest_len {

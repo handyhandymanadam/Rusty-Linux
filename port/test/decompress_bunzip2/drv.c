@@ -7,7 +7,7 @@
  * (not derived from either decompressor), compressed by the SYSTEM bzip2.
  * Both the pristine C oracle and the Rust port decompress the SAME
  * compressed bytes and are checked against that plaintext directly --
- * not just against each other, which is exactly the STATUS.md #12 trap
+ * not just against each other, which is exactly the notes/STATUS.md #12 trap
  * ("both arms agree and the answer is still wrong").
  *
  * DBZ2_PROVE_CAN_FAIL=1 flips one byte of the Rust output after a

@@ -1,0 +1,51 @@
+lower_shift~(!0u32).wrapping_shr(32 - n % 32)~(!0u32).wrapping_shr(31 - n % 32)
+upper_shift~(!0u32) << (n % 32)~(!0u32) << (n % 31)
+nla_align~payload.wrapping_add(NLA_HDRLEN).wrapping_add(3) & !3~payload.wrapping_add(NLA_HDRLEN).wrapping_add(2) & !3
+nla_hdr~const NLA_HDRLEN: u32 = 4;~const NLA_HDRLEN: u32 = 2;
+clear_mid_mask~mask &= lower_bits(end);<NL>                if *dst.add(start_word as usize) & mask != 0 {~mask |= lower_bits(end);<NL>                if *dst.add(start_word as usize) & mask != 0 {
+clear_mid_mod~                    *dst.add(start_word as usize) &= !mask;<NL>                    *modified = true;<NL>                }<NL>                return;~                    *dst.add(start_word as usize) &= !mask;<NL>                }<NL>                return;
+clear_mid_ret~                    *modified = true;<NL>                }<NL>                return;<NL>            }~                    *modified = true;<NL>                }<NL>            }
+clear_head_mod~            if *dst.add(start_word as usize) & mask != 0 {<NL>                *dst.add(start_word as usize) &= !mask;<NL>                *modified = true;<NL>            }<NL>            start_word += 1;~            if *dst.add(start_word as usize) & mask != 0 {<NL>                *dst.add(start_word as usize) &= !mask;<NL>            }<NL>            start_word += 1;
+clear_head_inc~            start_word += 1;<NL>        }<NL><NL>        let mut i = start_word;~        }<NL><NL>        let mut i = start_word;
+clear_words~while i < end_word {<NL>            if *dst.add(i as usize) != 0 {<NL>                *dst.add(i as usize) = 0;<NL>                *modified = true;~while i < end_word {<NL>            if *dst.add(i as usize) != 0 {<NL>                *dst.add(i as usize) = 0;
+clear_words_end~while i < end_word {<NL>            if *dst.add(i as usize) != 0 {~while i <= end_word {<NL>            if *dst.add(i as usize) != 0 {
+clear_tail~if end % 32 != 0 {<NL>            let mask = lower_bits(end);~if end % 32 > 1 {<NL>            let mask = lower_bits(end);
+clear_tail_mask~            let mask = lower_bits(end);<NL>            if *dst.add(end_word as usize) & mask != 0 {<NL>                *dst.add(end_word as usize) &= !mask;<NL>                *modified = true;~            let mask = lower_bits(end);<NL>            if *dst.add(end_word as usize) & mask != 0 {<NL>                *dst.add(end_word as usize) &= !mask;
+nz_mid~mask &= lower_bits(end);<NL>                return *map.add(start_word as usize) & mask != 0;~mask |= lower_bits(end);<NL>                return *map.add(start_word as usize) & mask != 0;
+nz_head~if *map.add(start_word as usize) & mask != 0 {<NL>                return true;<NL>            }<NL>            start_word += 1;~if *map.add(start_word as usize) & mask != 0 {<NL>                return true;<NL>            }<NL>            start_word += 0;
+nz_words~let mut i = start_word;<NL>        while i < end_word {<NL>            if *map.add(i as usize) != 0 {~let mut i = start_word;<NL>        while i + 1 < end_word {<NL>            if *map.add(i as usize) != 0 {
+nz_end0~if end % 32 == 0 {<NL>            return false;~if end % 32 == 0 {<NL>            return true;
+nz_tail~*map.add(end_word as usize) & lower_bits(end) != 0~*map.add(end_word as usize) != 0
+nz_upper~let mut mask = upper_bits(start);<NL>            if end_word == start_word {<NL>                mask &= lower_bits(end);<NL>                return~let mut mask = !0u32;<NL>            if end_word == start_word {<NL>                mask &= lower_bits(end);<NL>                return
+up_nullmask~let mut real_mask = if mask.is_null() { !0u32 } else { *mask };~let mut real_mask = if mask.is_null() { 0 } else { *mask };
+up_lt32~if nbits < 32 {<NL>                real_mask &= lower_bits(nbits);~if nbits < 31 {<NL>                real_mask &= lower_bits(nbits);
+up_new~let new_value = (*dst & !real_mask) | (*value & real_mask);~let new_value = (*dst & real_mask) | (*value & !real_mask);
+up_mod~if new_value != *dst {<NL>                *dst = new_value;<NL>                *modified = true;~if new_value != *dst {<NL>                *dst = new_value;<NL>                *modified = false;
+up_store~if new_value != *dst {<NL>                *dst = new_value;~if new_value != *dst {<NL>                *dst = *dst;
+up_dst~dst = dst.add(1);~dst = dst.add(0);
+up_val~value = value.add(1);~value = value.add(0);
+up_mask~if !mask.is_null() {<NL>                mask = mask.add(1);~if !mask.is_null() {<NL>                mask = mask.add(0);
+up_loop~while nbits > 0 {<NL>            let mut real_mask~while nbits > 1 {<NL>            let mut real_mask
+tb_idx~*map.add((index / 32) as usize) & (1u32 << (index % 32)) != 0~*map.add((index / 32) as usize) & (1u32 << (index % 31)) != 0
+eq_words~while i < (nbits / 32) as usize {~while i + 1 < (nbits / 32) as usize {
+eq_cmp~if *map1.add(i) != *map2.add(i) {<NL>                return false;~if *map1.add(i) == *map2.add(i) {<NL>                return false;
+eq_exact~if nbits % 32 == 0 {<NL>            return true;~if nbits % 32 == 0 {<NL>            return false;
+eq_tail~(*map1.add((nbits / 32) as usize) ^ *map2.add((nbits / 32) as usize)) & lower_bits(nbits % 32) == 0~(*map1.add((nbits / 32) as usize) ^ *map2.add((nbits / 32) as usize)) & !0u32 == 0
+strz_len~while n < ETH_GSTRING_LEN && *s.add(n) != 0 {~while n < ETH_GSTRING_LEN - 1 && *s.add(n) != 0 {
+strz_plus~nla_total_size(n as u32 + 1)~nla_total_size(n as u32)
+gstring~const ETH_GSTRING_LEN: usize = 32;~const ETH_GSTRING_LEN: usize = 31;
+sz_list~if mask.is_null() {<NL>            len = len.wrapping_add(nla_total_size(4));~if !mask.is_null() {<NL>            len = len.wrapping_add(nla_total_size(4));
+sz_size~        // size<NL>        len = len.wrapping_add(nla_total_size(4));~        // size<NL>        len = len.wrapping_add(nla_total_size(0));
+sz_nwords~let nwords = nbits.wrapping_add(31) / 32;~let nwords = nbits.wrapping_add(32) / 32;
+sz_cmask~(if mask.is_null() { 1u32 } else { 2u32 })~(if mask.is_null() { 2u32 } else { 1u32 })
+sz_cbytes~nla_total_size(nwords.wrapping_mul(4))~nla_total_size(nwords.wrapping_mul(8))
+sz_skip~if !ethnl_bitmap32_test_bit(if mask.is_null() { val } else { mask }, i) {~if !ethnl_bitmap32_test_bit(val, i) {
+sz_name~names.add(i as usize * ETH_GSTRING_LEN)~names.add(i as usize * ETH_GSTRING_LEN + 1)
+sz_nameadd~if !name.is_null() {<NL>                    bit_len = bit_len.wrapping_add(strz_size(name));~if name.is_null() {<NL>                    bit_len = bit_len.wrapping_add(strz_size(name));
+sz_value~if !mask.is_null() && ethnl_bitmap32_test_bit(val, i) {~if !mask.is_null() && !ethnl_bitmap32_test_bit(val, i) {
+sz_value0~bit_len = bit_len.wrapping_add(nla_total_size(0));~bit_len = bit_len.wrapping_add(nla_total_size(4));
+sz_bit~bits_len = bits_len.wrapping_add(nla_total_size(bit_len));~bits_len = bits_len.wrapping_add(bit_len);
+sz_bits~len = len.wrapping_add(nla_total_size(bits_len));~len = len.wrapping_add(bits_len);
+sz_out~nla_total_size(len) as c_int~len as c_int
+sz_idx~let mut bit_len = nla_total_size(4);~let mut bit_len = nla_total_size(0);
+sz_loop~while i < nbits {<NL>                let name~while i + 1 < nbits {<NL>                let name

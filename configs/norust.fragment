@@ -11,7 +11,7 @@
 # It is configs/fast.fragment with the Rust symbols turned off, so any
 # difference between the two arms is CONFIG_RUST and nothing else.
 
-# config-fast -- the ITERATION instrument (SCOPE.md §3).
+# config-fast -- the ITERATION instrument (notes/SCOPE.md §3).
 # Base: allnoconfig. Every line below is something a boot, a module load, or a
 # ported lib/ function actually needs. Nothing is here "in case".
 #
@@ -53,9 +53,9 @@ CONFIG_SHMEM=y
 CONFIG_BLK_DEV_INITRD=y
 CONFIG_RD_GZIP=y
 
-# --- Criterion 4 is unmeasurable without these (SCOPE.md §3), and the
+# --- Criterion 4 is unmeasurable without these (notes/SCOPE.md §3), and the
 # --- MODVERSIONS/GENDWARFKSYMS pair is what keeps CONFIG_RUST from being
-# --- silently dropped (PRIOR-ART.md §2).
+# --- silently dropped (notes/PRIOR-ART.md §2).
 CONFIG_MODULES=y
 CONFIG_MODULE_UNLOAD=y
 CONFIG_MODVERSIONS=y
@@ -75,7 +75,7 @@ CONFIG_SAMPLES=y
 
 # --- lib/glob: the first ported module. GLOB has no prompt upstream (it is
 # --- select-only), so port/tree/lib/Kconfig uncomments upstream's own commented
-# --- prompt; see the note there. GLOB_SELFTEST is the SCOPE.md §4 class-A proof
+# --- prompt; see the note there. GLOB_SELFTEST is the notes/SCOPE.md §4 class-A proof
 # --- caller and is not ours -- it ships in lib/globtest.c with a 63-case
 # --- corpus, and it is the reason this port needs no proof caller written for
 # --- it. It prints "glob: N self-tests passed, M failed" at boot.
@@ -111,3 +111,15 @@ CONFIG_CRYPTO_LIB_UTILS=y
 
 # --- lib/ucs2_string: UTF-16 to UTF-8, seven functions.
 CONFIG_UCS2_STRING=y
+
+# --- the same upstream oracles as fast.fragment (lib/bitmap, lib/random32): the C fallback arm is checked by the same tests.
+CONFIG_RUNTIME_TESTING_MENU=y
+CONFIG_TEST_BITMAP=y
+CONFIG_RANDOM32_SELFTEST=y
+
+# --- lib/string: upstream's own KUnit corpus (lib/tests/string_kunit.c: strcpy/strncpy/strcat/strncat/strchr/strnchr/strlen/strnlen/
+# --- strstr/strspn/... against hand-written expectations), the oracle for the Rust string port (2026-10-24).
+CONFIG_STRING_KUNIT_TEST=y
+
+# bootconfig is ported: both arms need the parser (the fast/full fragments add it to the Rust builds)
+CONFIG_BOOT_CONFIG=y

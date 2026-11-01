@@ -79,10 +79,10 @@ unsafe fn resize_if_needed(a: *mut MpiBitGcryMpi, b: c_uint) -> c_int {
 unsafe fn mpn_normalize(d: *const c_ulong, mut n: c_int) -> c_int {
     while n > 0 {
         // SAFETY: `n` limbs readable, `n > 0` here.
-        if unsafe { *d.add((n - 1) as usize) } != 0 {
+        if unsafe { *d.add((n.wrapping_sub(1)) as usize) } != 0 {
             break;
         }
-        n -= 1;
+        n = n.wrapping_sub(1);
     }
     n
 }
@@ -128,13 +128,13 @@ pub unsafe extern "C" fn mpi_get_nbits(a: *mut MpiBitGcryMpi) -> c_uint {
     let nlimbs = unsafe { (*a).nlimbs };
     if nlimbs != 0 {
         // SAFETY: `nlimbs > 0`, so index `nlimbs - 1` is valid.
-        let alimb = unsafe { *(*a).d.add((nlimbs - 1) as usize) };
+        let alimb = unsafe { *(*a).d.add((nlimbs.wrapping_sub(1)) as usize) };
         let n = if alimb != 0 {
             count_leading_zeros(alimb)
         } else {
             BITS_PER_MPI_LIMB
         };
-        BITS_PER_MPI_LIMB - n + (nlimbs as c_uint - 1) * BITS_PER_MPI_LIMB
+        BITS_PER_MPI_LIMB.wrapping_sub(n).wrapping_add((nlimbs as c_uint).wrapping_sub(1).wrapping_mul(BITS_PER_MPI_LIMB))
     } else {
         0
     }
@@ -194,13 +194,13 @@ pub unsafe extern "C" fn mpi_set_bit(a: *mut MpiBitGcryMpi, n: c_uint) -> c_int 
             let mut i = (*a).nlimbs;
             while i < (*a).alloced {
                 *(*a).d.add(i as usize) = 0;
-                i += 1;
+                i = i.wrapping_add(1);
             }
-            let err = mpi_resize(a, limbno + 1);
+            let err = mpi_resize(a, limbno.wrapping_add(1));
             if err != 0 {
                 return err;
             }
-            (*a).nlimbs = (limbno + 1) as c_int;
+            (*a).nlimbs = (limbno.wrapping_add(1)) as c_int;
         }
     }
     // SAFETY: `limbno < nlimbs` now, so this index is valid.
@@ -239,12 +239,12 @@ pub unsafe extern "C" fn mpi_rshift(x: *mut MpiBitGcryMpi, a: *mut MpiBitGcryMpi
             // one just read.
             unsafe {
                 let mut i: c_uint = 0;
-                while i < (*x).nlimbs as c_uint - nlimbs {
-                    *(*x).d.add(i as usize) = *(*x).d.add((i + nlimbs) as usize);
-                    i += 1;
+                while i < ((*x).nlimbs as c_uint).wrapping_sub(nlimbs) {
+                    *(*x).d.add(i as usize) = *(*x).d.add((i.wrapping_add(nlimbs)) as usize);
+                    i = i.wrapping_add(1);
                 }
                 *(*x).d.add(i as usize) = 0;
-                (*x).nlimbs -= nlimbs as c_int;
+                (*x).nlimbs = (*x).nlimbs.wrapping_sub(nlimbs as c_int);
             }
         }
         // SAFETY: `x` valid.
@@ -266,7 +266,7 @@ pub unsafe extern "C" fn mpi_rshift(x: *mut MpiBitGcryMpi, a: *mut MpiBitGcryMpi
             let mut i: c_int = 0;
             while i < (*a).nlimbs {
                 *(*x).d.add(i as usize) = *(*a).d.add(i as usize);
-                i += 1;
+                i = i.wrapping_add(1);
             }
             (*x).nlimbs = i;
         }
@@ -279,12 +279,12 @@ pub unsafe extern "C" fn mpi_rshift(x: *mut MpiBitGcryMpi, a: *mut MpiBitGcryMpi
         // SAFETY: as the in-place branch above.
         unsafe {
             let mut i: c_uint = 0;
-            while i < (*x).nlimbs as c_uint - nlimbs {
-                *(*x).d.add(i as usize) = *(*x).d.add((i + nlimbs) as usize);
-                i += 1;
+            while i < ((*x).nlimbs as c_uint).wrapping_sub(nlimbs) {
+                *(*x).d.add(i as usize) = *(*x).d.add((i.wrapping_add(nlimbs)) as usize);
+                i = i.wrapping_add(1);
             }
             *(*x).d.add(i as usize) = 0;
-            (*x).nlimbs -= nlimbs as c_int;
+            (*x).nlimbs = (*x).nlimbs.wrapping_sub(nlimbs as c_int);
         }
 
         if unsafe { (*x).nlimbs } != 0 && nbits != 0 {
@@ -310,7 +310,7 @@ pub unsafe extern "C" fn mpi_rshift(x: *mut MpiBitGcryMpi, a: *mut MpiBitGcryMpi
                     let mut i: c_int = 0;
                     while i < (*x).nlimbs {
                         *(*x).d.add(i as usize) = *(*a).d.add(i as usize);
-                        i += 1;
+                        i = i.wrapping_add(1);
                     }
                 }
             }

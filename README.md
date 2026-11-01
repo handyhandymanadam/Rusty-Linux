@@ -13,30 +13,93 @@ interesting as the port itself — that's most of what this repo is about.
 
 ## Status
 
-As of this snapshot:
+Snapshot of 2026-10-31 (the previous one was 2026-09-06). Numbers are
+`rig/progress.sh`'s own output on this tree, not hand-copied forward.
 
 | | files | lines |
 |---|---|---|
-| Ported (`config-full`, the authoritative build) | 98 / 128 buildable — **76.6%** | 23,135 / 41,570 — **55.7%** |
-| Ported (full candidate set) | 102 / 248 — 41.1% | 23,906 / 113,020 — 21.2% |
+| `lib/` candidates ported (both buildable configurations) | 145 / 145 — **100.0%** | 63,524 / 63,524 — **100.0%** |
 
-`config-full` is the number that matters: it's the kernel configuration this
-project treats as authoritative, versus `config-fast`, a smaller build used
-for quick iteration. The candidate-set percentage is smaller because it
-includes files that don't compile on x86-64 at all yet (see below) — porting
-one of those wouldn't be progress toward a kernel that boots, so it isn't
-counted as any.
+Of those 145 files, 98 have their C deleted outright; 47 keep a C entry
+that the port could not close. The fraction is 100% of the
+*candidates*, not of every file under `lib/`: code that neither verified
+configuration compiles on x86-64 (raid6's per-instruction-set SIMD variants,
+`crc/riscv`, `crc/s390`, `fdt*.c`, `vdso/`, options nothing turns on) is
+deferred, not excluded, until there is a cross-architecture test strategy.
+`drivers/` stays permanently out of scope for the reason given in the first
+snapshot: drivers consume `lib/` through the same MODVERSIONS ABI this
+project already verifies on every build.
 
-**Out of scope, deliberately:**
-- **`drivers/`** — permanently out. Drivers are `lib/`'s *consumers* through
-  the same MODVERSIONS ABI this project already verifies on every build;
-  porting a driver too would prove nothing the ABI check doesn't already
-  prove, and most of `drivers/` ships as loadable modules anyway.
-- **Architecture-specific code no available build compiles** (`raid6/`'s
-  per-instruction-set SIMD variants, `crc/riscv`, `crc/s390`, `fdt*.c`,
-  `fonts/`, `vdso/`) — 116 files, 70,679 lines. Not excluded, just deferred:
-  there's no boot to put them in and no test to run them against without a
-  cross-architecture QEMU strategy this project hasn't built yet.
+Latest gate result (last finished module, `net/ipv4/tcp_htcp.c`): in-kernel
+self-test suite 1,957 passed / 0 failed on the full configuration, 1,190 / 0
+on the fast configuration, exported-symbol fingerprint changes 0, the
+`CONFIG_RUST=n` fallback still builds, and all 85 sabotage mutants of the
+module's harness are caught.
+
+## What has been added since the first snapshot
+
+The first snapshot covered `lib/`. The port now reaches beyond it, one
+module at a time, under the same loop (differential test, integrate, build
+both configurations, boot, check the Rust was reached, check the ABI):
+
+| area | Rust files | examples |
+|---|---|---|
+| `lib/` | 156 | decompressors (gzip/inflate, bzip2, lz4, lzo, xz, zstd), sort, glob, plist, lockref, string helpers, radix-tree, rbtree, xarray, MPI, checksums |
+| `arch/x86` | 64 | real-mode boot code (A20, APM, EDD, video, memory map, command line), the compressed-kernel boot stub (page tables, KASLR, EFI, early IDT), CPU feature detection, e820, instruction decoder |
+| `kernel/` | 20 | scheduler load average, PELT and cputime arithmetic; clocksource, timer, NTP and time conversions; user namespaces, resource tree, sysctl, kallsyms, audit filter |
+| `crypto/` | 15 | AES, CBC, CTR, ECB, CMAC, GHASH, HMAC, MD5, SHA-256/512, SHA-3, LZO, RSA helpers |
+| `fs/` | 10 | mount-parameter parsing, ext4 directory hash, NLS code pages, Unicode UTF-8 normalisation and folding |
+| `net/` | 6 | TCP congestion control (BIC, CUBIC, H-TCP, Illinois), ethtool bitsets, network utilities |
+| `security/` | 6 | SELinux policy structures (avtab, ebitmap, hashtab, symtab, MLS, conditionals) |
+| `block/`, `init/` | 2 | GPT partition validation, init |
+
+Across `port/tree`: 281 Rust files, about 138,000 lines, and about 160
+per-module test harnesses in `port/test`. Other additions:
+
+- **Pre-boot Rust.** The kernel's pre-boot XZ decompressor engine is Rust,
+  linked through rules in the boot stub's Makefile; the real-mode and
+  compressed-stub boot code have Rust ports in the tree as well. A defect found on the way: five ported decompressors had lost
+  their pre-boot arm, so five `KERNEL_*` compression choices did not build;
+  restored and covered by `rig/codec-check.sh`.
+- **More of the verification rig**: a KASAN-instrumented build, a build with
+  no Rust at all (`CONFIG_RUST=n`) as the control, the pristine C baseline
+  kernels, GPT disk images for the partition code (`rig/disk-check.sh`), a
+  module-load check, and a gate script that runs build, boot and fingerprint
+  check as one step.
+- **Cross-architecture rigs**: `qemu-system-aarch64` and `qemu-system-riscv64`
+  test rigs (`rig/boot-arm64.sh`, `configs/arm64*.fragment`, and the riscv64
+  equivalents). The riscv64 build of the ported tree boots with the Rust
+  reached and shows 0 changed, 0 added, 0 removed exported-symbol
+  fingerprints.
+- **Sabotage checks for every harness** (the "capable of disagreeing"
+  principle below), with mutant counts recorded per module.
+
+Parked work that is not finished is not in this repository (for example, the
+`tcp_westwood` port was still being wired in at the time of this snapshot).
+
+## Benchmarks
+
+There is one published performance series, and it is deliberately modest.
+
+**Boot to userspace**, `rig/boot.sh`, five runs per row, QEMU/KVM, 1 GiB, 2
+CPUs, Linux 6.18.49, rustc 1.98.0, wall clock at 0.1 s resolution. Recorded
+2026-09-02 and 2026-09-03; **not re-run for this snapshot**.
+
+| ported modules | functions in Rust | `config-fast` boot | `config-full` boot |
+|---|---|---|---|
+| 0 (pure C baseline) | 0 | 0.4 s | 1.5 s |
+| 1 (`lib/glob`) | — | 0.4 s | 1.4 s |
+| 25 | 53 | 0.4 s | 1.5 s |
+| 38 | 73 | 0.4 s | 1.5 s |
+
+What this does and does not say: the instrument reports to 0.1 s on a
+0.4 s boot, so it cannot resolve one module. It says nothing broke and
+nothing moved by a tenth of a second, including after `sort()` and the first
+decompressor (on the path that unpacks the initramfs) became Rust. It is
+**not** a claim that any module is faster. A per-module microbenchmark rig
+exists (`rig/perf/`, one binary with both arms chosen at runtime, worst
+control deviation 0.99%) but its Rust arms are built without the kernel's
+overflow checks, so its numbers are optimistic and are not published here.
 
 ## Why this is hard in a way that isn't obvious
 

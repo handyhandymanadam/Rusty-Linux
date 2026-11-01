@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Prove the differential can fail.
 #
-# GOALS.md and PRIOR-ART.md §5 both say the same thing: a test that has never
+# notes/GOALS.md and notes/PRIOR-ART.md §5 both say the same thing: a test that has never
 # failed is not known to work. This breaks the Rust in nine specific ways,
 # one at a time, and checks the differential notices each. Every sabotage is
 # a plausible porting slip rather than a random mutation -- an off-by-one in

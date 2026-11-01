@@ -273,7 +273,7 @@ fn pc_parent(pc: usize) -> *mut IntervalTreeRbNode {
 #[inline(always)]
 unsafe fn rb_set_parent(rb: *mut IntervalTreeRbNode, p: *mut IntervalTreeRbNode) {
     // SAFETY: caller guarantees `rb` is valid.
-    unsafe { (*rb).rb_parent_color = rb_color(rb) + p as usize };
+    unsafe { (*rb).rb_parent_color = (rb_color(rb)).wrapping_add(p as usize) };
 }
 
 /// `rb_set_parent_color()`: set both at once.
@@ -283,7 +283,7 @@ unsafe fn rb_set_parent(rb: *mut IntervalTreeRbNode, p: *mut IntervalTreeRbNode)
 #[inline(always)]
 unsafe fn rb_set_parent_color(rb: *mut IntervalTreeRbNode, p: *mut IntervalTreeRbNode, color: usize) {
     // SAFETY: caller guarantees `rb` is valid.
-    unsafe { (*rb).rb_parent_color = p as usize + color };
+    unsafe { (*rb).rb_parent_color = (p as usize).wrapping_add(color) };
 }
 
 /// `__rb_change_child()`: point `parent`'s link at `new` where it pointed

@@ -1,0 +1,94 @@
+nfree_size_gt~if size as usize > len {~if size as usize >= len {
+nfree_shift~size >>= SHIFT;<NL>            for i in 0..len {~size >>= SHIFT - 1;<NL>            for i in 0..len {
+nalloc_min~if nbuckets < (1usize << (SHIFT + 1)) {~if nbuckets <= (1usize << (SHIFT + 1)) {
+nest_formula~(nbuckets.ilog2() - 1) % SHIFT + 1~nbuckets.ilog2() % SHIFT + 1
+alloc_blocking~if tbl.is_null() && !rust_rhw_gfp_allow_blocking(gfp) {~if tbl.is_null() && rust_rhw_gfp_allow_blocking(gfp) {
+alloc_size_prepare~rust_rhw_tbl_prepare(tbl, size);~rust_rhw_tbl_prepare(tbl, if nbuckets == 0 { 0 } else { size });
+rone_nest~if (*new_tbl).nest != 0 {<NL>            return err;~if (*new_tbl).nest > 1 {<NL>            return err;
+rone_pprev~pprev = next_of(entry);~pprev = null_mut();
+rone_head~let head = rht_ptr(nb);~let head = 1usize;
+rone_pprev_store~st_release(pprev, next);~st_release(pprev, 0);
+rchain_enoent~if err == -ENOENT {<NL>            err = 0;~if err == -EAGAIN {<NL>            err = 0;
+rtable_walkers~(*(pos as *mut Walker)).tbl = null_mut();~let _ = pos;
+rtable_ret~if ld(addr_of!((*new_tbl).future_tbl)) != 0 {<NL>            -EAGAIN~if ld(addr_of!((*new_tbl).future_tbl)) == 0 {<NL>            -EAGAIN
+ralloc_double~rhashtable_rehash_alloc(ht, tbl, (*tbl).size.wrapping_mul(2))~rhashtable_rehash_alloc(ht, tbl, (*tbl).size)
+shrink_ratio~(nelems.wrapping_mul(3) / 2)~(nelems.wrapping_mul(3) / 3)
+shrink_future~if ld(addr_of!((*old_tbl).future_tbl)) != 0 {<NL>            return -EEXIST;~if ld(addr_of!((*old_tbl).future_tbl)) == 0 {<NL>            return -EEXIST;
+worker_shrinking_flag~(*ht).p.automatic_shrinking && shrink_below_30(ht, tbl)~shrink_below_30(ht, tbl)
+worker_nest~} else if (*tbl).nest != 0 {<NL>            err = rhashtable_rehash_alloc(ht, tbl, (*tbl).size);~} else if false {<NL>            err = rhashtable_rehash_alloc(ht, tbl, (*tbl).size);
+worker_eexist~if err == 0 || err == -EEXIST {~if err == 0 {
+worker_err~err = if err != 0 { err } else { nerr };~err = nerr;
+irehash_double~size = size.wrapping_mul(2);~size = size.wrapping_mul(4);
+irehash_old~} else if old_tbl != tbl {~} else if old_tbl == tbl {
+irehash_sched~err = rhashtable_rehash_attach(ht, tbl, new_tbl);<NL>            if err != 0 {~err = rhashtable_rehash_attach(ht, tbl, new_tbl);<NL>            if err == 0 {
+irehash_fail_future~if ld(addr_of!((*tbl).future_tbl)) != 0 {<NL>            return 0;~if ld(addr_of!((*tbl).future_tbl)) == 0 {<NL>            return 0;
+irehash_nomem_sched~if err == -ENOMEM {<NL>            rust_rhw_schedule_work(ht);<NL>        }<NL>        err~if err == -EBUSY_ {<NL>            rust_rhw_schedule_work(ht);<NL>        }<NL>        err
+lookup_elast_dec~elasticity -= 1;~elasticity -= 2;
+lookup_elast_cmp~if elasticity <= 0 {~if elasticity < 0 {
+lookup_nokey~if key.is_null() || rust_rhw_cmp~if rust_rhw_cmp
+lookup_rhl~if !(*ht).rhlist {<NL>                return rht_obj(ht, head) as usize;~if (*ht).rhlist {<NL>                return rht_obj(ht, head) as usize;
+lookup_rhl_next~st_once(addr_of_mut!((*list).rhead.next), nxt);~st_once(addr_of_mut!((*list).rhead.next), nxt & 0);
+lookup_rhl_pprev~if !pprev.is_null() {<NL>                st_release(pprev, obj as usize);~if pprev.is_null() {<NL>                st_release(pprev, obj as usize);
+ins_one_or~if ptr_err(data) != -EAGAIN as isize && ptr_err(data) != -ENOENT as isize {~if ptr_err(data) != -EAGAIN as isize || ptr_err(data) != -ENOENT as isize {
+ins_one_future~let new_tbl = ld(addr_of!((*tbl).future_tbl));<NL>        if new_tbl != 0 {~let new_tbl = ld(addr_of!((*tbl).future_tbl));<NL>        if new_tbl == 0 {
+ins_one_max~if grow_above_max(ht, tbl) {<NL>            return err_ptr(-E2BIG);~if !grow_above_max(ht, tbl) {<NL>            return err_ptr(-E2BIG);
+ins_one_e2big~return err_ptr(-E2BIG);~return err_ptr(-E2BIG + 1);
+ins_one_100~if grow_above_100(ht, tbl) {<NL>            return err_ptr(-EAGAIN);~if grow_above_100(ht, tbl) {<NL>            return err_ptr(-EEXIST);
+ins_one_head~let head = rht_ptr(bkt);<NL><NL>        st_once(next_of(obj as usize), head);~let head = rht_ptr(bkt);<NL><NL>        st_once(next_of(obj as usize), head & 1);
+ins_one_rhl_next~st_once(addr_of_mut!((*list).next) as *mut usize, 0);<NL>        }<NL><NL>        // bkt~let _ = list;<NL>        }<NL><NL>        // bkt
+try_inserted~let inserted = data != 0 && new_tbl == 0;~let inserted = data == 0 && new_tbl == 0;
+try_nelems~fetch_add(1, Ordering::SeqCst)~fetch_add(2, Ordering::SeqCst)
+try_eexist~if ptr_err(new_tbl) != -EEXIST as isize {~if ptr_err(new_tbl) == -EEXIST as isize {
+try_sched75~if inserted && grow_above_75(ht, tbl) {~if grow_above_75(ht, tbl) {
+try_future_var~if ld(addr_of!((*tbl).future_tbl)) != 0 {<NL>                // Failure is OK~if ld(addr_of!((*tbl).future_tbl)) == 0 {<NL>                // Failure is OK
+try_rehash_err~data = err_ptr(if e != 0 { e } else { -EAGAIN });~data = err_ptr(-EAGAIN + e * 0);
+slow_loop~if ptr_err(data) != -EAGAIN as isize {<NL>                break;~if true {<NL>                break;
+walk_enter_eot~(*iter).end_of_table = false;~(*iter).end_of_table = true;
+walk_enter_slot~(*iter).slot = 0;<NL>        (*iter).skip = 0;<NL>        (*iter).end_of_table = false;~(*iter).slot = 1;<NL>        (*iter).skip = 0;<NL>        (*iter).end_of_table = false;
+start_eot~if (*iter).end_of_table {<NL>            return 0;~if !(*iter).end_of_table {<NL>            return 0;
+start_rewind_slot~(*iter).slot = 0;<NL>            (*iter).skip = 0;<NL>            (*iter).p = null_mut();<NL>            return -EAGAIN;~(*iter).slot = 0;<NL>            (*iter).skip = 1;<NL>            (*iter).p = null_mut();<NL>            return -EAGAIN;
+start_skip~skip += 1;<NL>                if p == (*iter).p as usize {~skip += 2;<NL>                if p == (*iter).p as usize {
+start_rhl_skip~skip += 1;<NL>                    if list == (*iter).list {~skip += 2;<NL>                    if list == (*iter).list {
+start_rhl_p~(*iter).p = p as *mut RhashHead;<NL>                        (*iter).skip = skip as c_uint;~(*iter).skip = skip as c_uint;
+find_skip~skip -= 1;<NL>                        list =~skip -= 2;<NL>                        list =
+find_skip_plain~if skip == 0 {<NL>                    break;<NL>                }<NL>                skip -= 1;~if skip == 0 {<NL>                    break;<NL>                }<NL>                skip -= 2;
+find_skipinc~(*iter).skip = (*iter).skip.wrapping_add(1);<NL>                (*iter).p = p as *mut RhashHead;<NL>                (*iter).list = list;<NL>                return rht_obj(ht, if rhlist { list as usize } else { p }) as usize;~(*iter).skip = (*iter).skip.wrapping_add(2);<NL>                (*iter).p = p as *mut RhashHead;<NL>                (*iter).list = list;<NL>                return rht_obj(ht, if rhlist { list as usize } else { p }) as usize;
+find_eot~(*iter).end_of_table = true;<NL><NL>        0~(*iter).end_of_table = false;<NL><NL>        0
+find_future~if !(*iter).walker.tbl.is_null() {<NL>            (*iter).slot = 0;<NL>            (*iter).skip = 0;<NL>            return err_ptr(-EAGAIN);~if (*iter).walker.tbl.is_null() {<NL>            (*iter).slot = 0;<NL>            (*iter).skip = 0;<NL>            return err_ptr(-EAGAIN);
+next_skip0~// At the end of this slot, switch to next one and then find next entry from that point.<NL>            (*iter).skip = 0;~// At the end of this slot, switch to next one and then find next entry from that point.<NL>            (*iter).skip = 1;
+next_slot~(*iter).slot = (*iter).slot.wrapping_add(1);<NL>        }<NL><NL>        walk_find_next(iter) as *mut c_void~(*iter).slot = (*iter).slot.wrapping_add(2);<NL>        }<NL><NL>        walk_find_next(iter) as *mut c_void
+next_rhl~let advance = if !rhlist {~let advance = if rhlist {
+peek_skip~(*iter).skip -= 1;~(*iter).skip -= 0;
+stop_after~if rust_rhw_after_call_rcu(tbl) {~if !rust_rhw_after_call_rcu(tbl) {
+init_minsize~roundup_pow_of_two((*params).min_size as u64) as u16~(*params).min_size
+init_maxelems~(*ht).max_elems = 1u32 << 31;~(*ht).max_elems = 1u32 << 30;
+init_maxsize_cmp~if (*ht).p.max_size < (*ht).max_elems / 2 {~if (*ht).p.max_size <= (*ht).max_elems / 2 {
+init_maxelems2~(*ht).max_elems = (*ht).p.max_size * 2;~(*ht).max_elems = (*ht).p.max_size * 3;
+init_rounddown~rounddown_pow_of_two((*params).max_size as u64) as c_uint~rounddown_pow_of_two((*params).max_size as u64 + 1) as c_uint
+init_keylen4~if (*ht).key_len & (4 - 1) == 0 {~if (*ht).key_len & (8 - 1) == 0 {
+init_keylen_div~(*ht).key_len /= 4;~(*ht).key_len /= 2;
+init_minmax~core::cmp::max((*ht).p.min_size, HASH_MIN_SIZE as u16);<NL><NL>        let mut size~core::cmp::min((*ht).p.min_size, HASH_MIN_SIZE as u16);<NL><NL>        let mut size
+init_hint~(params.nelem_hint as c_int * 4 / 3)~(params.nelem_hint as c_int * 3 / 4)
+init_default~core::cmp::max(HASH_DEFAULT_SIZE, params.min_size as u64)~core::cmp::max(HASH_DEFAULT_SIZE / 2, params.min_size as u64)
+init_nofail~size = core::cmp::max((*ht).p.min_size, HASH_MIN_SIZE as u16) as usize;~size = 1;
+init_einval~if ((*params).key_len == 0 && (*params).obj_hashfn.is_none())~if ((*params).key_len == 0 && (*params).obj_hashfn.is_some())
+init_einval2~((*params).obj_hashfn.is_some() && (*params).obj_cmpfn.is_none())~((*params).obj_hashfn.is_some() && (*params).obj_cmpfn.is_some())
+fad_future~let next_tbl = ld(addr_of!((*tbl).future_tbl)) as *mut Tbl;<NL>            rust_rht_bucket_table_free(tbl);~let next_tbl = null_mut::<Tbl>();<NL>            rust_rht_bucket_table_free(tbl);
+fad_next~let mut next = if !is_nulls(pos) { ld(next_of(pos)) } else { 0 };<NL>                    while~let mut next = 0;<NL>                    while
+free_one_rhl~if !(*ht).rhlist {<NL>            free_fn(rht_obj(ht, obj), arg);<NL>            return;~if (*ht).rhlist {<NL>            free_fn(rht_obj(ht, obj), arg);<NL>            return;
+nested_sub~ntbl.add(subhash as usize)~ntbl.add(0)
+nested_index~index = (subhash & ((1u32 << SHIFT) - 1)) as usize;~index = (subhash & ((1u32 << SHIFT) - 2)) as usize;
+nested_size~while !ntbl.is_null() && size > (1u32 << SHIFT) {<NL>            index = (subhash~while !ntbl.is_null() && size >= (1u32 << SHIFT) {<NL>            index = (subhash
+nins_leaf~size <= (1u32 << SHIFT));<NL><NL>        while~size < (1u32 << SHIFT));<NL><NL>        while
+nins_hash~hash >>= nest;<NL>        let mut ntbl~hash >>= nest + 1;<NL>        let mut ntbl
+g75~(*tbl).size / 4 * 3~(*tbl).size / 4 * 2
+g75_max~((*ht).p.max_size == 0 || (*tbl).size < (*ht).p.max_size)<NL>    }<NL>}<NL><NL>/// `rht_shrink~((*ht).p.max_size == 0 || (*tbl).size <= (*ht).p.max_size)<NL>    }<NL>}<NL><NL>/// `rht_shrink
+s30~(*tbl).size.wrapping_mul(3) / 10~(*tbl).size.wrapping_mul(3) / 5
+s30_min~(*tbl).size > (*ht).p.min_size as u32~(*tbl).size >= (*ht).p.min_size as u32
+g100~(nelems_read(ht) as u32) > (*tbl).size &&~(nelems_read(ht) as u32) >= (*tbl).size &&
+gmax~(nelems_read(ht) as u32) >= (*ht).max_elems~(nelems_read(ht) as u32) > (*ht).max_elems
+nulls_marker~1 | (((bkt as usize) >> 1) << 1)~1 | (bkt as usize)
+assign_locked_nulls~let obj = if is_nulls(obj) { 0 } else { obj };~let obj = obj;
+bucket_var_nest~if (*tbl).nest != 0 {<NL>            rust___rht_bucket_nested(tbl, hash)~if (*tbl).nest > 1 {<NL>            rust___rht_bucket_nested(tbl, hash)
+walk_exit_tbl~if !(*iter).walker.tbl.is_null() {<NL>            rust_rhw_list_del(addr_of_mut!((*iter).walker.list));<NL>        }<NL>        rust_rhw_spin_unlock((*iter).ht);~if (*iter).walker.tbl.is_null() {<NL>            rust_rhw_list_del(addr_of_mut!((*iter).walker.list));<NL>        }<NL>        rust_rhw_spin_unlock((*iter).ht);
+worker_resched~        rust_rhw_mutex_unlock(ht);<NL><NL>        if err != 0 {~        rust_rhw_mutex_unlock(ht);<NL><NL>        if err != 0 && err != -EEXIST {

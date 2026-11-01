@@ -1,0 +1,85 @@
+mr_zero~if ca.min_rtt > srtt || ca.min_rtt == 0 {~if ca.min_rtt > srtt {
+mr_zero2~if ca.min_rtt > srtt || ca.min_rtt == 0 {~if ca.min_rtt < srtt || ca.min_rtt == 0 {
+mr_open~if ca_state == TCP_CA_OPEN {<NL>        if ca.max_rtt < ca.min_rtt {~if ca_state != TCP_CA_OPEN {<NL>        if ca.max_rtt < ca.min_rtt {
+mr_maxmin~if ca.max_rtt < ca.min_rtt {~if ca.max_rtt <= ca.min_rtt + 1 {
+mr_maxmin_set~ca.max_rtt = ca.min_rtt;~ca.max_rtt = srtt;
+mr_le~(srtt as u64) <= ca.max_rtt as u64 + ms20 as u64~(srtt as u64) < ca.max_rtt as u64 + ms20 as u64
+mr_set~ca.max_rtt = srtt;~ca.max_rtt = srtt + 1;
+th_open~if ca_state == TCP_CA_OPEN {<NL>        ca.pkts_acked = pkts_acked as u16;~if ca_state != TCP_CA_OPEN {<NL>        ca.pkts_acked = pkts_acked as u16;
+th_pk~ca.pkts_acked = pkts_acked as u16;~ca.pkts_acked = pkts_acked as u16 + 1;
+th_rtt~if has_rtt != 0 {~if has_rtt == 0 {
+th_bw~if use_bandwidth_switch == 0 {<NL>        return;~if use_bandwidth_switch != 0 {<NL>        return;
+th_mask~& 0b11) == 0 {~& 0b01) == 0 {
+th_mask2~& 0b11) == 0 {~& 0b10) == 0 {
+th_reset_pc~ca.packetcount = 0;<NL>        ca.lasttime = now;<NL>        return;~ca.lasttime = now;<NL>        return;
+th_reset_lt~ca.packetcount = 0;<NL>        ca.lasttime = now;<NL>        return;~ca.packetcount = 0;<NL>        return;
+th_add~ca.packetcount = ca.packetcount.wrapping_add(pkts_acked);~ca.packetcount = ca.packetcount.wrapping_add(1);
+th_alpha~let alpha_pkts = if ca.alpha >> 7 != 0 { ca.alpha >> 7 } else { 1 };~let alpha_pkts = ca.alpha >> 7;
+th_alpha2~let alpha_pkts = if ca.alpha >> 7 != 0 { ca.alpha >> 7 } else { 1 };~let alpha_pkts = 1;
+th_ge~if ca.packetcount >= cwnd.wrapping_sub(alpha_pkts)~if ca.packetcount > cwnd.wrapping_sub(alpha_pkts)
+th_time~now.wrapping_sub(ca.lasttime) >= ca.min_rtt~now.wrapping_sub(ca.lasttime) > ca.min_rtt
+th_minrtt~&& ca.min_rtt > 0 {~&& ca.min_rtt > 1 {
+th_bi~ca.packetcount.wrapping_mul(hz) / now.wrapping_sub(ca.lasttime)~ca.packetcount.wrapping_mul(hz) / (now.wrapping_sub(ca.lasttime) + 1)
+th_3~if cong_time(ca, jiffies) / ca.min_rtt <= 3 {~if cong_time(ca, jiffies) / ca.min_rtt < 3 {
+th_3b~if cong_time(ca, jiffies) / ca.min_rtt <= 3 {~if cong_time(ca, jiffies) / ca.min_rtt <= 4 {
+th_minb~ca.min_b = cur_bi;<NL>            ca.max_b = cur_bi;~ca.max_b = cur_bi;
+th_maxb~ca.min_b = cur_bi;<NL>            ca.max_b = cur_bi;~ca.min_b = cur_bi;
+th_bi_set~ca.max_b = cur_bi;<NL>            ca.bi = cur_bi;~ca.max_b = cur_bi;
+th_avg~ca.bi = ca.bi.wrapping_mul(3).wrapping_add(cur_bi) / 4;~ca.bi = ca.bi.wrapping_mul(3).wrapping_add(cur_bi) / 2;
+th_avg2~ca.bi = ca.bi.wrapping_mul(3).wrapping_add(cur_bi) / 4;~ca.bi = ca.bi.wrapping_mul(2).wrapping_add(cur_bi) / 3;
+th_maxup~if ca.bi > ca.max_b {~if ca.bi >= ca.max_b + 1000000 {
+th_maxup2~if ca.bi > ca.max_b {<NL>                ca.max_b = ca.bi;~if ca.bi > ca.max_b {<NL>                ca.max_b = ca.bi + 1;
+th_minup~if ca.min_b > ca.max_b {~if ca.min_b >= ca.max_b + 1000000 {
+th_minup2~ca.min_b = ca.max_b;<NL>            }<NL>        }~ca.min_b = ca.bi;<NL>            }<NL>        }
+th_end_pc~ca.packetcount = 0;<NL>        ca.lasttime = now;<NL>    }<NL>}~ca.lasttime = now;<NL>    }<NL>}
+th_end_lt~ca.packetcount = 0;<NL>        ca.lasttime = now;<NL>    }<NL>}~ca.packetcount = 0;<NL>    }<NL>}
+bt_bw~if use_bandwidth_switch != 0 {<NL>        let max_b~if use_bandwidth_switch == 0 {<NL>        let max_b
+bt_old~ca.old_max_b = ca.max_b;~
+bt_5~let (s1, s2, s3) = (max_b.wrapping_mul(5)~let (s1, s2, s3) = (max_b.wrapping_mul(4)
+bt_4~max_b.wrapping_mul(5), old_max_b.wrapping_mul(4)~max_b.wrapping_mul(5), old_max_b.wrapping_mul(5)
+bt_6~old_max_b.wrapping_mul(6))~old_max_b.wrapping_mul(7))
+bt_between~if s3.wrapping_sub(s2) < s1.wrapping_sub(s2) {~if s3.wrapping_sub(s2) <= s1.wrapping_sub(s2) {
+bt_between2~if s3.wrapping_sub(s2) < s1.wrapping_sub(s2) {~if s3.wrapping_sub(s2) > s1.wrapping_sub(s2) {
+bt_min~ca.beta = BETA_MIN;<NL>            ca.modeswitch = 0;~ca.beta = BETA_MAX;<NL>            ca.modeswitch = 0;
+bt_mode0~ca.beta = BETA_MIN;<NL>            ca.modeswitch = 0;~ca.beta = BETA_MIN;<NL>            ca.modeswitch = 1;
+bt_switch~if ca.modeswitch != 0 && min_rtt > ms10 && max_rtt != 0 {~if ca.modeswitch == 0 && min_rtt > ms10 && max_rtt != 0 {
+bt_ms10~min_rtt > ms10 && max_rtt != 0~min_rtt >= ms10 && max_rtt != 0
+bt_max0~min_rtt > ms10 && max_rtt != 0~min_rtt > ms10
+bt_calc~ca.beta = ((min_rtt << 7) / max_rtt) as u8;~ca.beta = ((min_rtt << 6) / max_rtt) as u8;
+bt_trunc~ca.beta = ((min_rtt << 7) / max_rtt) as u8;~ca.beta = ((min_rtt << 7) / max_rtt).min(255) as u8;
+bt_lo_val~ca.beta = BETA_MIN;<NL>        } else if~ca.beta = BETA_MIN + 1;<NL>        } else if
+bt_hi_val~ca.beta = BETA_MAX;<NL>        }~ca.beta = BETA_MAX - 1;<NL>        }
+bt_else~ca.beta = BETA_MIN;<NL>        ca.modeswitch = 1;~ca.beta = BETA_MIN;<NL>        ca.modeswitch = 0;
+al_sub~diff -= hz;~diff -= hz / 2;
+al_f~factor = 1u32.wrapping_add(diff.wrapping_mul(10)~factor = 1u32.wrapping_add(diff.wrapping_mul(9)
+al_f2~(diff / 2).wrapping_mul(diff / 2) / hz~(diff / 2).wrapping_mul(diff / 2) / (hz * 2)
+al_f3~/ hz) / hz);~/ hz) / (hz * 2));
+al_f4~factor = 1u32.wrapping_add(~factor = 0u32.wrapping_add(
+al_rs~if use_rtt_scaling != 0 && min_rtt != 0 {~if use_rtt_scaling == 0 && min_rtt != 0 {
+al_rs0~if use_rtt_scaling != 0 && min_rtt != 0 {~if use_rtt_scaling != 0 {
+al_scale~let mut scale = (hz << 3) / min_rtt.wrapping_mul(10);~let mut scale = (hz << 3) / min_rtt.wrapping_mul(8);
+al_scale2~let mut scale = (hz << 3) / min_rtt.wrapping_mul(10);~let mut scale = (hz << 2) / min_rtt.wrapping_mul(10);
+al_clamp_lo~scale.clamp(1 << 2, 10 << 3)~scale.clamp(1 << 3, 10 << 3)
+al_clamp_hi~scale.clamp(1 << 2, 10 << 3)~scale.clamp(1 << 2, 8 << 3)
+al_factor~factor = (factor << 3) / scale;~factor = (factor << 2) / scale;
+al_zero~if factor == 0 {<NL>            factor = 1;~if factor == 0 {<NL>            factor = 2;
+al_zero_chk~if factor == 0 {<NL>            factor = 1;~if factor == 1 {<NL>            factor = 1;
+al_alpha~ca.alpha = factor.wrapping_mul(2).wrapping_mul((128i32 - ca.beta as i32) as u32);~ca.alpha = factor.wrapping_mul(2).wrapping_mul((127i32 - ca.beta as i32) as u32);
+al_alpha2~factor.wrapping_mul(2).wrapping_mul(~factor.wrapping_mul(3).wrapping_mul(
+al_base~if ca.alpha == 0 {<NL>        ca.alpha = ALPHA_BASE;~if ca.alpha == 0 {<NL>        ca.alpha = 1;
+al_base_chk~if ca.alpha == 0 {<NL>        ca.alpha = ALPHA_BASE;~if ca.alpha == 1 {<NL>        ca.alpha = ALPHA_BASE;
+pu_beta_first~beta_update(ca, min_rtt, max_rtt, use_bandwidth_switch, ms10);<NL>    alpha_update(ca, jiffies, hz, use_rtt_scaling);~alpha_update(ca, jiffies, hz, use_rtt_scaling);<NL>    beta_update(ca, min_rtt, max_rtt, use_bandwidth_switch, ms10);
+pu_fade0~if min_rtt > 0 && max_rtt > min_rtt {~if max_rtt > min_rtt {
+pu_fade95~(max_rtt - min_rtt).wrapping_mul(95) / 100~(max_rtt - min_rtt).wrapping_mul(90) / 100
+pu_fade_base~ca.max_rtt = min_rtt.wrapping_add(~ca.max_rtt = max_rtt.wrapping_add(
+ss_shift~(cwnd.wrapping_mul(ca.beta as u32) >> 7).max(2)~(cwnd.wrapping_mul(ca.beta as u32) >> 6).max(2)
+ss_floor~(cwnd.wrapping_mul(ca.beta as u32) >> 7).max(2)~(cwnd.wrapping_mul(ca.beta as u32) >> 7).max(1)
+ai_ge~if (cnt.wrapping_mul(ca.alpha) >> 7) >= *cwnd {~if (cnt.wrapping_mul(ca.alpha) >> 7) > *cwnd {
+ai_shift~if (cnt.wrapping_mul(ca.alpha) >> 7) >= *cwnd {~if (cnt.wrapping_mul(ca.alpha) >> 6) >= *cwnd {
+ai_clamp~if *cwnd < clamp {~if *cwnd <= clamp {
+ai_inc~*cwnd = cwnd.wrapping_add(1);~*cwnd = cwnd.wrapping_add(2);
+ai_changed~            changed = 1;<NL>        }~            changed = 0;<NL>        }
+ai_cnt0~*cnt = 0;<NL>        alpha_update~alpha_update
+ai_alpha~*cnt = 0;<NL>        alpha_update(ca, jiffies, hz, use_rtt_scaling);~*cnt = 0;
+ai_else~*cnt = cnt.wrapping_add(ca.pkts_acked as u32);~*cnt = cnt.wrapping_add(1);
+ai_pk~ca.pkts_acked = 1;~ca.pkts_acked = 0;

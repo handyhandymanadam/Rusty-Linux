@@ -1,0 +1,92 @@
+hash_c1~const C1: u32 = 0xcc9e2d51;~const C1: u32 = 0xcc9e2d50;
+hash_c2~const C2: u32 = 0x1b873593;~const C2: u32 = 0x1b873592;
+hash_r1~const R1: u32 = 15;~const R1: u32 = 14;
+hash_r2~const R2: u32 = 13;~const R2: u32 = 12;
+hash_m~const M: u32 = 5;~const M: u32 = 4;
+hash_n~const N: u32 = 0xe6546b64;~const N: u32 = 0xe6546b65;
+hash_order~mix(keyp.target_class as u32);<NL>    mix(keyp.target_type as u32);<NL>    mix(keyp.source_type as u32);~mix(keyp.source_type as u32);<NL>    mix(keyp.target_type as u32);<NL>    mix(keyp.target_class as u32);
+hash_f1~hash ^= hash >> 16;<NL>    hash = hash.wrapping_mul(0x85ebca6b);~hash ^= hash >> 15;<NL>    hash = hash.wrapping_mul(0x85ebca6b);
+hash_f2~hash ^= hash >> 13;~hash ^= hash >> 12;
+hash_f3~hash = hash.wrapping_mul(0xc2b2ae35);~hash = hash.wrapping_mul(0xc2b2ae34);
+hash_f4~hash ^= hash >> 16;<NL><NL>    hash & mask~hash ^= hash >> 15;<NL><NL>    hash & mask
+hash_mask~    hash & mask~    hash
+ins_node_xp~if (*key).specified as u32 & AVTAB_XPERMS != 0 {<NL>            let xperms = rust_av_xperms_alloc();~if (*key).specified as u32 & AVTAB_XPERMS == 0 {<NL>            let xperms = rust_av_xperms_alloc();
+ins_node_free~rust_av_node_free(newnode);<NL>                return null_mut();~return null_mut();
+ins_node_copy~*xperms = *(*datum).xperms;~(*xperms).perms = (*(*datum).xperms).perms;
+ins_node_nel~(*h).nel += 1;~(*h).nel += 2;
+ins_node_next~(*newnode).next = *dst;~(*newnode).next = null_mut();
+ins_node_dst~*dst = newnode;<NL><NL>        (*h).nel~(*h).nel
+cmp_spec~let specified = key1.specified & !(AVTAB_ENABLED | (AVTAB_ENABLED_OLD as u16));~let specified = key1.specified;
+cmp_and~(specified & key2.specified) != 0~(specified | key2.specified) != 0
+cmp_src~if key1.source_type < key2.source_type {<NL>        return -1;~if key1.source_type > key2.source_type {<NL>        return -1;
+cmp_tgt~if key1.source_type == key2.source_type && key1.target_type < key2.target_type {~if key1.target_type < key2.target_type {
+cmp_cls~key1.target_class < key2.target_class {<NL>        return -1;~key1.target_class <= key2.target_class {<NL>        return -1;
+ins_exist~if cmp == 0 && (*key).specified as u32 & AVTAB_XPERMS == 0 {<NL>                return -EEXIST;~if cmp == 0 {<NL>                return -EEXIST;
+ins_exist2~if cmp == 0 && (*key).specified as u32 & AVTAB_XPERMS == 0 {~if cmp == 0 && (*key).specified as u32 & AVTAB_XPERMS != 0 {
+ins_break~if cmp <= 0 {<NL>                break;<NL>            }<NL>            prev = cur;<NL>            cur = (*cur).next;<NL>        }<NL>        let dst = if !prev.is_null() { &mut (*prev).next as *mut *mut Node } else { (*h).htable.add(hvalue as usize) };<NL>        let newnode~if cmp < 0 {<NL>                break;<NL>            }<NL>            prev = cur;<NL>            cur = (*cur).next;<NL>        }<NL>        let dst = if !prev.is_null() { &mut (*prev).next as *mut *mut Node } else { (*h).htable.add(hvalue as usize) };<NL>        let newnode
+ins_enomem~if newnode.is_null() {<NL>            return -ENOMEM;~if newnode.is_null() {<NL>            return -EINVAL;
+nu_null~if h.is_null() || (*h).nslot == 0 || (*h).nel == u32::MAX {<NL>            return null_mut();~if h.is_null() || (*h).nslot == 0 {<NL>            return null_mut();
+nu_break~            if cmp <= 0 {<NL>                break;<NL>            }<NL>            prev = cur;<NL>            cur = (*cur).next;<NL>        }<NL>        let dst = if !prev.is_null() { &mut (*prev).next as *mut *mut Node } else { (*h).htable.add(hvalue as usize) };<NL>        avtab_insert_node~            if cmp < 0 {<NL>                break;<NL>            }<NL>            prev = cur;<NL>            cur = (*cur).next;<NL>        }<NL>        let dst = if !prev.is_null() { &mut (*prev).next as *mut *mut Node } else { (*h).htable.add(hvalue as usize) };<NL>        avtab_insert_node
+search_null~if h.is_null() || (*h).nslot == 0 {<NL>            return null_mut();<NL>        }<NL><NL>        let hvalue~if h.is_null() {<NL>            return null_mut();<NL>        }<NL><NL>        let hvalue
+next_spec~tmp_key.specified = specified;~tmp_key.specified = tmp_key.specified;
+next_start~let mut cur = (*node).next;~let mut cur = node;
+destroy_xp~if (*temp).key.specified as u32 & AVTAB_XPERMS != 0 {<NL>                    rust_av_xperms_free~if (*temp).key.specified as u32 & AVTAB_XPERMS == 0 {<NL>                    rust_av_xperms_free
+destroy_free~rust_av_node_free(temp);~{ }
+destroy_tab~rust_av_kvfree((*h).htable as *mut c_void);<NL>        (*h).htable = null_mut();~(*h).htable = null_mut();
+destroy_nel~(*h).htable = null_mut();<NL>        (*h).nel = 0;<NL>        (*h).nslot = 0;<NL>        (*h).mask = 0;<NL>    }<NL>}<NL><NL>/// `avtab_init()`.~(*h).htable = null_mut();<NL>        (*h).nslot = 0;<NL>        (*h).mask = 0;<NL>    }<NL>}<NL><NL>/// `avtab_init()`.
+init_nel~(*h).htable = null_mut();<NL>        (*h).nel = 0;<NL>        (*h).nslot = 0;<NL>        (*h).mask = 0;<NL>    }<NL>}<NL><NL>/// `avtab_alloc_common()`.~(*h).htable = null_mut();<NL>        (*h).nslot = 0;<NL>        (*h).mask = 0;<NL>    }<NL>}<NL><NL>/// `avtab_alloc_common()`.
+init_mask~(*h).nslot = 0;<NL>        (*h).mask = 0;<NL>    }<NL>}<NL><NL>/// `avtab_alloc_common()`.~(*h).nslot = 0;<NL>    }<NL>}<NL><NL>/// `avtab_alloc_common()`.
+common_zero~if nslot == 0 {<NL>            return 0;~if nslot == 0 {<NL>            return -EINVAL;
+common_mask~(*h).mask = nslot - 1;~(*h).mask = nslot;
+common_fail~if (*h).htable.is_null() {<NL>            return -ENOMEM;~if (*h).htable.is_null() {<NL>            return 0;
+alloc_div~(nrules / 2).leading_zeros()~(nrules / 3).leading_zeros()
+alloc_two~} else { 2 };~} else { 1 };
+alloc_cap2~const MAX_AVTAB_HASH_BUCKETS: u32 = 1 << 16;~const MAX_AVTAB_HASH_BUCKETS: u32 = 1 << 15;
+alloc_rc~let rc = avtab_alloc_common(h, nslot);<NL>            if rc != 0 {<NL>                return rc;~let rc = avtab_alloc_common(h, nslot);<NL>            if rc != 0 {<NL>                return 0;
+dup_slot~avtab_alloc_common(new, (*orig).nslot)~avtab_alloc_common(new, (*orig).nel)
+rd_cnt_lo~if items2 < 5 || items2 > 8 {~if items2 < 4 || items2 > 8 {
+rd_cnt_hi~if items2 < 5 || items2 > 8 {~if items2 < 5 || items2 > 9 {
+rd_vers~if vers < POLICYDB_VERSION_AVTAB {~if vers <= POLICYDB_VERSION_AVTAB {
+rd_trunc1~rc = next_entry(buf32.as_mut_ptr() as *mut u8, fp, 4 * items2 as usize);<NL>            if rc != 0 {<NL>                rust_av_err(E_TRUNCATED, 0, 0);~rc = next_entry(buf32.as_mut_ptr() as *mut u8, fp, 4 * items2 as usize);<NL>            if rc != 0 {<NL>                rust_av_err(E_ITEM_COUNT, 0, 0);
+rd_src~if key.source_type as u32 != val {~if key.source_type as u32 > val {
+rd_tgt~if key.target_type as u32 != val {<NL>                rust_av_err(E_TRUNC_TGT~if key.target_type as u32 != val {<NL>                rust_av_err(E_TRUNC_SRC
+rd_cls~if key.target_class as u32 != val {~if key.target_class as u32 > val {
+rd_valid_t~rust_av_type_isvalid(pol, key.target_type as u32) == 0 || rust_av_class_isvalid(pol, key.target_class as u32) == 0 {<NL>                rust_av_err(E_TYPE_OR_CLASS, 0, 0);<NL>                return -EINVAL;<NL>            }<NL><NL>            val~rust_av_type_isvalid(pol, key.source_type as u32) == 0 || rust_av_class_isvalid(pol, key.target_class as u32) == 0 {<NL>                rust_av_err(E_TYPE_OR_CLASS, 0, 0);<NL>                return -EINVAL;<NL>            }<NL><NL>            val
+rd_valid_c~|| rust_av_class_isvalid(pol, key.target_class as u32) == 0 {<NL>                rust_av_err(E_TYPE_OR_CLASS, 0, 0);<NL>                return -EINVAL;<NL>            }<NL><NL>            val~{<NL>                rust_av_err(E_TYPE_OR_CLASS, 0, 0);<NL>                return -EINVAL;<NL>            }<NL><NL>            val
+rd_enabled~let enabled: u16 = if val & AVTAB_ENABLED_OLD != 0 { AVTAB_ENABLED } else { 0 };~let enabled: u16 = if val & AVTAB_ENABLED_OLD == 0 { AVTAB_ENABLED } else { 0 };
+rd_null~if val & (AVTAB_AV | AVTAB_TYPE) == 0 {~if val & AVTAB_AV == 0 {
+rd_both~if val & AVTAB_AV != 0 && val & AVTAB_TYPE != 0 {~if val & AVTAB_AV != 0 || val & AVTAB_TYPE != 0 {
+rd_xp~if val & AVTAB_XPERMS != 0 {<NL>                rust_av_err(E_HAS_XPERMS~if val & AVTAB_XPERMS == 0 {<NL>                rust_av_err(E_HAS_XPERMS
+rd_many~if items >= items2 {~if items > items2 {
+rd_many_arg~rust_av_err(E_TOO_MANY, items + 1, items2);~rust_av_err(E_TOO_MANY, items, items2);
+rd_spec~key.specified = spec | enabled;~key.specified = spec;
+rd_datum~datum.data = u32::from_le(buf32[items as usize]);<NL>                    items += 1;~datum.data = u32::from_le(buf32[items as usize]);<NL>                    items += 0;
+rd_ins_rc~rc = insertf(a, &key, &datum, p);<NL>                    if rc != 0 {<NL>                        return rc;~rc = insertf(a, &key, &datum, p);<NL>                    if rc != 0 {<NL>                        return 0;
+rd_only_arg~rust_av_err(E_ONLY_HAD, items2, items);~rust_av_err(E_ONLY_HAD, items, items2);
+rd_spec_order~    AVTAB_ALLOWED,<NL>    AVTAB_AUDITDENY,<NL>    AVTAB_AUDITALLOW,~    AVTAB_ALLOWED,<NL>    AVTAB_AUDITALLOW,<NL>    AVTAB_AUDITDENY,
+rd_spec_cnt~(key.specified & !AVTAB_ENABLED).count_ones() != 1~(key.specified).count_ones() != 1
+rd_spec_mask~key.specified as u32 & !AVTAB_SPECIFIER_MASK != 0~key.specified as u32 & !(AVTAB_SPECIFIER_MASK | 0x1000) != 0
+rd_ver1~if vers < POLICYDB_VERSION_XPERMS_IOCTL && key.specified~if vers <= POLICYDB_VERSION_XPERMS_IOCTL && key.specified
+rd_ver2~} else if vers < POLICYDB_VERSION_COND_XPERMS && key.specified as u32 & AVTAB_XPERMS != 0 && conditional {~} else if vers < POLICYDB_VERSION_COND_XPERMS && key.specified as u32 & AVTAB_XPERMS != 0 && !conditional {
+rd_ver2b~} else if vers < POLICYDB_VERSION_COND_XPERMS~} else if vers <= POLICYDB_VERSION_COND_XPERMS
+rd_xspec~if !is_valid_xperm_specified(xperms.specified) {~if is_valid_xperm_specified(xperms.specified) {
+rd_xvalid~matches!(specified, AVTAB_XPERMS_IOCTLFUNCTION | AVTAB_XPERMS_IOCTLDRIVER | AVTAB_XPERMS_NLMSG)~matches!(specified, AVTAB_XPERMS_IOCTLFUNCTION | AVTAB_XPERMS_IOCTLDRIVER)
+rd_xdrv~rc = next_entry(&mut xperms.driver, fp, 1);~rc = next_entry(&mut xperms.specified, fp, 1);
+rd_xperms~xperms.perms[i] = u32::from_le(buf32[i]);~xperms.perms[i] = u32::from_le(buf32[0]);
+rd_xsize~rc = next_entry(buf32.as_mut_ptr() as *mut u8, fp, 4 * 8);~rc = next_entry(buf32.as_mut_ptr() as *mut u8, fp, 4 * 7);
+rd_type~key.specified as u32 & AVTAB_TYPE != 0 && rust_av_type_isvalid(pol, datum.data) == 0~key.specified as u32 & AVTAB_TYPE != 0 && rust_av_type_isvalid(pol, datum.data) != 0
+rd_k0~key.source_type = u16::from_le(buf16[0]);~key.source_type = u16::from_le(buf16[1]);
+rd_k3~key.specified = u16::from_le(buf16[3]);~key.specified = u16::from_le(buf16[2]);
+rd_nel0~if nel == 0 {~if nel == 1 {
+rd_nel_rc~rust_av_err(E_EMPTY_TABLE, 0, 0);<NL>                rc = -EINVAL;~rust_av_err(E_EMPTY_TABLE, 0, 0);<NL>                rc = 0;
+rd_oom~if rc == -ENOMEM {~if rc == -EEXIST {
+rd_dup~} else if rc == -EEXIST {~} else if rc == -ENOMEM {
+rd_destroy~avtab_destroy(a);<NL>        rc<NL>    }<NL>}~rc<NL>    }<NL>}
+wr_k~(*cur).key.target_type.to_le(), (*cur).key.target_class.to_le()~(*cur).key.target_class.to_le(), (*cur).key.target_type.to_le()
+wr_xp~if (*cur).key.specified as u32 & AVTAB_XPERMS != 0 {<NL>            let x~if (*cur).key.specified as u32 & AVTAB_XPERMS == 0 {<NL>            let x
+wr_xs~rc = put_entry(&(*x).specified, 1, 1, fp);~rc = put_entry(&(*x).driver, 1, 1, fp);
+wr_perm~buf32[i] = (*x).perms[i].to_le();~buf32[i] = (*x).perms[0].to_le();
+wr_n~rc = put_entry(buf32.as_ptr() as *const u8, 4, 8, fp);~rc = put_entry(buf32.as_ptr() as *const u8, 4, 7, fp);
+wr_nel~let buf = [(*a).nel.to_le()];~let buf = [(*a).nslot.to_le()];
+wr_slots~        while i < (*a).nslot {<NL>            let mut cur = *(*a).htable.add(i as usize);<NL>            while !cur.is_null() {<NL>                rc = avtab_write_item~        while i + 1 < (*a).nslot {<NL>            let mut cur = *(*a).htable.add(i as usize);<NL>            while !cur.is_null() {<NL>                rc = avtab_write_item
+wr_rc~rc = avtab_write_item(p, cur, fp);<NL>                if rc != 0 {<NL>                    return rc;~rc = avtab_write_item(p, cur, fp);<NL>                if rc != 0 {<NL>                    return 0;

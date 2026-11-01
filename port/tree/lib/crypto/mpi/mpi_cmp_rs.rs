@@ -29,10 +29,17 @@
 //!
 //! # `mpi_cmp`'s size-difference return value
 //!
-//! `usize - vsize` in the C is `int - int` with both operands already
-//! bounded well inside `i32` (a limb count, never remotely close to
-//! `i32::MAX`), so the subtraction cannot overflow; translated as plain `i32`
-//! subtraction rather than a checked/wrapping variant.
+//! **Corrected 2026-09-06, via `rig/uaccess-panic-check.sh`**: this used
+//! to claim `usize - vsize` "cannot overflow... so plain `i32` subtraction"
+//! was fine as-is. True about the VALUES (both are limb counts, nowhere
+//! near `i32::MAX`) and wrong about what that means for the COMPILED
+//! CODE: rustc has no way to know an `i32`'s runtime range is that
+//! narrow just from its type, so the checked-arithmetic path is compiled
+//! in regardless, and the panic-check tool found it live. `wrapping_sub`
+//! now, same reasoning as `mpihelp_cmp`'s `-cmp` below (also fixed, to
+//! `wrapping_neg` -- `mpihelp_cmp` only ever returns exactly -1/0/1, so
+//! negating it can never hit `i32::MIN` either, and the same gap between
+//! "provably safe" and "compiler can prove it" applies).
 
 use core::ffi::{c_int, c_ulong};
 
@@ -147,10 +154,10 @@ pub unsafe extern "C" fn mpi_cmp(u: *mut GcryMpi, v: *mut GcryMpi) -> c_int {
         return -1;
     }
     if usize_ != vsize && ur.sign == 0 && vr.sign == 0 {
-        return usize_ - vsize;
+        return usize_.wrapping_sub(vsize);
     }
     if usize_ != vsize && ur.sign != 0 && vr.sign != 0 {
-        return vsize - usize_;
+        return vsize.wrapping_sub(usize_);
     }
     if usize_ == 0 {
         return 0;
@@ -159,7 +166,7 @@ pub unsafe extern "C" fn mpi_cmp(u: *mut GcryMpi, v: *mut GcryMpi) -> c_int {
     // SAFETY: `usize_ == vsize > 0`, and both `d` point at that many limbs.
     let cmp = unsafe { mpihelp_cmp(ur.d, vr.d, usize_) };
     if ur.sign != 0 {
-        -cmp
+        cmp.wrapping_neg()
     } else {
         cmp
     }

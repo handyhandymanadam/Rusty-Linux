@@ -8,7 +8,7 @@
  * looking like a kernel. Only what xz_dec_bcj.c actually touches is here.
  *
  * <linux/xz.h> is the REAL header out of src/linux/include, not a copy:
- * struct xz_buf is the caller's layout and GOALS.md §5 puts it out of bounds,
+ * struct xz_buf is the caller's layout and notes/GOALS.md §5 puts it out of bounds,
  * so a transcription of it in a test would be the one place a drift could
  * hide.
  */

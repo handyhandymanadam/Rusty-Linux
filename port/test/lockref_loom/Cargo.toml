@@ -1,0 +1,9 @@
+[package]
+name = "lockref_loom"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+loom = "0.7.2"
+
+[workspace]

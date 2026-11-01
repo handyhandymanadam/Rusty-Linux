@@ -749,7 +749,12 @@ pub unsafe extern "C" fn xz_dec_bcj_run(
         out_pos = unsafe { (*b).out_pos };
         // SAFETY: `out` covers `out_size >= out_pos` writable bytes, and it
         // does not overlap `*s`.
-        let window = unsafe { core::slice::from_raw_parts_mut(out, out_pos) };
+        // `out_pos == 0` must not build a slice from a possibly null `out`.
+        let window: &mut [u8] = if out_pos == 0 {
+            &mut []
+        } else {
+            unsafe { core::slice::from_raw_parts_mut(out, out_pos) }
+        };
         bcj_apply(s.kind, &mut s.pos, &mut s.x86_prev_mask, window, &mut out_start);
 
         // As an exception, if the next filter returned XZ_STREAM_END, we can

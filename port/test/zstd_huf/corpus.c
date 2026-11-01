@@ -5,7 +5,7 @@
  * WHERE THE INPUT COMES FROM, AND WHY IT IS NOT GENERATED. HUF_decompress*
  * consumes a Huffman tree description followed by one or four bitstreams. A
  * generator for that is a Huffman ENCODER, and a corpus encoder that does not
- * round-trip is the fault STATUS.md lesson 12 records costing two hours on
+ * round-trip is the fault notes/STATUS.md lesson 12 records costing two hours on
  * lib/lz4. The kernel's own encoder is not even built (CONFIG_ZSTD_COMPRESS is
  * n), so the corpus is LIFTED OUT OF REAL FRAMES instead: SYSTEM libzstd
  * compresses generated plaintexts, this walks each frame's block headers, and

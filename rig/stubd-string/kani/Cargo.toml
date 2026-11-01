@@ -1,0 +1,13 @@
+# Kani proofs for the stub's string_rs.rs:  cd rig/stubd-string/kani && cargo kani
+# (the harnesses are the `#[cfg(kani)] mod proofs` at the bottom of string_rs.rs itself).
+[package]
+name = "string_rs_kani"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "../../../port/tree/arch/x86/boot/compressed/string_rs.rs"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)", "cfg(kasan)"] }

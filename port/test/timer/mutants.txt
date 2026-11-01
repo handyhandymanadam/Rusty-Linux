@@ -1,0 +1,34 @@
+sh_mul~    n * LVL_CLK_SHIFT~    n * (LVL_CLK_SHIFT + 1)
+st_size~    (LVL_SIZE - 1) << ((n - 1) * LVL_CLK_SHIFT)~    LVL_SIZE << ((n - 1) * LVL_CLK_SHIFT)
+st_n~(LVL_SIZE - 1) << ((n - 1) * LVL_CLK_SHIFT)~(LVL_SIZE - 1) << (n * LVL_CLK_SHIFT)
+ci_plus~(expires >> lvl_shift(lvl)).wrapping_add(1)~(expires >> lvl_shift(lvl)).wrapping_add(0)
+ci_shl~*bucket_expiry = e << lvl_shift(lvl);~*bucket_expiry = e << lvl_shift(lvl).wrapping_sub(1);
+ci_exp~*bucket_expiry = e << lvl_shift(lvl);~*bucket_expiry = expires;
+ci_offs~((lvl as c_ulong) * LVL_SIZE).wrapping_add(e & LVL_MASK)~((lvl as c_ulong) * LVL_SIZE).wrapping_add(expires & LVL_MASK)
+ci_offs2~((lvl as c_ulong) * LVL_SIZE).wrapping_add~(((lvl as c_ulong) + 1) * LVL_SIZE).wrapping_add
+ci_mask~e & LVL_MASK~e & (LVL_MASK >> 1)
+w_range~    for n in 1..8 {~    for n in 2..8 {
+w_range2~    for n in 1..8 {~    for n in 1..7 {
+w_cmp~        if delta < lvl_start(n) {~        if delta <= lvl_start(n) {
+w_lvl~            return calc_index(expires, n - 1, be);~            return calc_index(expires, n, be);
+w_depth~    if lvl_depth > 8 && delta < lvl_start(8) {~    if lvl_depth > 9 && delta < lvl_start(8) {
+w_l8~        calc_index(expires, 7, be)~        calc_index(expires, 6, be)
+w_neg_be~        *be = clk;~        *be = expires;
+w_neg_idx~        (clk & LVL_MASK) as c_uint~        (expires & LVL_MASK) as c_uint
+w_cut~        let cutoff = lvl_start(lvl_depth);~        let cutoff = lvl_start(lvl_depth - 1);
+w_ge~        if delta >= cutoff {~        if delta > cutoff {
+w_max~            let max = cutoff.wrapping_sub(1 << lvl_shift(lvl_depth - 1));~            let max = cutoff;
+w_max2~            let max = cutoff.wrapping_sub(1 << lvl_shift(lvl_depth - 1));~            let max = cutoff.wrapping_sub(1 << lvl_shift(lvl_depth - 2));
+w_clk~            expires = clk.wrapping_add(max);~            expires = expires.wrapping_add(max);
+w_last~        calc_index(expires, lvl_depth - 1, be)<NL>    }~        calc_index(expires, lvl_depth - 2, be)<NL>    }
+r_skew~    let skew = (cpu.wrapping_mul(3) as c_long) as c_ulong;~    let skew = (cpu.wrapping_mul(2) as c_long) as c_ulong;
+r_skew_cast~(cpu.wrapping_mul(3) as c_long) as c_ulong~(cpu.wrapping_mul(3) as c_uint) as c_ulong
+r_add~    let mut j = j.wrapping_add(skew);~    let mut j = j;
+r_rem~    let rem: c_int = (j % (hz as c_ulong)) as c_int;~    let rem: c_int = ((j + 1) % (hz as c_ulong)) as c_int;
+r_cut~    if rem < hz / 4 && !force_up {~    if rem <= hz / 4 && !force_up {
+r_cut2~    if rem < hz / 4 && !force_up {~    if rem < hz / 3 && !force_up {
+r_up~    if rem < hz / 4 && !force_up {~    if rem < hz / 4 {
+r_up2~    if rem < hz / 4 && !force_up {~    if rem < hz / 4 || !force_up {
+r_down~        j = j.wrapping_sub(rem as c_ulong);<NL>    } else {~        j = j.wrapping_sub(rem as c_ulong).wrapping_add(1);<NL>    } else {
+r_roundup~        j = j.wrapping_sub(rem as c_ulong).wrapping_add(hz as c_ulong);~        j = j.wrapping_sub(rem as c_ulong);
+r_unskew~    j.wrapping_sub(skew)~    j

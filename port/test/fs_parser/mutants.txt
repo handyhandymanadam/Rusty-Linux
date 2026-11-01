@@ -1,0 +1,48 @@
+lc_ret~if p.is_null() {<NL>            not_found~if !p.is_null() {<NL>            not_found
+lc_next~tbl = tbl.add(1);~tbl = tbl.add(2);
+lc_nul~while !(*tbl).name.is_null() {<NL>            if streq(name, (*tbl).name) {~while !(*tbl).name.is_null() {<NL>            if !streq(name, (*tbl).name) {
+streq~if *a == 0 {<NL>                return true;~if *a == 1 {<NL>                return true;
+flag~(*p).type_.is_none()~(*p).type_.is_some()
+key_want~let want_flag = rust_fp_type(param) == FS_VALUE_IS_FLAG;~let want_flag = rust_fp_type(param) != FS_VALUE_IS_FLAG;
+key_neg0~*negated = false;<NL>        let mut p = desc;~let mut p = desc;
+key_match~if is_flag(p) == want_flag {<NL>                    return p;~if is_flag(p) != want_flag {<NL>                    return p;
+key_other~other = p;~other = null();
+key_no~if want_flag && *name == b'n' as c_char && *name.add(1) == b'o' as c_char && *name.add(2) != 0 {~if want_flag && *name == b'n' as c_char && *name.add(1) == b'o' as c_char {
+key_no2~*name.add(1) == b'o' as c_char && *name.add(2) != 0~*name.add(1) == b'p' as c_char && *name.add(2) != 0
+key_no3~if streq((*p).name, name.add(2)) && (*p).flags & FS_PARAM_NEG_WITH_NO != 0 {~if streq((*p).name, name.add(2)) {
+key_no4~if streq((*p).name, name.add(2)) && (*p).flags & FS_PARAM_NEG_WITH_NO != 0 {~if streq((*p).name, name) && (*p).flags & FS_PARAM_NEG_WITH_NO != 0 {
+key_neg_set~*negated = true;<NL>                    return p;~return p;
+parse_zero~(*result).u = 0;<NL><NL>        let p = fs_lookup_key~let p = fs_lookup_key
+parse_noparam~return -ENOPARAM;~return -22;
+parse_dep~if (*p).flags & FS_PARAM_DEPRECATED != 0 {~if (*p).flags & FS_PARAM_DEPRECATED == 0 {
+parse_flagtype~if rust_fp_type(param) != FS_VALUE_IS_FLAG {~if rust_fp_type(param) == FS_VALUE_IS_FLAG {
+parse_flaginv~return rust_fp_inval(log, INVAL_UNEXPECTED, rust_fp_key(param));~return rust_fp_inval(log, INVAL_BAD_VALUE, rust_fp_key(param));
+parse_bool~(*result).u = (!(*result).negated) as u64;~(*result).u = ((*result).negated) as u64;
+parse_ret~if ret != 0 {<NL>                return ret;~if ret != 0 {<NL>                return 0;
+parse_opt~(*p).opt as c_int<NL>    }~(*p).opt as c_int + 1<NL>    }
+empty~unsafe { *rust_fp_string(param) == 0 && (*p).flags & FS_PARAM_CAN_BE_EMPTY != 0 }~unsafe { *rust_fp_string(param) == 0 }
+bool_type~if rust_fp_type(param) != FS_VALUE_IS_STRING {<NL>            return bad_value(log, param);<NL>        }<NL>        if empty_ok(p, param) {<NL>            return 0;<NL>        }<NL>        let b~if rust_fp_type(param) == FS_VALUE_IS_STRING {<NL>            return bad_value(log, param);<NL>        }<NL>        if empty_ok(p, param) {<NL>            return 0;<NL>        }<NL>        let b
+bool_lookup~let b = rust_lookup_constant(bool_names, rust_fp_string(param), -1);~let b = rust_lookup_constant(bool_names, rust_fp_string(param), 0);
+u32_base~let base = (*p).data as usize as u32;~let base = 0u32;
+u32_neg~let rc = kstrtouint(rust_fp_string(param), base, &mut v);<NL>        if rc < 0 {~let rc = kstrtouint(rust_fp_string(param), base, &mut v);<NL>        if rc <= 0 {
+u32_set~(*result).set_u32(v);<NL>        0<NL>    }<NL>}<NL><NL>#[no_mangle]<NL>pub unsafe extern "C" fn rust_fs_param_is_s32~0<NL>    }<NL>}<NL><NL>#[no_mangle]<NL>pub unsafe extern "C" fn rust_fs_param_is_s32
+s32_base~if kstrtoint(rust_fp_string(param), 0, &mut v) < 0 {~if kstrtoint(rust_fp_string(param), 10, &mut v) < 0 {
+s32_set~(*result).set_u32(v as u32);<NL>        0<NL>    }<NL>}<NL><NL>#[no_mangle]<NL>pub unsafe extern "C" fn rust_fs_param_is_u64~0<NL>    }<NL>}<NL><NL>#[no_mangle]<NL>pub unsafe extern "C" fn rust_fs_param_is_u64
+u64_set~(*result).u = v;<NL>        0~0
+u64_base~if kstrtoull(rust_fp_string(param), 0, &mut v) < 0 {~if kstrtoull(rust_fp_string(param), 16, &mut v) < 0 {
+enum_data~lookup_constant_node((*p).data as *const ConstantTable, rust_fp_string(param))~lookup_constant_node(null(), rust_fp_string(param))
+enum_set~(*result).set_u32((*c).value as u32);~(*result).set_u32(0);
+str_empty~(*rust_fp_string(param) == 0 && (*p).flags & FS_PARAM_CAN_BE_EMPTY == 0)~(*rust_fp_string(param) == 0)
+str_type~if rust_fp_type(param) != FS_VALUE_IS_STRING || (*rust_fp_string~if rust_fp_type(param) != FS_VALUE_IS_BLOB || (*rust_fp_string
+blob_type~if rust_fp_type(param) != FS_VALUE_IS_BLOB {~if rust_fp_type(param) != FS_VALUE_IS_STRING {
+fd_empty~(*rust_fp_string(param) == 0 && (*p).flags & FS_PARAM_CAN_BE_EMPTY == 0) || kstrtouint(rust_fp_string(param), 0, &mut v) < 0~(*rust_fp_string(param) == 0 && (*p).flags & FS_PARAM_CAN_BE_EMPTY == 0) && kstrtouint(rust_fp_string(param), 0, &mut v) < 0
+fd_max~if v <= INT_MAX {<NL>                    return 0;<NL>                }<NL>            }<NL>            FS_VALUE_IS_FILE~if v < INT_MAX {<NL>                    return 0;<NL>                }<NL>            }<NL>            FS_VALUE_IS_FILE
+fd_file~FS_VALUE_IS_FILE => {<NL>                let v = rust_fp_dirfd(param) as u32;<NL>                (*result).set_u32(v);~FS_VALUE_IS_FILE => {<NL>                let v = rust_fp_dirfd(param) as u32;
+fos_str~FS_VALUE_IS_STRING => return rust_fs_param_is_string(log, p, param),~FS_VALUE_IS_STRING => return 0,
+fos_file~            FS_VALUE_IS_FILE => {<NL>                let v = rust_fp_dirfd(param) as u32;<NL>                (*result).set_u32(v);<NL>                if v <= INT_MAX {<NL>                    return 0;<NL>                }<NL>            }<NL>            _ => {}<NL>        }<NL>        bad_value(log, param)<NL>    }<NL>}<NL><NL>#[no_mangle]<NL>pub unsafe extern "C" fn rust_fs_param_is_uid~            FS_VALUE_IS_FILE => {<NL>                let v = rust_fp_dirfd(param) as u32;<NL>                if v <= INT_MAX {<NL>                    return 0;<NL>                }<NL>            }<NL>            _ => {}<NL>        }<NL>        bad_value(log, param)<NL>    }<NL>}<NL><NL>#[no_mangle]<NL>pub unsafe extern "C" fn rust_fs_param_is_uid
+uid_bad~if rust_fs_param_is_u32(log, p, param, result) != 0 {<NL>            return bad_value(log, param);<NL>        }<NL><NL>        let mut id: u32 = 0;<NL>        if rust_fp_make_kuid~if rust_fs_param_is_u32(log, p, param, result) != 0 {<NL>            return 0;<NL>        }<NL><NL>        let mut id: u32 = 0;<NL>        if rust_fp_make_kuid
+uid_inv~return rust_fp_inval(log, INVAL_UID, rust_fp_string(param));~return rust_fp_inval(log, INVAL_GID, rust_fp_string(param));
+uid_set~(*result).set_u32(id);<NL>        0<NL>    }<NL>}<NL><NL>#[no_mangle]<NL>pub unsafe extern "C" fn rust_fs_param_is_gid~0<NL>    }<NL>}<NL><NL>#[no_mangle]<NL>pub unsafe extern "C" fn rust_fs_param_is_gid
+gid_make~if rust_fp_make_kgid((*result).u as u32, &mut id) == 0 {~if rust_fp_make_kuid((*result).u as u32, &mut id) == 0 {
+gid_inv~return rust_fp_inval(log, INVAL_GID, rust_fp_string(param));~return rust_fp_inval(log, INVAL_UID, rust_fp_string(param));
+gid_set~(*result).set_u32(id);<NL>        0<NL>    }<NL>}~0<NL>    }<NL>}

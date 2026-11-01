@@ -1,0 +1,18 @@
+/* Preprocessed by the Makefile (CC -E -P; only the `pub const` lines are kept, C integer suffixes stripped) into video_gen.rs, which video_vesa_rs.rs
+ * include!s: the two configuration switches video-vesa.c tests (CONFIG_BOOT_VESA_SUPPORT: register/set graphics modes; CONFIG_FIRMWARE_EDID: vesa_store_edid
+ * reads the EDID), plus the mode numbers of uapi/asm/boot.h, from the same autoconf.h / headers the C sees. */
+#include <uapi/asm/boot.h>
+
+pub const RM_NORMAL_VGA: u16 = NORMAL_VGA;
+pub const RM_EXTENDED_VGA: u16 = EXTENDED_VGA;
+pub const RM_ASK_VGA: u16 = ASK_VGA;
+#ifdef CONFIG_BOOT_VESA_SUPPORT
+pub const RM_BOOT_VESA_SUPPORT: bool = true;
+#else
+pub const RM_BOOT_VESA_SUPPORT: bool = false;
+#endif
+#ifdef CONFIG_FIRMWARE_EDID
+pub const RM_FIRMWARE_EDID: bool = true;
+#else
+pub const RM_FIRMWARE_EDID: bool = false;
+#endif

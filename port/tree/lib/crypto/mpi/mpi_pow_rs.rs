@@ -129,7 +129,7 @@ unsafe fn mpn_copy(d: *mut c_ulong, s: *const c_ulong, n: c_int) {
     while i < n {
         // SAFETY: caller guarantees `n` limbs on both sides.
         unsafe { *d.add(i as usize) = *s.add(i as usize) };
-        i += 1;
+        i = i.wrapping_add(1);
     }
 }
 
@@ -141,10 +141,10 @@ unsafe fn mpn_copy(d: *mut c_ulong, s: *const c_ulong, n: c_int) {
 unsafe fn mpn_normalize(d: *const c_ulong, mut n: c_int) -> c_int {
     while n > 0 {
         // SAFETY: `n` limbs readable, `n > 0` here.
-        if unsafe { *d.add((n - 1) as usize) } != 0 {
+        if unsafe { *d.add((n.wrapping_sub(1)) as usize) } != 0 {
             break;
         }
-        n -= 1;
+        n = n.wrapping_sub(1);
     }
     n
 }
@@ -172,7 +172,7 @@ unsafe fn mpihelp_sub_1(
 
     if s2_limb_out > x0 {
         loop {
-            s1_size -= 1;
+            s1_size = s1_size.wrapping_sub(1);
             if s1_size == 0 {
                 return 1;
             }
@@ -189,7 +189,7 @@ unsafe fn mpihelp_sub_1(
 
     if (res_ptr as *const c_ulong) != s1_ptr {
         // SAFETY: `s1_size - 1` limbs remain readable/writable.
-        for i in 0..(s1_size - 1) as usize {
+        for i in 0..(s1_size.wrapping_sub(1)) as usize {
             unsafe { *res_ptr.add(i) = *s1_ptr.add(i) };
         }
     }
@@ -213,13 +213,13 @@ unsafe fn mpihelp_sub(
         // SAFETY: caller guarantees `s2_size` limbs on all three.
         cy = unsafe { mpihelp_sub_n(res_ptr, s1_ptr, s2_ptr, s2_size) };
     }
-    if s1_size - s2_size != 0 {
+    if s1_size.wrapping_sub(s2_size) != 0 {
         // SAFETY: `s1_size - s2_size` limbs remain at the offset positions.
         cy = unsafe {
             mpihelp_sub_1(
                 res_ptr.add(s2_size as usize),
                 s1_ptr.add(s2_size as usize),
-                s1_size - s2_size,
+                s1_size.wrapping_sub(s2_size),
                 cy,
             )
         };
@@ -271,7 +271,7 @@ pub unsafe extern "C" fn mpi_powm(
     // SAFETY: caller guarantees `exp`, `mod_` valid.
     let esize = unsafe { (*exp).nlimbs };
     let msize = unsafe { (*mod_).nlimbs };
-    let size = 2 * msize;
+    let size = 2_i32.wrapping_mul(msize);
     let msign = unsafe { (*mod_).sign };
 
     // SAFETY: caller guarantees `res`, `exp` valid.
@@ -314,7 +314,7 @@ pub unsafe extern "C" fn mpi_powm(
             break 'body -ENOMEM;
         }
         // SAFETY: `mod_` valid, `msize >= 1`.
-        let mod_top = unsafe { *(*mod_).d.add((msize - 1) as usize) };
+        let mod_top = unsafe { *(*mod_).d.add((msize.wrapping_sub(1)) as usize) };
         let mod_shift_cnt = count_leading_zeros(mod_top);
         if mod_shift_cnt != 0 {
             // SAFETY: `mp`/`mod_->d` valid for `msize` limbs.
@@ -329,7 +329,7 @@ pub unsafe extern "C" fn mpi_powm(
         let bsign = unsafe { (*base).sign };
         if bsize > msize {
             // The base is larger than the modulus. Reduce it.
-            bp = unsafe { mpi_alloc_limb_space((bsize + 1) as c_uint) };
+            bp = unsafe { mpi_alloc_limb_space((bsize.wrapping_add(1)) as c_uint) };
             bp_marker = bp;
             if bp.is_null() {
                 break 'body -ENOMEM;
@@ -405,7 +405,7 @@ pub unsafe extern "C" fn mpi_powm(
 
         let negative_result;
         {
-            let mut xp = unsafe { mpi_alloc_limb_space((2 * (msize + 1)) as c_uint) };
+            let mut xp = unsafe { mpi_alloc_limb_space((2_i32.wrapping_mul(msize.wrapping_add(1))) as c_uint) };
             xp_marker = xp;
             if xp.is_null() {
                 break 'body -ENOMEM;
@@ -414,12 +414,20 @@ pub unsafe extern "C" fn mpi_powm(
             // SAFETY: `ep` valid, `esize >= 1`.
             negative_result = (unsafe { *ep } & 1 != 0) && unsafe { (*base).sign } != 0;
 
-            let mut i = esize - 1;
+            let mut i = esize.wrapping_sub(1);
             // SAFETY: `ep` readable for `esize` limbs, `i` in range.
             let mut e = unsafe { *ep.add(i as usize) };
             let c = count_leading_zeros(e) as c_int;
-            e = (e << c) << 1; // shift the exp bits left, lose the msb
-            let mut c = BITS_PER_MPI_LIMB - 1 - c;
+            // `wrapping_shl`, not `<<`: a normalized MPI's top limb is
+            // never zero when its `nlimbs` is, so `c` (0..63) never
+            // reaches 64 in practice -- but if a caller ever handed in a
+            // non-normalized `exp`, `e` here is 0, and `0 << anything ==
+            // 0.wrapping_shl(anything)`, so wrapping changes nothing
+            // observable even in that case. `rig/uaccess-panic-check.sh`
+            // found the checked path live regardless of it being unreachable
+            // for well-formed input.
+            e = (e.wrapping_shl(c as u32)) << 1; // shift the exp bits left, lose the msb
+            let mut c = BITS_PER_MPI_LIMB.wrapping_sub(1).wrapping_sub(c);
 
             // Main loop. XP and RP alternate holding the result.
             'outer: loop {
@@ -428,14 +436,14 @@ pub unsafe extern "C" fn mpi_powm(
                         unsafe { mpih_sqr_n_basecase(xp, rp, rsize) };
                     } else {
                         if tspace.is_null() {
-                            tsize = 2 * rsize;
+                            tsize = 2_i32.wrapping_mul(rsize);
                             tspace = unsafe { mpi_alloc_limb_space(tsize as c_uint) };
                             if tspace.is_null() {
                                 break 'body -ENOMEM;
                             }
-                        } else if tsize < 2 * rsize {
+                        } else if tsize < 2_i32.wrapping_mul(rsize) {
                             unsafe { mpi_free_limb_space(tspace) };
-                            tsize = 2 * rsize;
+                            tsize = 2_i32.wrapping_mul(rsize);
                             tspace = unsafe { mpi_alloc_limb_space(tsize as c_uint) };
                             if tspace.is_null() {
                                 break 'body -ENOMEM;
@@ -444,7 +452,7 @@ pub unsafe extern "C" fn mpi_powm(
                         unsafe { mpih_sqr_n(xp, rp, rsize, tspace) };
                     }
 
-                    let mut xsize = 2 * rsize;
+                    let mut xsize = 2_i32.wrapping_mul(rsize);
                     if xsize > msize {
                         unsafe { mpihelp_divrem(xp.add(msize as usize), 0, xp, xsize, mp, msize) };
                         xsize = msize;
@@ -465,7 +473,7 @@ pub unsafe extern "C" fn mpi_powm(
                             }
                         }
 
-                        xsize = rsize + bsize;
+                        xsize = rsize.wrapping_add(bsize);
                         if xsize > msize {
                             unsafe { mpihelp_divrem(xp.add(msize as usize), 0, xp, xsize, mp, msize) };
                             xsize = msize;
@@ -475,12 +483,12 @@ pub unsafe extern "C" fn mpi_powm(
                         rsize = xsize;
                     }
                     e <<= 1;
-                    c -= 1;
+                    c = c.wrapping_sub(1);
                     // SAFETY: no memory access; a scheduling yield point.
                     unsafe { rust_mpi_pow_cond_resched() };
                 }
 
-                i -= 1;
+                i = i.wrapping_sub(1);
                 if i < 0 {
                     break 'outer;
                 }
@@ -498,7 +506,7 @@ pub unsafe extern "C" fn mpi_powm(
                 rp = unsafe { (*res).d };
                 if carry_limb != 0 {
                     unsafe { *rp.add(rsize as usize) = carry_limb };
-                    rsize += 1;
+                    rsize = rsize.wrapping_add(1);
                 }
             } else {
                 unsafe { mpn_copy((*res).d, rp, rsize) };

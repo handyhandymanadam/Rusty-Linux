@@ -74,7 +74,7 @@ unsafe fn mpn_copy(d: *mut c_ulong, s: *const c_ulong, n: c_int) {
     while i < n {
         // SAFETY: caller guarantees `n` limbs on both sides.
         unsafe { *d.add(i as usize) = *s.add(i as usize) };
-        i += 1;
+        i = i.wrapping_add(1);
     }
 }
 
@@ -129,7 +129,7 @@ pub unsafe extern "C" fn mpi_mul(
     // SAFETY: `w` valid.
     let mut wp = unsafe { (*w).d };
 
-    let mut wsize = usize_ + vsize;
+    let mut wsize = usize_.wrapping_add(vsize);
     let mut assign_wp = false;
     let mut tmp_limb: *mut c_ulong = core::ptr::null_mut();
 
@@ -184,7 +184,7 @@ pub unsafe extern "C" fn mpi_mul(
                 unsafe { mpi_free_limb_space(wp) };
             }
         } else {
-            wsize -= if cy != 0 { 0 } else { 1 };
+            wsize = wsize.wrapping_sub(if cy != 0 { 0 } else { 1 });
         }
     }
 

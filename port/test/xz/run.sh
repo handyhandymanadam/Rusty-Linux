@@ -7,7 +7,7 @@
 #
 # Compiles the SAME .rs the kernel build compiles, via a #[path] wrapper in
 # probe.rs -- not a copy. A stale copy tested here while the kernel built
-# something else is the failure PRIOR-ART.md §2 records four times.
+# something else is the failure notes/PRIOR-ART.md §2 records four times.
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)

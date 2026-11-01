@@ -9,7 +9,7 @@
  * which is exactly what happened to lib/lz4 on 2026-09-03: its fork lacked the
  * width normalisation lzo's had, the oracle took LZ4's 32-bit paths on a
  * 64-bit host, and byPtr[] overflowed LZ4_STREAMSIZE. Three debugging rounds
- * went to a fault that was never in the port. See ARCHIVE.md.
+ * went to a fault that was never in the port. See notes/ARCHIVE.md.
  *
  * WHAT BELONGS HERE. Definitions that are (a) needed by more than one harness
  * and (b) identical for all of them -- convenience macros, and the two

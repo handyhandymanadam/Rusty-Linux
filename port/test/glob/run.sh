@@ -3,7 +3,7 @@
 #
 # Builds the Rust from port/tree/lib/glob_rs.rs -- the SAME file the kernel
 # build compiles. Not a copy: a stale copy tested here while the kernel built
-# something else is exactly the failure PRIOR-ART.md §2 records four times.
+# something else is exactly the failure notes/PRIOR-ART.md §2 records four times.
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)

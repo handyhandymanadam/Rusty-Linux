@@ -1,0 +1,19 @@
+/* Preprocessed by the Makefile (CC -E -P; only the `pub const` lines are kept, C integer suffixes stripped) into edd_gen.rs, which
+ * edd_rs.rs include!s: the numbers and the configuration switch edd.c uses, from the same headers and autoconf.h the C sees
+ * (linux/edd.h, uapi/asm/bootparam.h CAN_USE_HEAP, CONFIG_EDD_OFF). The struct offsets are written out in edd_rs.rs and checked by the
+ * host rig (run-edd-diff.sh) against the real headers compiled for the 32-bit target model. */
+#include <linux/edd.h>
+#include <asm/bootparam.h>
+
+pub const RM_EDDMAGIC1: u16 = EDDMAGIC1;
+pub const RM_EDDMAGIC2: u16 = EDDMAGIC2;
+pub const RM_EDDMAXNR: u8 = EDDMAXNR;
+pub const RM_EDDPARMSIZE: u16 = EDDPARMSIZE;
+pub const RM_EDD_MBR_SIG_OFFSET: usize = EDD_MBR_SIG_OFFSET;
+pub const RM_EDD_MBR_SIG_MAX: u8 = EDD_MBR_SIG_MAX;
+pub const RM_CAN_USE_HEAP: u8 = CAN_USE_HEAP;
+#ifdef CONFIG_EDD_OFF
+pub const RM_EDD_OFF: bool = true;
+#else
+pub const RM_EDD_OFF: bool = false;
+#endif

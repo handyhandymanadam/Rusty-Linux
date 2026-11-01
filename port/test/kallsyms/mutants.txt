@@ -1,0 +1,54 @@
+ex_off1~        off = off.wrapping_add(1);<NL><NL>        // MSB set~        off = off.wrapping_add(2);<NL><NL>        // MSB set
+ex_msb~        if (len & 0x80) != 0 {<NL>            len = (len & 0x7F) | ((*data as c_int) << 7);~        if (len & 0x40) != 0 {<NL>            len = (len & 0x7F) | ((*data as c_int) << 7);
+ex_big_shift~            len = (len & 0x7F) | ((*data as c_int) << 7);~            len = (len & 0x7F) | ((*data as c_int) << 6);
+ex_big_mask~            len = (len & 0x7F) | ((*data as c_int) << 7);~            len = (len & 0x3F) | ((*data as c_int) << 7);
+ex_big_off~            data = data.add(1);<NL>            off = off.wrapping_add(1);<NL>        }<NL><NL>        // the offset~            data = data.add(1);<NL>        }<NL><NL>        // the offset
+ex_next~        off = off.wrapping_add(len as c_uint);~        off = off.wrapping_add(len as c_uint + 1);
+ex_skip~                    skipped_first = true;~                    skipped_first = false;
+ex_skip2~                if skipped_first {<NL>                    if maxlen <= 1 {~                if !skipped_first {<NL>                    if maxlen <= 1 {
+ex_max~                    if maxlen <= 1 {<NL>                        break 'outer;~                    if maxlen <= 0 {<NL>                        break 'outer;
+ex_max2~                    if maxlen <= 1 {<NL>                        break 'outer;~                    if maxlen <= 2 {<NL>                        break 'outer;
+ex_dec~                    maxlen -= 1;~                    maxlen -= 0;
+ex_nul~        if maxlen != 0 {<NL>            *result = 0;~        if maxlen > 1 {<NL>            *result = 0;
+ex_tok~            let mut tptr = t.token_table.add(*t.token_index.add(*data as usize) as usize);~            let mut tptr = t.token_table.add(*t.token_index.add((*data & 0x7f) as usize) as usize);
+ex_lenzero~        'outer: while len != 0 {~        'outer: while len > 1 {
+ty_msb~        if (*t.names.add(off) & 0x80) != 0 {<NL>            off += 1;~        if (*t.names.add(off) & 0x80) == 0 {<NL>            off += 1;
+ty_idx~*t.names.add(off + 1) as usize~*t.names.add(off) as usize
+so_marker~(pos >> 8) as usize~(pos >> 7) as usize
+so_mask~while (i as c_ulong) < (pos & 0xFF) {~while (i as c_ulong) < (pos & 0x7F) {
+so_cmp~while (i as c_ulong) < (pos & 0xFF) {~while (i as c_ulong) <= (pos & 0xFF) {
+so_big~                len = ((len & 0x7F) | ((*name.add(1) as c_int) << 7)) + 1;~                len = ((len & 0x7F) | ((*name.add(1) as c_int) << 7));
+so_big2~(len & 0x7F) | ((*name.add(1) as c_int) << 7)) + 1~(len & 0x7F) | ((*name.add(1) as c_int) << 6)) + 1
+so_adv~            name = name.add((len + 1) as usize);~            name = name.add(len as usize);
+sa_base~t.relative_base.wrapping_add(*t.offsets.add(idx as usize) as c_uint as c_ulong)~t.relative_base.wrapping_add(*t.offsets.add(idx as usize) as c_ulong)
+sa_idx~*t.offsets.add(idx as usize) as c_uint~*t.offsets.add(idx as usize + 1) as c_uint
+sq_shift~            seq = (seq << 8) | *t.seqs.add~            seq = (seq << 7) | *t.seqs.add
+sq_idx~(3 * index + i) as usize~(3 * index + i + 1) as usize
+sc_sign~                return x as c_int - y as c_int;~                return y as c_int - x as c_int;
+sc_unsigned~            let (x, y) = (*a.add(i) as u8, *b.add(i) as u8);~            let (x, y) = (*a.add(i) as i8 as c_int as u8, *b.add(i) as u8 & 0x7f);
+lk_high~        let mut high: c_int = t.num_syms.wrapping_sub(1) as c_int;~        let mut high: c_int = t.num_syms as c_int;
+lk_loop~        while low <= high {<NL>            mid = low + (high - low) / 2;~        while low < high {<NL>            mid = low + (high - low) / 2;
+lk_gt~            if ret > 0 {<NL>                low = mid + 1;~            if ret < 0 {<NL>                low = mid + 1;
+lk_low~                low = mid + 1;~                low = mid;
+lk_high2~                high = mid - 1;~                high = mid;
+lk_fail~        if low > high {<NL>            return -ESRCH;~        if low >= high {<NL>            return -ESRCH;
+lk_back~            let seq = symbol_seq(t, low - 1);~            let seq = symbol_seq(t, low);
+lk_back2~            if strcmp(name, namebuf.as_ptr()) != 0 {<NL>                break;<NL>            }<NL>            low -= 1;~            if strcmp(name, namebuf.as_ptr()) != 0 {<NL>                break;<NL>            }<NL>            low -= 2;
+lk_start~        *start = low as c_uint;~        *start = mid as c_uint;
+lk_end~        if !end.is_null() {~        if end.is_null() {
+lk_fwd~                let seq = symbol_seq(t, high + 1);~                let seq = symbol_seq(t, high);
+lk_fwdlim~            while (high as c_uint) < t.num_syms.wrapping_sub(1) {~            while (high as c_uint) < t.num_syms {
+lk_fwdlim2~            while (high as c_uint) < t.num_syms.wrapping_sub(1) {~            while (high as c_uint) < t.num_syms.wrapping_sub(2) {
+lk_endset~            *end = high as c_uint;~            *end = mid as c_uint;
+lk_ret~            return -ESRCH;~            return 0;
+sp_high~        let mut high: c_ulong = t.num_syms as c_ulong;~        let mut high: c_ulong = t.num_syms as c_ulong - 1;
+sp_loop~        while high.wrapping_sub(low) > 1 {~        while high.wrapping_sub(low) > 2 {
+sp_cmp~            if sym_address(t, mid) <= addr {~            if sym_address(t, mid) < addr {
+sp_mid~            let mid = low + high.wrapping_sub(low) / 2;~            let mid = low + (high.wrapping_sub(low) + 1) / 2;
+sp_alias~        while low != 0 && sym_address(t, low - 1) == sym_address(t, low) {~        while low != 0 && sym_address(t, low - 1) >= sym_address(t, low) {
+sp_alias2~        while low != 0 && sym_address(t, low - 1) == sym_address(t, low) {~        while low > 1 && sym_address(t, low - 1) == sym_address(t, low) {
+sp_alias3~        while low != 0 && sym_address(t, low - 1) == sym_address(t, low) {~        if low != 0 && sym_address(t, low - 1) == sym_address(t, low) {
+sp_gt~            if sym_address(t, i) > start {~            if sym_address(t, i) >= start {
+sp_end~                end = sym_address(t, i);~                end = start;
+sp_brk~                end = sym_address(t, i);<NL>                break;~                end = sym_address(t, i);
+sp_ret~        *symbol_end = end;<NL>        low~        *symbol_end = end;<NL>        low + 1

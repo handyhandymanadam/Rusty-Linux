@@ -1,0 +1,121 @@
+ev_empty~if (*expr).len == 0 {<NL>            return -1;~if (*expr).len == 0 {<NL>            return 0;
+ev_depth~if sp == COND_EXPR_MAXDEPTH as isize - 1 {~if sp == COND_EXPR_MAXDEPTH as isize {
+ev_depth2~if sp == COND_EXPR_MAXDEPTH as isize - 1 {~if sp == COND_EXPR_MAXDEPTH as isize - 2 {
+ev_bool~(**arr.add((*node).boolean.wrapping_sub(1) as usize)).state~(**arr.add((*node).boolean as usize % 2)).state
+ev_not_chk~COND_NOT => {<NL>                    if sp < 0 {~COND_NOT => {<NL>                    if sp < 1 {
+ev_not~s[sp as usize] = (s[sp as usize] == 0) as c_int;~s[sp as usize] = (s[sp as usize] != 0) as c_int;
+ev_or_chk~COND_OR => {<NL>                    if sp < 1 {~COND_OR => {<NL>                    if sp < 0 {
+ev_or~s[sp as usize] |= s[sp as usize + 1];~s[sp as usize] &= s[sp as usize + 1];
+ev_and~s[sp as usize] &= s[sp as usize + 1];~s[sp as usize] |= s[sp as usize + 1];
+ev_xor~s[sp as usize] ^= s[sp as usize + 1];~s[sp as usize] |= s[sp as usize + 1];
+ev_eq~s[sp as usize] = (s[sp as usize] == s[sp as usize + 1]) as c_int;~s[sp as usize] = (s[sp as usize] != s[sp as usize + 1]) as c_int;
+ev_neq~s[sp as usize] = (s[sp as usize] != s[sp as usize + 1]) as c_int;~s[sp as usize] = (s[sp as usize] == s[sp as usize + 1]) as c_int;
+ev_dec~COND_AND => {<NL>                    if sp < 1 {<NL>                        return -1;<NL>                    }<NL>                    sp -= 1;~COND_AND => {<NL>                    if sp < 1 {<NL>                        return -1;<NL>                    }<NL>                    sp -= 2;
+ev_ret~        s[0]<NL>    }<NL>}<NL><NL>/// `evaluate_cond_node()`.~        s[sp as usize]<NL>    }<NL>}<NL><NL>/// `evaluate_cond_node()`.
+node_cmp~if new_state != (*node).cur_state {~if new_state > (*node).cur_state {
+node_set~(*node).cur_state = new_state;<NL>            if new_state == -1 {~if new_state == -1 {
+node_err~if new_state == -1 {<NL>                rust_cd_err(E_UNDEFINED);~if new_state == 1 {<NL>                rust_cd_err(E_UNDEFINED);
+node_t~if new_state <= 0 {~if new_state < 0 {
+node_f~if new_state != 0 {<NL>                    (*avnode).key.specified &= !AVTAB_ENABLED;~if new_state == 1 {<NL>                    (*avnode).key.specified &= !AVTAB_ENABLED;
+node_tflag~(*avnode).key.specified |= AVTAB_ENABLED;<NL>                }<NL>                i += 1;<NL>            }<NL><NL>            i = 0;~(*avnode).key.specified ^= AVTAB_ENABLED;<NL>                }<NL>                i += 1;<NL>            }<NL><NL>            i = 0;
+all_loop~while i < *field::<u32>(p, OFF_COND_LIST_LEN) {<NL>            evaluate_cond_node~while i + 1 < *field::<u32>(p, OFF_COND_LIST_LEN) {<NL>            evaluate_cond_node
+init_list~*field::<*mut c_void>(p, OFF_COND_LIST) = null_mut();<NL>        *field::<u32>(p, OFF_COND_LIST_LEN) = 0;<NL><NL>        avtab_init~*field::<u32>(p, OFF_COND_LIST_LEN) = 0;<NL><NL>        avtab_init
+init_len~*field::<u32>(p, OFF_COND_LIST_LEN) = 0;<NL><NL>        avtab_init~avtab_init
+init_idx~*field::<*mut c_void>(p, OFF_BOOL_VAL_TO_STRUCT) = null_mut();<NL>        *field::<*mut c_void>(p, OFF_COND_LIST) = null_mut();~*field::<*mut c_void>(p, OFF_COND_LIST) = null_mut();
+cnd_free~rust_cd_kfree((*node).expr.nodes as *mut c_void);~{ }
+cnd_free2~rust_cd_kfree((*node).false_list.nodes as *mut c_void);~{ }
+cld_len~*field::<u32>(p, OFF_COND_LIST_LEN) = 0;<NL>    }<NL>}<NL><NL>/// `cond_policydb_destroy()`.~}<NL>}<NL><NL>/// `cond_policydb_destroy()`.
+cld_null~*field::<*mut c_void>(p, OFF_COND_LIST) = null_mut();<NL>        *field::<u32>(p, OFF_COND_LIST_LEN) = 0;<NL>    }<NL>}<NL><NL>/// `cond_policydb_destroy()`.~*field::<u32>(p, OFF_COND_LIST_LEN) = 0;<NL>    }<NL>}<NL><NL>/// `cond_policydb_destroy()`.
+pd_idx~rust_cd_kfree(*field::<*mut c_void>(p, OFF_BOOL_VAL_TO_STRUCT));<NL>        avtab_destroy~avtab_destroy
+pd_av~avtab_destroy(field::<c_void>(p, OFF_TE_COND_AVTAB));<NL>        cond_list_destroy(p);~cond_list_destroy(p);
+ib_free~rust_cd_kfree(*field::<*mut c_void>(p, OFF_BOOL_VAL_TO_STRUCT));<NL>        let arr~let arr
+ib_fail~if arr.is_null() {<NL>            return -ENOMEM;~if arr.is_null() {<NL>            return 0;
+db_key~rust_cd_kfree(key);<NL>        rust_cd_kfree(datum);~rust_cd_kfree(datum);
+db_datum~rust_cd_kfree(key);<NL>        rust_cd_kfree(datum);~rust_cd_kfree(key);
+ix_zero~if (*booldatum).value == 0 || (*booldatum).value > *field::<u32>(p, OFF_BOOLS_NPRIM) {~if (*booldatum).value > *field::<u32>(p, OFF_BOOLS_NPRIM) {
+ix_max~|| (*booldatum).value > *field::<u32>(p, OFF_BOOLS_NPRIM) {~|| (*booldatum).value >= *field::<u32>(p, OFF_BOOLS_NPRIM) {
+ix_name~*names.add((*booldatum).value as usize - 1) = key;~*names.add((*booldatum).value as usize - 1) = datum;
+ix_arr~*arr.add((*booldatum).value as usize - 1) = booldatum;~*arr.add((*booldatum).value as usize) = booldatum;
+rb_alloc~if booldatum.is_null() {<NL>            return -ENOMEM;~if booldatum.is_null() {<NL>            return 0;
+rb_val~(*booldatum).value = u32::from_le(buf[0]);~(*booldatum).value = u32::from_le(buf[1]);
+rb_bool~if val > 1 {~if val > 2 {
+rb_state~(*booldatum).state = val as c_int;~(*booldatum).state = 0;
+rb_len~let len = u32::from_le(buf[2]);~let len = u32::from_le(buf[1]);
+rb_err~rust_cd_err(E_READ_BOOL);<NL>        cond_destroy_bool~cond_destroy_bool
+rb_destroy~cond_destroy_bool(key as *mut c_void, booldatum as *mut c_void, null_mut());<NL>        rc~rc
+rb_ret~rc = symtab_insert(s, key, booldatum as *mut c_void);<NL>            if rc != 0 {<NL>                break 'err;~rc = symtab_insert(s, key, booldatum as *mut c_void);<NL>            if rc != 0 {<NL>                rc = 0;<NL>                break 'err;
+ri_type~if (*k).specified & AVTAB_TYPE != 0 {<NL>            if !avtab_search_node(field::<c_void>(p, OFF_TE_AVTAB), k).is_null() {~if (*k).specified & AVTAB_TYPE == 0 {<NL>            if !avtab_search_node(field::<c_void>(p, OFF_TE_AVTAB), k).is_null() {
+ri_exists~rust_cd_err(E_TYPE_EXISTS);<NL>                return -EINVAL;~rust_cd_err(E_TYPE_EXISTS);<NL>                return 0;
+ri_other~if !other.is_null() {<NL>                let node_ptr~if other.is_null() {<NL>                let node_ptr
+ri_many~if !avtab_search_node_next(node_ptr, (*k).specified).is_null() {~if avtab_search_node_next(node_ptr, (*k).specified).is_null() {
+ri_found~let mut found = false;~let mut found = true;
+ri_in~if *(*other).nodes.add(i as usize) == node_ptr {~if *(*other).nodes.add(i as usize) != node_ptr {
+ri_conf~if !found {<NL>                        rust_cd_err(E_CONFLICT);~if found {<NL>                        rust_cd_err(E_CONFLICT);
+ri_true~} else if !avtab_search_node(field::<c_void>(p, OFF_TE_COND_AVTAB), k).is_null() {~} else if avtab_search_node(field::<c_void>(p, OFF_TE_COND_AVTAB), k).is_null() {
+ri_ins~if node_ptr.is_null() {<NL>            rust_cd_err(E_INSERT);<NL>            return -ENOMEM;~if node_ptr.is_null() {<NL>            rust_cd_err(E_INSERT);<NL>            return 0;
+ri_dst~*(*data).dst = node_ptr;~*(*data).dst = null_mut();
+al_zero~if len == 0 {<NL>            return 0;<NL>        }<NL><NL>        (*list).nodes~if len == 1 {<NL>            return 0;<NL>        }<NL><NL>        (*list).nodes
+al_fail~if (*list).nodes.is_null() {<NL>            return -ENOMEM;~if (*list).nodes.is_null() {<NL>            return 0;
+al_null~rust_cd_kfree((*list).nodes as *mut c_void);<NL>                (*list).nodes = null_mut();<NL>                return rc;~(*list).nodes = null_mut();<NL>                return rc;
+al_cond~c_void, true);~c_void, false);
+al_len~(*list).len = len;<NL>        0~0
+al_other~data = InsertData { p, dst: null_mut(), other }~data = InsertData { p, dst: null_mut(), other: null_mut() }
+ev_op~if (*expr).expr_type == 0 || (*expr).expr_type > COND_LAST {~if (*expr).expr_type == 0 || (*expr).expr_type >= COND_LAST {
+ev_op0~if (*expr).expr_type == 0 || (*expr).expr_type > COND_LAST {~if (*expr).expr_type > COND_LAST {
+ev_bool0~(*expr).expr_type == COND_BOOL && ((*expr).boolean == 0 || (*expr).boolean > *field::<u32>(p, OFF_BOOLS_NPRIM))~(*expr).expr_type == COND_BOOL && ((*expr).boolean > *field::<u32>(p, OFF_BOOLS_NPRIM))
+ev_boolmax~(*expr).boolean > *field::<u32>(p, OFF_BOOLS_NPRIM))~(*expr).boolean >= *field::<u32>(p, OFF_BOOLS_NPRIM))
+rn_state~(*node).cur_state = u32::from_le(buf[0]) as c_int;~(*node).cur_state = u32::from_le(buf[1]) as c_int;
+rn_len~(*node).expr.len = len;~(*node).expr.len = len + 0 * 1;<NL>        if len > 4 { (*node).expr.len = 4; }
+rn_true~rc = cond_read_av_list(p, fp, &mut (*node).true_list, null_mut());~rc = cond_read_av_list(p, fp, &mut (*node).true_list, &mut (*node).false_list);
+rn_false~cond_read_av_list(p, fp, &mut (*node).false_list, &mut (*node).true_list)~cond_read_av_list(p, fp, &mut (*node).false_list, null_mut())
+rn_valid~if !expr_node_isvalid(p, expr) {~if expr_node_isvalid(p, expr) {
+rl_alloc~if list.is_null() {<NL>            return -ENOMEM;<NL>        }<NL><NL>        'err~if list.is_null() {<NL>            return 0;<NL>        }<NL><NL>        'err
+rl_nel~*field::<u32>(field::<c_void>(p, OFF_TE_AVTAB), 8)~*field::<u32>(field::<c_void>(p, OFF_TE_AVTAB), 12)
+rl_len~*field::<u32>(p, OFF_COND_LIST_LEN) = len;<NL><NL>            let mut i = 0;~let mut i = 0;
+rl_err~cond_list_destroy(p);<NL>        rc<NL>    }<NL>}<NL><NL>/// `strlen()`.~rc<NL>    }<NL>}<NL><NL>/// `strlen()`.
+wb_val~[(*booldatum).value.to_le(), ((*booldatum).state as u32).to_le(), (len as u32).to_le()]~[((*booldatum).state as u32).to_le(), (*booldatum).value.to_le(), (len as u32).to_le()]
+wb_key~rc = put_entry(key as *const u8, 1, len, fp);~rc = put_entry(key as *const u8, 1, len + 1, fp);
+wb_rc~let mut rc = put_entry(buf.as_ptr() as *const u8, 4, 3, fp);<NL>        if rc != 0 {<NL>            return rc;~let mut rc = put_entry(buf.as_ptr() as *const u8, 4, 3, fp);<NL>        if rc != 0 {<NL>            return 0;
+wa_len~let buf = [(*list).len.to_le()];~let buf = [(*list).len.to_le() + 1];
+wa_rc~rc = avtab_write_item(p, *(*list).nodes.add(i as usize), fp);<NL>            if rc != 0 {<NL>                return rc;~rc = avtab_write_item(p, *(*list).nodes.add(i as usize), fp);<NL>            if rc != 0 {<NL>                return 0;
+wn_state~let mut buf = [(((*node).cur_state) as u32).to_le()];~let mut buf = [0u32];
+wn_expr~buf[0] = (*node).expr.len.to_le();~buf[0] = 0u32;
+wn_pair~(*(*node).expr.nodes.add(i as usize)).expr_type.to_le(), (*(*node).expr.nodes.add(i as usize)).boolean.to_le()~(*(*node).expr.nodes.add(i as usize)).boolean.to_le(), (*(*node).expr.nodes.add(i as usize)).expr_type.to_le()
+wn_false~rc = cond_write_av_list(p, &mut (*node).false_list, fp);~rc = cond_write_av_list(p, &mut (*node).true_list, fp);
+wl_len~let buf = [(*field::<u32>(p, OFF_COND_LIST_LEN)).to_le()];~let buf = [0u32];
+wl_rc~rc = cond_write_node(p, list.add(i as usize), fp);<NL>            if rc != 0 {<NL>                return rc;~rc = cond_write_node(p, list.add(i as usize), fp);<NL>            if rc != 0 {<NL>                return 0;
+cx_null~if ctab.is_null() || key.is_null() || xpermd.is_null() {<NL>            return;~if ctab.is_null() || key.is_null() {<NL>            return;
+cx_en~if (*node).key.specified & AVTAB_ENABLED != 0 {<NL>                services_compute_xperms_decision~if (*node).key.specified & AVTAB_ENABLED == 0 {<NL>                services_compute_xperms_decision
+cx_next~node = avtab_search_node_next(node, (*key).specified);<NL>        }<NL>    }<NL>}<NL><NL>/// `cond_compute_av()`~node = (*node).next;<NL>        }<NL>    }<NL>}<NL><NL>/// `cond_compute_av()`
+ca_null~if ctab.is_null() || key.is_null() || avd.is_null() {~if ctab.is_null() || key.is_null() {
+ca_allow~(*avd).allowed |= datum;~(*avd).allowed &= datum;
+ca_allow_f~if AVTAB_ALLOWED | AVTAB_ENABLED == sp & (AVTAB_ALLOWED | AVTAB_ENABLED) {~if AVTAB_ALLOWED == sp & (AVTAB_ALLOWED | AVTAB_ENABLED) {
+ca_deny~(*avd).auditdeny &= datum;~(*avd).auditdeny |= datum;
+ca_deny_f~if AVTAB_AUDITDENY | AVTAB_ENABLED == sp & (AVTAB_AUDITDENY | AVTAB_ENABLED) {~if AVTAB_AUDITDENY | AVTAB_ENABLED == sp & (AVTAB_AUDITDENY) {
+ca_aa~(*avd).auditallow |= datum;~(*avd).auditallow &= datum;
+ca_aa_f~if AVTAB_AUDITALLOW | AVTAB_ENABLED == sp & (AVTAB_AUDITALLOW | AVTAB_ENABLED) {~if AVTAB_AUDITALLOW == sp & (AVTAB_AUDITALLOW | AVTAB_ENABLED) {
+ca_x~if !xperms.is_null() && sp & AVTAB_ENABLED != 0 && sp & AVTAB_XPERMS != 0 {~if !xperms.is_null() && sp & AVTAB_ENABLED != 0 {
+ca_x2~if !xperms.is_null() && sp & AVTAB_ENABLED != 0 && sp & AVTAB_XPERMS != 0 {~if !xperms.is_null() && sp & AVTAB_XPERMS != 0 {
+dl_fail~if (*new).nodes.is_null() {<NL>            return -ENOMEM;~if (*new).nodes.is_null() {<NL>            return 0;
+dl_key~avtab_insert_nonunique(avtab, &(*o).key, &(*o).datum)~avtab_insert_nonunique(avtab, &(*o).key, &0u64)
+dl_len~(*new).len += 1;~(*new).len += 0;
+dl_null~if n.is_null() {<NL>                return -ENOMEM;~if n.is_null() {<NL>                return 0;
+dp_alloc~let rc = avtab_alloc_dup(field::<c_void>(newp, OFF_TE_COND_AVTAB), field::<c_void>(origp, OFF_TE_COND_AVTAB));<NL>        if rc != 0 {<NL>            return rc;~let rc = avtab_alloc_dup(field::<c_void>(newp, OFF_TE_COND_AVTAB), field::<c_void>(origp, OFF_TE_COND_AVTAB));<NL>        if rc != 0 {<NL>            return 0;
+dp_inc~*field::<u32>(newp, OFF_COND_LIST_LEN) += 1;~*field::<u32>(newp, OFF_COND_LIST_LEN) += 0;
+dp_state~(*newn).cur_state = (*orign).cur_state;~(*newn).cur_state = 0;
+dp_expr~(*orign).expr.len as usize * core::mem::size_of::<ExprNode>()~(*orign).expr.len as usize * 4
+dp_fail~if (*newn).expr.nodes.is_null() {<NL>                    break 'error;~if (*newn).expr.nodes.is_null() {<NL>                    return 0;
+dp_elen~(*newn).expr.len = (*orign).expr.len;~(*newn).expr.len = 0;
+dp_true~let mut rc = cond_dup_av_list(&mut (*newn).true_list, &(*orign).true_list~let mut rc = cond_dup_av_list(&mut (*newn).true_list, &(*orign).false_list
+bc_key~(*new).key = (*orig).key; // No need to copy, never modified~(*new).key = null_mut();
+bc_dat~(*new).datum = datum;<NL>        0~(*new).datum = (*orig).datum;<NL>        0
+bc_fail~if datum.is_null() {<NL>            return -ENOMEM;~if datum.is_null() {<NL>            return 0;
+bi_idx~*cond_bool_array.add((*booldatum).value.wrapping_sub(1) as usize) = booldatum;~*cond_bool_array.add(0) = booldatum;
+bd_alloc~let cond_bool_array = rust_cd_kcalloc(nprim, core::mem::size_of::<*mut BoolDatum>()) as *mut *mut BoolDatum;<NL>        if cond_bool_array.is_null() {<NL>            return -ENOMEM;~let cond_bool_array = rust_cd_kcalloc(nprim, core::mem::size_of::<*mut BoolDatum>()) as *mut *mut BoolDatum;<NL>        if cond_bool_array.is_null() {<NL>            return 0;
+bd_free~rust_cd_kfree(cond_bool_array as *mut c_void);<NL>            return -ENOMEM;~return -ENOMEM;
+bd_nprim~*field::<u32>(newdb, OFF_BOOLS_NPRIM) = nprim;~
+bd_set~*field::<*mut *mut BoolDatum>(newdb, OFF_BOOL_VAL_TO_STRUCT) = cond_bool_array;~
+dd_map~hashtab_map(field::<c_void>(p, OFF_BOOLS_TABLE), cond_bools_destroy, null_mut());<NL>        hashtab_destroy~hashtab_destroy
+dd_tab~hashtab_destroy(field::<c_void>(p, OFF_BOOLS_TABLE));<NL>        cond_policydb_destroy(p);~cond_policydb_destroy(p);
+dup_init~cond_policydb_init(new);<NL><NL>        if duplicate_policydb_bools~if duplicate_policydb_bools
+dup_cl~if duplicate_policydb_cond_list(new, orig) != 0 {<NL>            cond_policydb_destroy_dup(new);~if duplicate_policydb_cond_list(new, orig) != 0 {

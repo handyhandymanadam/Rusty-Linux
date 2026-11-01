@@ -1,0 +1,13 @@
+# chk-kc -- lockdep + atomic-sleep + PROVE_RCU + KCSAN (clang). KCSAN depends on !KASAN, so it is its own build.
+# (shared lines are the same as chk-ka.fragment; keep in step)
+CONFIG_LIB_STRESS=y
+CONFIG_PROVE_LOCKING=y
+CONFIG_PROVE_RCU=y
+CONFIG_DEBUG_ATOMIC_SLEEP=y
+CONFIG_PREEMPT=y
+CONFIG_DEBUG_PREEMPT=y
+CONFIG_KCSAN=y
+CONFIG_KCSAN_SELFTEST=y
+# SMP: build-fast has no ACPI, and then QEMU -smp N still brings up ONE cpu (even the pristine C kernel: logs/concurrency-tooling.md)
+CONFIG_ACPI=y
+CONFIG_PCI=y

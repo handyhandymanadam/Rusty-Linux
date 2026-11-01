@@ -124,7 +124,7 @@ fn sha1_block_generic(state: &mut Sha1BlockState, data: &[u8; SHA1_BLOCK_SIZE]) 
         w[i] = u32::from_be_bytes(chunk.try_into().unwrap());
     }
     for i in 16..80 {
-        w[i] = (w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16]).rotate_left(1);
+        w[i] = (w[i.wrapping_sub(3)] ^ w[i.wrapping_sub(8)] ^ w[i.wrapping_sub(14)] ^ w[i.wrapping_sub(16)]).rotate_left(1);
     }
 
     let [mut a, mut b, mut c, mut d, mut e] = state.h;
@@ -180,7 +180,7 @@ pub unsafe extern "C" fn rust_sha1_blocks_generic(
         sha1_block_generic(state, block);
         // SAFETY: one block consumed; `nblocks` still bounds what is left.
         data = unsafe { data.add(SHA1_BLOCK_SIZE) };
-        nblocks -= 1;
+        nblocks = nblocks.wrapping_sub(1);
     }
 }
 
@@ -212,7 +212,7 @@ pub unsafe extern "C" fn sha1_transform(digest: *mut u32, data: *const c_char, a
         w[i] = u32::from_be_bytes(chunk.try_into().unwrap());
     }
     for i in 16..80 {
-        w[i] = (w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16]).rotate_left(1);
+        w[i] = (w[i.wrapping_sub(3)] ^ w[i.wrapping_sub(8)] ^ w[i.wrapping_sub(14)] ^ w[i.wrapping_sub(16)]).rotate_left(1);
     }
     // The legacy entry point also publishes each computed schedule word into
     // the caller's workspace, matching the C's `setW(t, TEMP)` -- observable
@@ -309,15 +309,15 @@ pub unsafe extern "C" fn sha1_update(ctx: *mut Sha1Ctx, data: *const u8, len: us
 
     ctx.bytecount = ctx.bytecount.wrapping_add(len as u64);
 
-    if partial + len >= SHA1_BLOCK_SIZE {
+    if partial.wrapping_add(len) >= SHA1_BLOCK_SIZE {
         if partial != 0 {
-            let l = SHA1_BLOCK_SIZE - partial;
+            let l = SHA1_BLOCK_SIZE.wrapping_sub(partial);
             // SAFETY: `partial < 64` so this fits in `buf`; the caller
             // guarantees `data` readable for `len >= l` bytes here.
             unsafe { core::ptr::copy_nonoverlapping(data, ctx.buf.as_mut_ptr().add(partial), l) };
             // SAFETY: `l` bytes consumed above.
             data = unsafe { data.add(l) };
-            len -= l;
+            len = len.wrapping_sub(l);
             // SAFETY: `ctx.buf` holds one full, valid block.
             unsafe { sha1_blocks_dispatch(&mut ctx.state, ctx.buf.as_ptr(), 1) };
         }
@@ -358,13 +358,13 @@ unsafe fn sha1_core_final(ctx: *mut Sha1Ctx, out: *mut u8) {
         let buf: *mut u8 = (&raw mut (*ctx).buf).cast();
 
         *buf.add(partial) = 0x80;
-        partial += 1;
+        partial = partial.wrapping_add(1);
         if partial > SHA1_BLOCK_SIZE - 8 {
-            core::ptr::write_bytes(buf.add(partial), 0, SHA1_BLOCK_SIZE - partial);
+            core::ptr::write_bytes(buf.add(partial), 0, SHA1_BLOCK_SIZE.wrapping_sub(partial));
             sha1_blocks_dispatch(&raw mut (*ctx).state, buf, 1);
             partial = 0;
         }
-        core::ptr::write_bytes(buf.add(partial), 0, SHA1_BLOCK_SIZE - 8 - partial);
+        core::ptr::write_bytes(buf.add(partial), 0, (SHA1_BLOCK_SIZE - 8).wrapping_sub(partial));
         core::ptr::copy_nonoverlapping(bitcount.to_be_bytes().as_ptr(), buf.add(SHA1_BLOCK_SIZE - 8), 8);
         sha1_blocks_dispatch(&raw mut (*ctx).state, buf, 1);
 
@@ -372,7 +372,7 @@ unsafe fn sha1_core_final(ctx: *mut Sha1Ctx, out: *mut u8) {
         while i < SHA1_DIGEST_SIZE {
             let bytes = (*ctx).state.h[i / 4].to_be_bytes();
             core::ptr::copy_nonoverlapping(bytes.as_ptr(), out.add(i), 4);
-            i += 4;
+            i = i.wrapping_add(4);
         }
     }
 }
@@ -540,7 +540,7 @@ unsafe fn hmac_core_final(ctx: *mut HmacSha1Ctx, out: *mut u8) {
         while i < SHA1_DIGEST_SIZE {
             let bytes = (*ctx).ostate.h[i / 4].to_be_bytes();
             core::ptr::copy_nonoverlapping(bytes.as_ptr(), out.add(i), 4);
-            i += 4;
+            i = i.wrapping_add(4);
         }
 
         memzero_explicit_bytes(ctx.cast(), core::mem::size_of::<HmacSha1Ctx>());

@@ -229,10 +229,10 @@ fn sha512_block_generic(state: &mut Sha512BlockState, data: &[u8; SHA512_BLOCK_S
         w[i] = u64::from_be_bytes(chunk.try_into().unwrap());
     }
     for i in 16..80 {
-        w[i] = small_s1(w[i - 2])
-            .wrapping_add(w[i - 7])
-            .wrapping_add(small_s0(w[i - 15]))
-            .wrapping_add(w[i - 16]);
+        w[i] = small_s1(w[i.wrapping_sub(2)])
+            .wrapping_add(w[i.wrapping_sub(7)])
+            .wrapping_add(small_s0(w[i.wrapping_sub(15)]))
+            .wrapping_add(w[i.wrapping_sub(16)]);
     }
 
     let [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut h] = state.h;
@@ -295,7 +295,7 @@ pub unsafe extern "C" fn rust_sha512_blocks_generic(
         sha512_block_generic(state, block);
         // SAFETY: one block consumed; `nblocks` still bounds what is left.
         data = unsafe { data.add(SHA512_BLOCK_SIZE) };
-        nblocks -= 1;
+        nblocks = nblocks.wrapping_sub(1);
     }
 }
 
@@ -360,15 +360,15 @@ pub unsafe extern "C" fn __sha512_update(ctx: *mut Sha512CoreCtx, data: *const u
         ctx.bytecount_hi = ctx.bytecount_hi.wrapping_add(1);
     }
 
-    if partial + len >= SHA512_BLOCK_SIZE {
+    if partial.wrapping_add(len) >= SHA512_BLOCK_SIZE {
         if partial != 0 {
-            let l = SHA512_BLOCK_SIZE - partial;
+            let l = SHA512_BLOCK_SIZE.wrapping_sub(partial);
             // SAFETY: `partial < 128` so this fits in `buf`; the caller
             // guarantees `data` readable for `len >= l` bytes here.
             unsafe { core::ptr::copy_nonoverlapping(data, ctx.buf.as_mut_ptr().add(partial), l) };
             // SAFETY: `l` bytes consumed above.
             data = unsafe { data.add(l) };
-            len -= l;
+            len = len.wrapping_sub(l);
             // SAFETY: `ctx.buf` holds one full, valid block.
             unsafe { sha512_blocks_dispatch(&mut ctx.state, ctx.buf.as_ptr(), 1) };
         }
@@ -414,13 +414,13 @@ unsafe fn sha512_core_final(ctx: *mut Sha512CoreCtx, out: *mut u8, digest_size: 
         let buf: *mut u8 = (&raw mut (*ctx).buf).cast();
 
         *buf.add(partial) = 0x80;
-        partial += 1;
+        partial = partial.wrapping_add(1);
         if partial > SHA512_BLOCK_SIZE - 16 {
-            core::ptr::write_bytes(buf.add(partial), 0, SHA512_BLOCK_SIZE - partial);
+            core::ptr::write_bytes(buf.add(partial), 0, SHA512_BLOCK_SIZE.wrapping_sub(partial));
             sha512_blocks_dispatch(&raw mut (*ctx).state, buf, 1);
             partial = 0;
         }
-        core::ptr::write_bytes(buf.add(partial), 0, SHA512_BLOCK_SIZE - 16 - partial);
+        core::ptr::write_bytes(buf.add(partial), 0, (SHA512_BLOCK_SIZE - 16).wrapping_sub(partial));
         core::ptr::copy_nonoverlapping(
             bitcount_hi.to_be_bytes().as_ptr(),
             buf.add(SHA512_BLOCK_SIZE - 16),
@@ -437,7 +437,7 @@ unsafe fn sha512_core_final(ctx: *mut Sha512CoreCtx, out: *mut u8, digest_size: 
         while i < digest_size {
             let bytes = (*ctx).state.h[i / 8].to_be_bytes();
             core::ptr::copy_nonoverlapping(bytes.as_ptr(), out.add(i), 8);
-            i += 8;
+            i = i.wrapping_add(8);
         }
     }
 }
@@ -713,9 +713,9 @@ unsafe fn hmac_core_final(ctx: *mut Sha512HmacCtxCore, out: *mut u8, digest_size
         let buf: *mut u8 = (&raw mut (*ctx).sha_ctx.buf).cast();
         sha512_core_final(sha_ctx_ptr, buf, digest_size);
 
-        core::ptr::write_bytes(buf.add(digest_size), 0, SHA512_BLOCK_SIZE - digest_size);
+        core::ptr::write_bytes(buf.add(digest_size), 0, SHA512_BLOCK_SIZE.wrapping_sub(digest_size));
         *buf.add(digest_size) = 0x80;
-        let bits: u32 = 8u32.wrapping_mul((SHA512_BLOCK_SIZE + digest_size) as u32);
+        let bits: u32 = 8u32.wrapping_mul((SHA512_BLOCK_SIZE.wrapping_add(digest_size)) as u32);
         core::ptr::copy_nonoverlapping(bits.to_be_bytes().as_ptr(), buf.add(SHA512_BLOCK_SIZE - 4), 4);
 
         let ostate_ptr: *mut Sha512BlockState = &raw mut (*ctx).ostate;
@@ -724,7 +724,7 @@ unsafe fn hmac_core_final(ctx: *mut Sha512HmacCtxCore, out: *mut u8, digest_size
         while i < digest_size {
             let bytes = (*ctx).ostate.h[i / 8].to_be_bytes();
             core::ptr::copy_nonoverlapping(bytes.as_ptr(), out.add(i), 8);
-            i += 8;
+            i = i.wrapping_add(8);
         }
 
         memzero_explicit_bytes(ctx.cast(), core::mem::size_of::<Sha512HmacCtxCore>());

@@ -1,9 +1,9 @@
 /* SPDX-License-Identifier: GPL-2.0
  *
- * The shared measuring rig (GOALS.md §4).
+ * The shared measuring rig (notes/GOALS.md §4).
  *
  * ONE binary, both arms inside it, chosen at runtime. That is not a style
- * choice: PRIOR-ART.md §1 records a control reading 0.825 on a callee that
+ * choice: notes/PRIOR-ART.md §1 records a control reading 0.825 on a callee that
  * was BYTE-IDENTICAL in both arms, purely because the two arms were separate
  * binaries laid out differently in memory. Re-measured on a second rig it was
  * 0.982/0.985 -- about 1.5-1.8%, ten times the run-to-run noise, and always
@@ -39,7 +39,7 @@
  * that the whole run takes long enough for the clock's resolution and any
  * fixed overhead to be under 1% of it.
  *
- * ONE rig for all modules, not one per module (GOALS.md §7). A benchmark is
+ * ONE rig for all modules, not one per module (notes/GOALS.md §7). A benchmark is
  * a row in the table at the bottom, not a new program.
  *
  * THE CONTROL COMES FIRST. Run with --control and both arms are pointed at
@@ -345,7 +345,7 @@ static uint64_t sig_rust(unsigned long n, void *ctx)
 
 /* ---- zlib_inflate, in rig/perf/bench_zlib.c ---------------------------- */
 
-/* SEVEN rows, not one. PRIOR-ART.md §5 records a twelve-fold spread on a
+/* SEVEN rows, not one. notes/PRIOR-ART.md §5 records a twelve-fold spread on a
  * decompressor across corpus inputs, so a single number in this family means
  * almost nothing; the spread is the measurement. See bench_zlib.c for what
  * each corpus is and for why the ratio is diluted toward 1. */
@@ -426,7 +426,7 @@ int main(int argc, char **argv)
 	/* REFUSE TO PRINT A TIMING NEVER MEASURED. With reps < 1 the loops
 	 * below never run and every row printed best_of()'s 1e30 initial
 	 * value -- a number the instrument had not measured, formatted like
-	 * one it had. That is exactly what GOALS.md §4 exists to prevent, and
+	 * one it had. That is exactly what notes/GOALS.md §4 exists to prevent, and
 	 * it reached the terminal once (via run.sh passing --kerf-only
 	 * through as the repetition count, since fixed). Closing the argument
 	 * path would leave the class open; this closes the class. */

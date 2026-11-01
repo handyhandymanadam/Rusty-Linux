@@ -73,6 +73,12 @@ fn quarter_round(x: &mut [u32; STATE_WORDS], a: usize, b: usize, c: usize, d: us
 
 /// The permutation. `nrounds` is 20 or 12; `lib/crypto/chacha-block-generic.c`
 /// has already `WARN_ON_ONCE`d anything else.
+///
+/// `i`'s own `wrapping_add` below is not ARX wraparound like the rest of
+/// this file -- it is the same "contract-bounded, compiler can't prove
+/// it" case as elsewhere in this session's panic-triage pass: `i` only
+/// ever counts 0, 2, .., 18/10 given the `nrounds` contract, nowhere
+/// near `c_int::MAX`, but rustc has no way to know that from the type.
 fn permute(x: &mut [u32; STATE_WORDS], nrounds: c_int) {
     let mut i = 0;
 
@@ -89,7 +95,7 @@ fn permute(x: &mut [u32; STATE_WORDS], nrounds: c_int) {
         quarter_round(x, 2, 7, 8, 13);
         quarter_round(x, 3, 4, 9, 14);
 
-        i += 2;
+        i = i.wrapping_add(2);
     }
 }
 

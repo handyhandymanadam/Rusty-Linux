@@ -1,0 +1,60 @@
+isalnum_ascii~unsafe { rust_ue_isalnum(c) }~(c as u8).is_ascii_alphanumeric()
+isalnum_neg~if !isalnum(c) {~if isalnum(c) {
+strncmp_nul~        if x == 0 {<NL>            return false;~        if x == 1 {<NL>            return false;
+strncmp_diff~        if x != y {<NL>            return true;~        if x > y {<NL>            return true;
+type_nl~if count != 0 && (*buf.add(count - 1) == b'\n' as c_char || *buf.add(count - 1) == 0) {<NL>            count -= 1;<NL>        }<NL>        if count == 0 {<NL>            return -EINVAL;<NL>        }<NL><NL>        // strnchr~if count != 0 && (*buf.add(count - 1) == b'\n' as c_char) {<NL>            count -= 1;<NL>        }<NL>        if count == 0 {<NL>            return -EINVAL;<NL>        }<NL><NL>        // strnchr
+type_nul~if count != 0 && (*buf.add(count - 1) == b'\n' as c_char || *buf.add(count - 1) == 0) {<NL>            count -= 1;<NL>        }<NL>        if count == 0 {<NL>            return -EINVAL;<NL>        }<NL><NL>        // strnchr~if count != 0 && (*buf.add(count - 1) == 0) {<NL>            count -= 1;<NL>        }<NL>        if count == 0 {<NL>            return -EINVAL;<NL>        }<NL><NL>        // strnchr
+type_empty~        if count == 0 {<NL>            return -EINVAL;<NL>        }<NL><NL>        // strnchr~        if count == 1 {<NL>            return -EINVAL;<NL>        }<NL><NL>        // strnchr
+strnchr_nul~            if *buf.add(i) == 0 {<NL>                break;<NL>            }~            if false {<NL>                break;<NL>            }
+strnchr_bound~        for i in 0..count {<NL>            if *buf.add(i) == b' ' as c_char {~        for i in 0..count + 1 {<NL>            if *buf.add(i) == b' ' as c_char {
+first_len~count_first = args_start.offset_from(buf) as usize;~count_first = args_start.offset_from(buf) as usize + 1;
+args_skip~            args_start = args_start.add(1);~            
+exact_end~if count_first > strlen(name) || *name.add(count_first) != 0 {~if count_first > strlen(name) {
+exact_len~if count_first > strlen(name) || *name.add(count_first) != 0 {~if *name.add(count_first.min(strlen(name))) != 0 {
+set_args~            if !args.is_null() {<NL>                *args = args_start;~            if false {<NL>                *args = args_start;
+set_type~            *ty = action as c_int;~            *ty = 0;
+loop_end~for action in 0..N_ACTIONS {~for action in 0..N_ACTIONS - 1 {
+word_bound~while next <= buf_end && *next != delim {~while next < buf_end && *next != delim {
+word_delim~while next <= buf_end && *next != delim {~while next <= buf_end && *next != b'=' as c_char {
+word_empty~        if next == buf {<NL>            return null();~        if false {<NL>            return null();
+word_incr~            let c = *next;<NL>            next = next.add(1);<NL>            if !isalnum(c) {~            let c = *next;<NL>            if !isalnum(c) {
+args_nl~if count != 0 && (*buf.add(count - 1) == b'\n' as c_char || *buf.add(count - 1) == 0) {<NL>            count -= 1;<NL>        }<NL>        if count == 0 {<NL>            return -EINVAL;<NL>        }<NL><NL>        let env~if count != 0 && (*buf.add(count - 1) == 0) {<NL>            count -= 1;<NL>        }<NL>        if count == 0 {<NL>            return -EINVAL;<NL>        }<NL><NL>        let env
+args_empty~        if count == 0 {<NL>            return -EINVAL;<NL>        }<NL><NL>        let env~        if count == 1 {<NL>            return -EINVAL;<NL>        }<NL><NL>        let env
+args_nomem~            return -ENOMEM;~            return -EINVAL;
+uuid_len~if count < UUID_STRING_LEN ||~if count <= UUID_STRING_LEN ||
+uuid_valid~|| !rust_ue_uuid_is_valid(buf) ||~|| false ||
+uuid_add~|| rust_ue_add_synth_uuid(env, buf) != 0 {~|| rust_ue_add_synth_uuid(env, buf) == 99 {
+uuid_next~let mut next = buf.add(UUID_STRING_LEN);~let mut next = buf.add(UUID_STRING_LEN - 1);
+end_off~let buf_end = buf.add(count - 1);~let buf_end = buf.add(count);
+sep_check~                if *next != b' ' as c_char {<NL>                    break 'out;~                if *next != b' ' as c_char && *next != b'\t' as c_char {<NL>                    break 'out;
+key_end~                if key > buf_end {~                if key >= buf_end {
+key_eq~                if next.is_null() || next > buf_end || *next != b'=' as c_char {~                if next.is_null() || next > buf_end {
+key_next_end~                if next.is_null() || next > buf_end || *next != b'=' as c_char {~                if next.is_null() || next >= buf_end || *next != b'=' as c_char {
+key_len~let key_len = next.offset_from(b) as c_int;~let key_len = next.offset_from(b) as c_int + 1;
+val_end~                if next > buf_end {<NL>                    break 'out;~                if next >= buf_end {<NL>                    break 'out;
+val_null~                if next.is_null() {<NL>                    break 'out;~                if false {<NL>                    break 'out;
+val_len~next.offset_from(b) as c_int) != 0 {~next.offset_from(b) as c_int - 1) != 0 {
+arg_add~if rust_ue_add_synth_arg(env, key, key_len, b, next.offset_from(b) as c_int) != 0 {~if rust_ue_add_synth_arg(env, key, key_len, b, next.offset_from(b) as c_int) == 99 {
+free_env~        if r != 0 {<NL>            rust_ue_kfree(env);<NL>        } else {~        if r != 0 {<NL>        } else {
+ret_env~            *ret_env = env;~            
+synth_unknown~                msg = 1;<NL>                break 'out;~                msg = 2;<NL>                break 'out;
+synth_noargs~            if action_args.is_null() {~            if !action_args.is_null() {
+synth_count~count.wrapping_sub(action_args.offset_from(buf) as usize)~count
+synth_inval~            if r == -EINVAL {<NL>                msg = 2;~            if r != 0 {<NL>                msg = 2;
+synth_nomem~            if r != 0 {<NL>                break 'out;~            if false {<NL>                break 'out;
+synth_env~(env as *mut u8).add(ENV_ENVP)~(env as *mut u8).add(ENV_ENVP + 8)
+synth_free~            rust_ue_kfree(env);<NL>        }<NL>        if r != 0 {<NL>            rust_ue_warn_synth~        }<NL>        if r != 0 {<NL>            rust_ue_warn_synth
+synth_warn~        if r != 0 {<NL>            rust_ue_warn_synth(kobj, msg);~        if r < -1000 {<NL>            rust_ue_warn_synth(kobj, msg);
+zap_prefix~    const PREFIX: &[u8; 9] = b"MODALIAS=";~    const PREFIX: &[u8; 9] = b"MODALIAS ";
+zap_cmp~                if c != *p {<NL>                    is_prefix = false;~                if c == *p {<NL>                    is_prefix = false;
+zap_skip~            if !is_prefix {<NL>                i += 1;<NL>                continue;~            if !is_prefix {<NL>                i += 2;<NL>                continue;
+zap_len~let len = (strlen(e) + 1) as isize;~let len = strlen(e) as isize;
+zap_last~            if i != *envp_idx - 1 {~            if i != *envp_idx {
+zap_n~let n = (*buflen as isize).wrapping_sub(next.offset_from(*envp));~let n = (*buflen as isize).wrapping_sub(next.offset_from(*envp)) + 1;
+zap_shift~*envp.add(j as usize) = (*envp.add(j as usize + 1)).offset(-len);~*envp.add(j as usize) = *envp.add(j as usize + 1);
+zap_j~                let mut j = i;~                let mut j = i + 1;
+zap_jend~                while j < *envp_idx - 1 {~                while j < *envp_idx {
+zap_idx~            *envp_idx -= 1;~            *envp_idx -= 0;
+zap_buflen~            *buflen -= len as c_int;~            *buflen -= 0;
+env_off_idx~const ENV_ENVP_IDX: usize = 536;~const ENV_ENVP_IDX: usize = 532;
+env_off_buflen~const ENV_BUFLEN: usize = 2588;~const ENV_BUFLEN: usize = 2584;

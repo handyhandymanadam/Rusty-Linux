@@ -40,9 +40,9 @@ enum Class {
 /// Scan the character class starting at `p` (just past the `[`) against `c`.
 fn class_scan(pat: &[u8], p: usize, c: u8) -> Class {
     let inverted = at(pat, p) == b'!';
-    let mut class = p + inverted as usize;
+    let mut class = p.wrapping_add(inverted as usize);
     let mut a = at(pat, class);
-    class += 1;
+    class = class.wrapping_add(1);
     let mut matched = false;
 
     // Each iteration consumes one span: a single character `a`, or a range
@@ -54,18 +54,18 @@ fn class_scan(pat: &[u8], p: usize, c: u8) -> Class {
         }
         let mut b = a;
 
-        if at(pat, class) == b'-' && at(pat, class + 1) != b']' {
-            b = at(pat, class + 1);
+        if at(pat, class) == b'-' && at(pat, class.wrapping_add(1)) != b']' {
+            b = at(pat, class.wrapping_add(1));
             if b == 0 {
                 return Class::Malformed;
             }
-            class += 2;
+            class = class.wrapping_add(2);
             // A range with a > b matches nothing, as in the C.
         }
         matched |= a <= c && c <= b;
 
         a = at(pat, class);
-        class += 1;
+        class = class.wrapping_add(1);
         if a == b']' {
             break;
         }
@@ -89,8 +89,8 @@ fn glob_match_bytes(pat: &[u8], s: &[u8]) -> bool {
     loop {
         let c = at(s, i);
         let d = at(pat, p);
-        p += 1;
-        i += 1;
+        p = p.wrapping_add(1);
+        i = i.wrapping_add(1);
 
         // Set when control reaches the C's `literal:` label, carrying the
         // byte to compare against. Set to `[` when a class is malformed.
@@ -110,7 +110,7 @@ fn glob_match_bytes(pat: &[u8], s: &[u8]) -> bool {
                     return true; // trailing `*` matches the rest
                 }
                 back_pat = Some(p);
-                i -= 1; // allow a zero-length match
+                i = i.wrapping_sub(1); // allow a zero-length match
                 back_str = i;
             }
             // Character class.
@@ -128,7 +128,7 @@ fn glob_match_bytes(pat: &[u8], s: &[u8]) -> bool {
             _ => {
                 let d = if d == b'\\' {
                     let e = at(pat, p);
-                    p += 1;
+                    p = p.wrapping_add(1);
                     e
                 } else {
                     d
@@ -155,7 +155,7 @@ fn glob_match_bytes(pat: &[u8], s: &[u8]) -> bool {
                 None => return false,
                 Some(bp) => {
                     p = bp;
-                    back_str += 1;
+                    back_str = back_str.wrapping_add(1);
                     i = back_str;
                 }
             }
@@ -172,7 +172,7 @@ unsafe fn strlen(p: *const u8) -> usize {
     // SAFETY: the caller guarantees a NUL-terminated string at `p`, so every
     // byte up to and including the terminator is readable.
     while unsafe { *p.add(n) } != 0 {
-        n += 1;
+        n = n.wrapping_add(1);
     }
     n
 }
@@ -186,7 +186,7 @@ unsafe fn strnlen(p: *const u8, max: usize) -> usize {
     // SAFETY: `n < max` is tested first and the caller guarantees `max` bytes
     // are readable from `p`, so the read is in range.
     while n < max && unsafe { *p.add(n) } != 0 {
-        n += 1;
+        n = n.wrapping_add(1);
     }
     n
 }

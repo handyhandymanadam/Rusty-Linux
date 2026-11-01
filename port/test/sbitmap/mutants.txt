@@ -1,0 +1,67 @@
+hint_before_ge~if hint >= depth {~if hint > depth {
+hint_before_zero~else { 0 };~else { 1 };
+hint_after_full~if nr == u32::MAX {~if nr == u32::MAX - 1 {
+hint_after_zero~rust_sbw_hint_write(sb, 0);~rust_sbw_hint_write(sb, 1);
+hint_after_rr~} else if nr == hint || (*sb).round_robin {~} else if nr == hint && (*sb).round_robin {
+hint_after_inc~let mut h = nr.wrapping_add(1);~let mut h = nr.wrapping_add(2);
+hint_after_wrap~if h >= depth.wrapping_sub(1) {~if h > depth.wrapping_sub(1) {
+dc_mask~(!0u64).wrapping_shr(BITS_PER_LONG.wrapping_sub(depth));~(!0u64).wrapping_shr(BITS_PER_LONG.wrapping_sub(depth + 1));
+dc_wrap~if !wrap && alloc_hint != 0 {~if wrap && alloc_hint != 0 {
+dc_ne~r = (ro(word) & word_mask) != word_mask;~r = (ro(word) & word_mask) == word_mask;
+dc_andnot~AtomicU64::from_ptr(word).fetch_and(!mask, Ordering::Relaxed);<NL>            r = true;~AtomicU64::from_ptr(word).fetch_and(mask, Ordering::Relaxed);<NL>            r = true;
+dc_swap~.swap(0, Ordering::SeqCst)~.swap(1, Ordering::SeqCst)
+dc_ret~fetch_and(!mask, Ordering::Relaxed);<NL>            r = true;~fetch_and(!mask, Ordering::Relaxed);<NL>            r = false;
+resize_noclear~sbitmap_deferred_clear(map_at(sb, i as usize), 0, 0, false);~let _ = map_at(sb, i as usize);
+resize_div~depth.wrapping_add(bits_per_word - 1) / bits_per_word;~depth / bits_per_word;
+word_ge~if nr >= depth {~if nr > depth {
+word_hint0~if hint != 0 && wrap {~if wrap {
+inword_retry~if !sbitmap_deferred_clear(map, depth, alloc_hint, wrap) {~if true {
+shallow_rem~if reminder >= index.wrapping_add(1).wrapping_mul(word_depth) {~if reminder > index.wrapping_add(1).wrapping_mul(word_depth) {
+shallow_inc~shallow_word_depth += 1;~shallow_word_depth += 2;
+findbit_depth~if depth != 0 {<NL>                nr = sbitmap_find_bit_in_word~if depth > 1 {<NL>                nr = sbitmap_find_bit_in_word
+findbit_shift~nr = nr.wrapping_add(index.wrapping_shl((*sb).shift) as c_int);~nr = nr.wrapping_add(index.wrapping_shl((*sb).shift + 1) as c_int);
+findbit_hint0~            alloc_hint = 0;<NL>            index += 1;~            alloc_hint |= 0;<NL>            index += 1;
+findbit_idx~if index >= (*sb).map_nr {~if index > (*sb).map_nr {
+get_rr_mask~alloc_hint &= 1u32.wrapping_shl((*sb).shift).wrapping_sub(1);~alloc_hint &= 1u32.wrapping_shl((*sb).shift);
+get_wrap~sbitmap_find_bit(sb, u32::MAX, index, alloc_hint, !(*sb).round_robin)~sbitmap_find_bit(sb, u32::MAX, index, alloc_hint, (*sb).round_robin)
+shallow_bit~let bit = hint & 1u32.wrapping_shl((*sb).shift).wrapping_sub(1);~let bit = hint;
+shallow_wrap~index, bit, true);~index, bit, false);
+any_bit~if *word_of(map) & !*cleared_of(map) != 0 {~if *word_of(map) != 0 {
+weight_sub~sbitmap_weight_of(sb, true).wrapping_sub(sbitmap_weight_of(sb, false))~sbitmap_weight_of(sb, true).wrapping_sub(0 * sbitmap_weight_of(sb, false))
+weight_word~weight.wrapping_add(word_weight(w, word_depth));~weight.wrapping_add(word_weight(w, 64 + (word_depth & 0)));
+weight_mask~(w & ((1u64 << nbits) - 1)).count_ones()~(w & ((1u64 << nbits) - 2)).count_ones()
+wb_min~let v = depth.min((*sbq).min_shallow_depth) / (SBQ_WAIT_QUEUES as u32);~let v = depth.min((*sbq).min_shallow_depth * 0 + u32::MAX) / (SBQ_WAIT_QUEUES as u32);
+wb_clamp~v.max(1).min(SBQ_WAKE_BATCH)~v.max(1).min(SBQ_WAKE_BATCH + 1)
+wb_update~if (*sbq).wake_batch != wake_batch {~if false {
+recalc_ceil~(*sbq).sb.depth.wrapping_add(users).wrapping_sub(1) / users~(*sbq).sb.depth / users
+recalc_min~(depth / (SBQ_WAIT_QUEUES as u32)).max(1).min(SBQ_WAKE_BATCH);~(depth / (SBQ_WAIT_QUEUES as u32)).max(0).min(SBQ_WAKE_BATCH);
+qresize_wb~        sbitmap_queue_update_wake_batch(sbq, depth);<NL>        rust_sbitmap_resize~        rust_sbitmap_resize
+batch_rr~if (*sb).round_robin {<NL>            return 0;~if false {<NL>            return 0;
+batch_idx~let mut index: u64 = (hint >> (*sb).shift) as u64;~let mut index: u64 = 0;
+batch_full~if val != (1u64.wrapping_shl(md.wrapping_sub(1))).wrapping_sub(1) {~if true {
+batch_fit~if nr + (nr_tags as u64) <= md as u64 {~if nr + (nr_tags as u64) < md as u64 {
+batch_mask~.wrapping_sub(1)).wrapping_shl(nr as u32);~.wrapping_sub(1)).wrapping_shl(nr as u32 + 1);
+batch_result~get_mask = (get_mask & !val).wrapping_shr(nr as u32);~get_mask = (get_mask & val).wrapping_shr(nr as u32);
+batch_offset~*offset = (nr as u32).wrapping_add((index as u32).wrapping_shl((*sb).shift));~*offset = nr as u32;
+batch_hint~update_alloc_hint_after_get(sb, depth, hint, (*offset).wrapping_add(nr_tags as u32).wrapping_sub(1));~update_alloc_hint_after_get(sb, depth, hint, *offset);
+batch_next~index += 1;<NL>            if index >= (*sb).map_nr as u64 {~index += 2;<NL>            if index >= (*sb).map_nr as u64 {
+shallow_warn~rust_sbw_warn_shallow(shallow_depth < (*sbq).min_shallow_depth);~rust_sbw_warn_shallow(shallow_depth <= (*sbq).min_shallow_depth);
+minshallow_set~(*sbq).min_shallow_depth = min_shallow_depth;~(*sbq).min_shallow_depth = min_shallow_depth + 1;
+ws_stride~.add((i as usize).wrapping_mul(rust_sb_ws_size))~.add((i as usize).wrapping_mul(rust_sb_ws_size * 0 + 1))
+index_inc~(index + 1) & (SBQ_WAIT_QUEUES - 1)~(index + 1) & (SBQ_WAIT_QUEUES - 2)
+wake_break~if woken == nr {~if woken == nr + 1 {
+wake_nr~nr -= woken;~nr -= 1;
+wake_idx_set~if wake_index != (*sbq).wake_index.load(Ordering::Relaxed) {~if false {
+wake_completion~(*sbq).completion_cnt.fetch_add(nr, Ordering::Relaxed);~(*sbq).completion_cnt.fetch_add(1 + nr * 0, Ordering::Relaxed);
+wake_cmp~.wrapping_sub(wakeups) < wake_batch {~.wrapping_sub(wakeups) <= wake_batch {
+wake_cas~wakeups.wrapping_add(wake_batch) as i32,~wakeups.wrapping_add(1) as i32,
+wake_nr_arg~sbitmap_queue_wake_up_inner(sbq, wake_batch as c_int);~sbitmap_queue_wake_up_inner(sbq, 1);
+cpuhint_rr~if !(*sb).round_robin && (tag as c_uint) < (*sb).depth {~if (tag as c_uint) < (*sb).depth {
+cpuhint_lt~(tag as c_uint) < (*sb).depth {~(tag as c_uint) <= (*sb).depth {
+cb_mask~mask |= 1u64.wrapping_shl((tag as u32) & 1u32.wrapping_shl((*sb).shift).wrapping_sub(1));~mask |= 1u64.wrapping_shl(tag as u32);
+cb_flush~} else if addr != this_addr {~} else if false {
+cb_last~        if mask != 0 {~        if mask != 0 && false {
+cb_tag~let tag = (*tags.add(i as usize)).wrapping_sub(offset);~let tag = *tags.add(i as usize);
+cb_hint~sbitmap_update_cpu_hint(sb, rust_sbw_cpu(), (*tags.add((nr_tags - 1) as usize)).wrapping_sub(offset));~sbitmap_update_cpu_hint(sb, rust_sbw_cpu(), (*tags).wrapping_sub(offset));
+clear_wake~rust_sbitmap_queue_wake_up(sbq, 1);~rust_sbitmap_queue_wake_up(sbq, 2);
+clear_cpu~sbitmap_update_cpu_hint(sb, cpu as c_int, nr as c_int);~sbitmap_update_cpu_hint(sb, rust_sbw_cpu() + (cpu as c_int) * 0, nr as c_int);

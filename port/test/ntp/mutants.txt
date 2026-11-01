@@ -1,0 +1,117 @@
+sr_neg~x.wrapping_neg().wrapping_shr(s).wrapping_neg()<NL>    } else {~x.wrapping_shr(s)<NL>    } else {
+sr_pos~    } else {<NL>        x >> s<NL>    }~    } else {<NL>        x >> (s + 1)<NL>    }
+uf_scale~(tick_usec.wrapping_mul(NSEC_PER_USEC as u64).wrapping_mul(USER_HZ)) << NTP_SCALE_SHIFT~(tick_usec.wrapping_mul(NSEC_PER_USEC as u64).wrapping_mul(USER_HZ)) << (NTP_SCALE_SHIFT - 1)
+uf_adj~second_length = second_length.wrapping_add(n.ntp_tick_adj as u64);~
+uf_freq~second_length = second_length.wrapping_add(n.time_freq as u64);~
+uf_div~let new_base = second_length / (hz() as u64);~let new_base = second_length / 1000;
+uf_tl~n.tick_length = n.tick_length.wrapping_add(new_base.wrapping_sub(n.tick_length_base));~n.tick_length = new_base;
+uf_base~    n.tick_length_base = new_base;<NL>}~}
+fll_mode~    n.time_status &= !STA_MODE;<NL>    if secs < MINSEC {~    if secs < MINSEC {
+fll_min~if secs < MINSEC {<NL>        return 0;~if secs <= MINSEC {<NL>        return 0;
+fll_flag~if n.time_status & STA_FLL == 0 && secs <= MAXSEC {~if n.time_status & STA_FLL != 0 && secs <= MAXSEC {
+fll_max~secs <= MAXSEC {<NL>        return 0;~secs < MAXSEC {<NL>        return 0;
+fll_setmode~    n.time_status |= STA_MODE;<NL>    (offset64~    (offset64
+fll_shift~(offset64 << (NTP_SCALE_SHIFT - SHIFT_FLL)).wrapping_div(secs)~(offset64 << (NTP_SCALE_SHIFT - SHIFT_FLL - 1)).wrapping_div(secs)
+uo_pll~if n.time_status & STA_PLL == 0 {<NL>        return;~if false {<NL>        return;
+uo_nano~if n.time_status & STA_NANO == 0 {<NL>        // Make sure~if n.time_status & STA_NANO != 0 {<NL>        // Make sure
+uo_clamp1~offset.clamp(-USEC_PER_SEC, USEC_PER_SEC);~offset.clamp(-USEC_PER_SEC, USEC_PER_SEC + 1);
+uo_mul~offset = offset.wrapping_mul(NSEC_PER_USEC as c_long);~offset = offset.wrapping_mul(NSEC_PER_USEC as c_long + 1);
+uo_clamp2~offset = offset.clamp(-MAXPHASE, MAXPHASE);~offset = offset.clamp(-MAXPHASE, MAXPHASE - 1);
+uo_secs~let mut secs: c_long = real_secs.wrapping_sub(n.time_reftime);~let mut secs: c_long = real_secs;
+uo_hold~if n.time_status & STA_FREQHOLD != 0 {<NL>        secs = 0;~if n.time_status & STA_FREQHOLD == 0 {<NL>        secs = 0;
+uo_ref~    n.time_reftime = real_secs;<NL><NL>    let offset64~    let offset64
+uo_lim~let lim = 1i64 << (SHIFT_PLL as i64 + 1 + n.time_constant);~let lim = 1i64 << (SHIFT_PLL as i64 + n.time_constant);
+uo_limcmp~if secs > lim as c_long {~if secs >= lim as c_long + 1 {
+uo_fll_before~let mut freq_adj = update_offset_fll(n, offset64, secs);~let mut freq_adj: i64 = 0;
+uo_shift~<< (NTP_SCALE_SHIFT as i64 - 2 * (SHIFT_PLL as i64 + 2 + n.time_constant))~<< (NTP_SCALE_SHIFT as i64 - 2 * (SHIFT_PLL as i64 + 1 + n.time_constant))
+uo_freq~freq_adj = freq_adj.wrapping_add(n.time_freq).min(MAXFREQ_SCALED);~freq_adj = freq_adj.min(MAXFREQ_SCALED);
+uo_min~freq_adj.wrapping_add(n.time_freq).min(MAXFREQ_SCALED)~freq_adj.wrapping_add(n.time_freq)
+uo_max~n.time_freq = freq_adj.max(-MAXFREQ_SCALED);~n.time_freq = freq_adj;
+uo_off~n.time_offset = (offset64 << NTP_SCALE_SHIFT).wrapping_div(hz());~n.time_offset = (offset64 << NTP_SCALE_SHIFT).wrapping_div(1000);
+cl_unsync~    n.time_status |= STA_UNSYNC;<NL>    n.time_maxerror = NTP_PHASE_LIMIT;~    n.time_maxerror = NTP_PHASE_LIMIT;
+cl_adj~    n.time_adjust = 0;<NL>    n.time_status |= STA_UNSYNC;~    n.time_status |= STA_UNSYNC;
+cl_ee~n.time_esterror = NTP_PHASE_LIMIT;<NL>    update_frequency(n);~update_frequency(n);
+cl_uf~    update_frequency(n);<NL>    n.tick_length = n.tick_length_base;~    n.tick_length = n.tick_length_base;
+cl_tl~    n.tick_length = n.tick_length_base;<NL>    n.time_offset = 0;~    n.time_offset = 0;
+cl_off~    n.time_offset = 0;<NL>    n.ntp_next_leap_sec = TIME64_MAX;~    n.ntp_next_leap_sec = TIME64_MAX;
+cl_leap~    n.ntp_next_leap_sec = TIME64_MAX;<NL>}<NL><NL>/// Body of `__ntp_clear()`~}<NL><NL>/// Body of `__ntp_clear()`
+nl_ins~if n.time_state == TIME_INS && n.time_status & STA_INS != 0 {<NL>        unsafe { *out~if n.time_state == TIME_INS {<NL>        unsafe { *out
+nl_flag~if n.time_state == TIME_INS && n.time_status & STA_INS != 0 {<NL>        unsafe { *out~if n.time_status & STA_INS != 0 {<NL>        unsafe { *out
+so_ok_ins~n.time_state = TIME_INS;<NL>                let rem = secs % SECS_PER_DAY;~n.time_state = TIME_INS;<NL>                let rem = (secs + 1) % SECS_PER_DAY;
+so_ok_del~let rem = secs.wrapping_add(1) % SECS_PER_DAY;~let rem = secs % SECS_PER_DAY;
+so_ok_order~if n.time_status & STA_INS != 0 {<NL>                n.time_state = TIME_INS;~if n.time_status & STA_DEL != 0 {<NL>                n.time_state = TIME_INS;
+so_ins_off~if n.time_status & STA_INS == 0 {<NL>                n.ntp_next_leap_sec = TIME64_MAX;<NL>                n.time_state = TIME_OK;<NL>            } else if secs == n.ntp_next_leap_sec {<NL>                leap = -1;~if n.time_status & STA_INS == 0 {<NL>                n.time_state = TIME_OK;<NL>            } else if secs == n.ntp_next_leap_sec {<NL>                leap = -1;
+so_ins_leap~leap = -1;~leap = 1;
+so_ins_state~leap = -1;<NL>                n.time_state = TIME_OOP;~leap = -1;<NL>                n.time_state = TIME_WAIT;
+so_ins_notice~n.time_state = TIME_OOP;<NL>                unsafe { rust_nt_notice_ins() };~n.time_state = TIME_OOP;
+so_del_off~if n.time_status & STA_DEL == 0 {<NL>                n.ntp_next_leap_sec = TIME64_MAX;<NL>                n.time_state = TIME_OK;~if n.time_status & STA_DEL == 0 {<NL>                n.time_state = TIME_OK;
+so_del_leap~leap = 1;~leap = -1;
+so_del_clear~leap = 1;<NL>                n.ntp_next_leap_sec = TIME64_MAX;~leap = 1;
+so_del_state~n.time_state = TIME_WAIT;<NL>                unsafe { rust_nt_notice_del() };~n.time_state = TIME_OOP;<NL>                unsafe { rust_nt_notice_del() };
+so_del_notice~unsafe { rust_nt_notice_del() };~
+so_oop~        TIME_OOP => {<NL>            n.ntp_next_leap_sec = TIME64_MAX;<NL>            n.time_state = TIME_WAIT;~        TIME_OOP => {<NL>            n.time_state = TIME_WAIT;
+so_wait~if n.time_status & (STA_INS | STA_DEL) == 0 {<NL>                n.time_state = TIME_OK;~if n.time_status & (STA_INS | STA_DEL) != 0 {<NL>                n.time_state = TIME_OK;
+so_maxerr~n.time_maxerror = n.time_maxerror.wrapping_add(MAXFREQ / NSEC_PER_USEC as c_long);~n.time_maxerror = n.time_maxerror.wrapping_add(MAXFREQ / 1000 + 1);
+so_maxcmp~if n.time_maxerror > NTP_PHASE_LIMIT {<NL>        n.time_maxerror = NTP_PHASE_LIMIT;<NL>        n.time_status |= STA_UNSYNC;~if n.time_maxerror >= NTP_PHASE_LIMIT {<NL>        n.time_maxerror = NTP_PHASE_LIMIT;<NL>        n.time_status |= STA_UNSYNC;
+so_maxflag~        n.time_maxerror = NTP_PHASE_LIMIT;<NL>        n.time_status |= STA_UNSYNC;<NL>    }<NL><NL>    // Compute~        n.time_maxerror = NTP_PHASE_LIMIT;<NL>    }<NL><NL>    // Compute
+so_chunk~let delta = shift_right(n.time_offset, SHIFT_PLL + n.time_constant as u32);~let delta = shift_right(n.time_offset, SHIFT_PLL + n.time_constant as u32 + 1);
+so_off~n.time_offset = n.time_offset.wrapping_sub(delta);~n.time_offset = n.time_offset.wrapping_add(delta);
+so_tl~n.tick_length = n.tick_length.wrapping_add(delta as u64);~n.tick_length = n.tick_length.wrapping_sub(delta as u64);
+so_adj0~if n.time_adjust == 0 {<NL>        return leap;~if n.time_adjust == 1 {<NL>        return leap;
+so_scaled~((MAX_TICKADJ * NSEC_PER_USEC) << NTP_SCALE_SHIFT) / hz()~((MAX_TICKADJ * NSEC_PER_USEC) << NTP_SCALE_SHIFT) / 1000
+so_gt~if n.time_adjust as i64 > MAX_TICKADJ {~if n.time_adjust as i64 >= MAX_TICKADJ {
+so_dec~n.time_adjust -= MAX_TICKADJ as c_long;~n.time_adjust -= MAX_TICKADJ as c_long + 1;
+so_lt~if (n.time_adjust as i64) < -MAX_TICKADJ {~if (n.time_adjust as i64) <= -MAX_TICKADJ {
+so_neg~n.tick_length = n.tick_length.wrapping_sub(max_tickadj_scaled as u64);~n.tick_length = n.tick_length.wrapping_add(max_tickadj_scaled as u64);
+so_last~let step = ((n.time_adjust as i64).wrapping_mul(NSEC_PER_USEC) / hz()) << NTP_SCALE_SHIFT;~let step = ((n.time_adjust as i64).wrapping_mul(NSEC_PER_USEC) / 1000) << NTP_SCALE_SHIFT;
+so_last0~    n.time_adjust = 0;<NL>    leap<NL>}~    leap<NL>}
+st_pll_off~if n.time_status & STA_PLL != 0 && txc.status & STA_PLL == 0 {<NL>        n.time_state = TIME_OK;~if n.time_status & STA_PLL != 0 && txc.status & STA_PLL != 0 {<NL>        n.time_state = TIME_OK;
+st_unsync~n.time_status = STA_UNSYNC;<NL>        n.ntp_next_leap_sec = TIME64_MAX;<NL>    }<NL>    // If~n.time_status = 0;<NL>        n.ntp_next_leap_sec = TIME64_MAX;<NL>    }<NL>    // If
+st_pll_on~if n.time_status & STA_PLL == 0 && txc.status & STA_PLL != 0 {<NL>        n.time_reftime~if n.time_status & STA_PLL != 0 && txc.status & STA_PLL != 0 {<NL>        n.time_reftime
+st_ronly~n.time_status &= STA_RONLY;<NL>    n.time_status |= txc.status & !STA_RONLY;~n.time_status &= STA_RONLY;<NL>    n.time_status |= txc.status;
+st_ronly2~n.time_status &= STA_RONLY;~n.time_status &= !STA_RONLY;
+md_status~if txc.modes & ADJ_STATUS != 0 {<NL>        process_adj_status~if txc.modes & ADJ_STATUS == 0 {<NL>        process_adj_status
+md_nano~if txc.modes & ADJ_NANO != 0 {<NL>        n.time_status |= STA_NANO;~if txc.modes & ADJ_NANO != 0 {<NL>        n.time_status &= !STA_NANO;
+md_micro~n.time_status &= !STA_NANO;<NL>    }<NL>    if txc.modes & ADJ_FREQUENCY~n.time_status |= STA_NANO;<NL>    }<NL>    if txc.modes & ADJ_FREQUENCY
+md_freq~n.time_freq = txc.freq.wrapping_mul(PPM_SCALE);~n.time_freq = txc.freq.wrapping_mul(PPM_SCALE / 2);
+md_fmin~n.time_freq = n.time_freq.min(MAXFREQ_SCALED);~
+md_fmax~n.time_freq = n.time_freq.max(-MAXFREQ_SCALED);~
+md_maxerr~n.time_maxerror = (txc.maxerror as c_long).clamp(0, NTP_PHASE_LIMIT);~n.time_maxerror = (txc.maxerror as c_long).clamp(-1, NTP_PHASE_LIMIT);
+md_esterr~n.time_esterror = (txc.esterror as c_long).clamp(0, NTP_PHASE_LIMIT);~n.time_esterror = (txc.esterror as c_long).clamp(0, NTP_PHASE_LIMIT - 1);
+md_tc1~n.time_constant = (txc.constant as c_long).clamp(0, MAXTC as c_long);<NL>        if n.time_status & STA_NANO == 0 {~n.time_constant = (txc.constant as c_long).clamp(0, MAXTC as c_long);<NL>        if n.time_status & STA_NANO != 0 {
+md_tc2~n.time_constant += 4;~n.time_constant += 3;
+md_tc3~n.time_constant = n.time_constant.clamp(0, MAXTC as c_long);<NL>    }~n.time_constant = n.time_constant;<NL>    }
+md_tai0~if txc.modes & ADJ_TAI != 0 && txc.constant >= 0 && txc.constant <= MAX_TAI_OFFSET {~if txc.modes & ADJ_TAI != 0 && txc.constant > 0 && txc.constant <= MAX_TAI_OFFSET {
+md_tai1~txc.constant >= 0 && txc.constant <= MAX_TAI_OFFSET~txc.constant >= 0 && txc.constant < MAX_TAI_OFFSET
+md_off~update_offset(n, tkid, txc.offset as c_long);~update_offset(n, 0, txc.offset as c_long);
+md_tick~n.tick_usec = txc.tick as c_ulong;~n.tick_usec = txc.tick as c_ulong + 1;
+md_uf~if txc.modes & (ADJ_TICK | ADJ_FREQUENCY | ADJ_OFFSET) != 0 {~if txc.modes & (ADJ_TICK | ADJ_FREQUENCY) != 0 {
+ax_adjtime~if txc.modes & ADJ_ADJTIME != 0 {<NL>        let save_adjust~if txc.modes & ADJ_ADJTIME == 0 {<NL>        let save_adjust
+ax_ro~if txc.modes & ADJ_OFFSET_READONLY == 0 {<NL>            // adjtime~if txc.modes & ADJ_OFFSET_READONLY != 0 {<NL>            // adjtime
+ax_uf~n.time_adjust = txc.offset as c_long;<NL>            update_frequency(n);~n.time_adjust = txc.offset as c_long;
+ax_save~txc.offset = save_adjust as i64;~txc.offset = n.time_adjust as i64;
+ax_audit_a~rust_nt_audit(ad, AU_ADJUST, false, save_adjust as i64);~
+ax_audit_b~rust_nt_audit(ad, AU_ADJUST, true, n.time_adjust as i64);~rust_nt_audit(ad, AU_ADJUST, false, n.time_adjust as i64);
+ax_audit_old~rust_nt_audit(ad, AU_TAI, false, *time_tai as i64);~
+ax_audit_new~rust_nt_audit(ad, AU_TICK, true, n.tick_usec as i64);~
+ax_audit_kind~rust_nt_audit(ad, AU_FREQ, true, n.time_freq);~rust_nt_audit(ad, AU_OFFSET, true, n.time_freq);
+ax_modes0~if txc.modes != 0 {<NL>            unsafe {~if txc.modes > 1 {<NL>            unsafe {
+ax_off~txc.offset = shift_right(n.time_offset.wrapping_mul(hz()), NTP_SCALE_SHIFT);~txc.offset = shift_right(n.time_offset.wrapping_mul(hz()), NTP_SCALE_SHIFT + 1);
+ax_offus~txc.offset = txc.offset.wrapping_div(NSEC_PER_USEC);~txc.offset = txc.offset.wrapping_div(NSEC_PER_USEC / 2);
+ax_nano~        if n.time_status & STA_NANO == 0 {<NL>            txc.offset~        if n.time_status & STA_NANO != 0 {<NL>            txc.offset
+ax_err~if n.time_status & (STA_UNSYNC | STA_CLOCKERR) != 0 {<NL>        result = TIME_ERROR;~if n.time_status & (STA_UNSYNC) != 0 {<NL>        result = TIME_ERROR;
+ax_freq~txc.freq = shift_right((n.time_freq >> PPM_SCALE_INV_SHIFT).wrapping_mul(PPM_SCALE_INV), NTP_SCALE_SHIFT);~txc.freq = shift_right((n.time_freq >> PPM_SCALE_INV_SHIFT).wrapping_mul(PPM_SCALE_INV), NTP_SCALE_SHIFT - 1);
+ax_tol~txc.tolerance = MAXFREQ_SCALED / PPM_SCALE;~txc.tolerance = MAXFREQ_SCALED / PPM_SCALE / 2;
+ax_prec~txc.precision = 1;~txc.precision = 2;
+ax_tick~txc.tick = n.tick_usec as i64;~txc.tick = 0;
+ax_tai~    txc.tai = *time_tai;<NL><NL>    // Fill~    // Fill
+ax_usec~txc.time_usec = ts.tv_nsec / NSEC_PER_USEC;~txc.time_usec = ts.tv_nsec;
+ax_usec2~    if n.time_status & STA_NANO == 0 {<NL>        txc.time_usec~    if n.time_status & STA_NANO != 0 {<NL>        txc.time_usec
+ax_leap_ge~if ts.tv_sec >= n.ntp_next_leap_sec {<NL>        if n.time_state == TIME_INS~if ts.tv_sec > n.ntp_next_leap_sec {<NL>        if n.time_state == TIME_INS
+ax_ins_res~result = TIME_OOP;<NL>            txc.tai = txc.tai.wrapping_add(1);~result = TIME_WAIT;<NL>            txc.tai = txc.tai.wrapping_add(1);
+ax_ins_tai~txc.tai = txc.tai.wrapping_add(1);<NL>            txc.time_sec = txc.time_sec.wrapping_sub(1);~txc.time_sec = txc.time_sec.wrapping_sub(1);
+ax_ins_sec~txc.time_sec = txc.time_sec.wrapping_sub(1);~txc.time_sec = txc.time_sec.wrapping_add(1);
+ax_del_res~result = TIME_WAIT;<NL>            txc.tai = txc.tai.wrapping_sub(1);~result = TIME_OOP;<NL>            txc.tai = txc.tai.wrapping_sub(1);
+ax_del_tai~txc.tai = txc.tai.wrapping_sub(1);~txc.tai = txc.tai.wrapping_add(1);
+ax_del_sec~txc.time_sec = txc.time_sec.wrapping_add(1);~txc.time_sec = txc.time_sec.wrapping_sub(1);
+ax_oop~if n.time_state == TIME_OOP && ts.tv_sec == n.ntp_next_leap_sec {~if n.time_state == TIME_OOP {

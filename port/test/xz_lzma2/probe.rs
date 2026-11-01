@@ -4,7 +4,7 @@
 //!
 //! Pulls in the file the kernel build compiles, BY PATH, rather than copying
 //! it — a stale copy tested here while the kernel builds something else is the
-//! failure PRIOR-ART.md §2 records four times.
+//! failure notes/PRIOR-ART.md §2 records four times.
 //!
 //! It presents the port under `rs_xz_dec_lzma2_*`, standing in for the C
 //! `xz_dec_lzma2_create()`/`_end()` that own `kmalloc`/`vmalloc` and therefore

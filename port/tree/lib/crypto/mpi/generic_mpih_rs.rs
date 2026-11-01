@@ -67,7 +67,7 @@ pub unsafe extern "C" fn mpihelp_mul_1(
         let prod = (s1_i as u128) * (s2_limb as u128);
         let (low, carry) = (prod as Limb).overflowing_add(cy);
 
-        cy = (carry as Limb) + (prod >> LIMB_BITS) as Limb;
+        cy = (carry as Limb).wrapping_add((prod >> LIMB_BITS) as Limb);
         // SAFETY: caller guarantees `res_ptr` writable for `n` limbs.
         unsafe { *res_ptr.add(i) = low };
     }
@@ -94,14 +94,14 @@ pub unsafe extern "C" fn mpihelp_addmul_1(
         let prod = (s1_i as u128) * (s2_limb as u128);
         let (low, carry) = (prod as Limb).overflowing_add(cy);
 
-        cy = (carry as Limb) + (prod >> LIMB_BITS) as Limb;
+        cy = (carry as Limb).wrapping_add((prod >> LIMB_BITS) as Limb);
 
         // SAFETY: caller guarantees `res_ptr` readable and writable for
         // `n` limbs; read happens before this iteration's write.
         let x = unsafe { *res_ptr.add(i) };
         let (sum, carry2) = x.overflowing_add(low);
 
-        cy += carry2 as Limb;
+        cy = cy.wrapping_add(carry2 as Limb);
         unsafe { *res_ptr.add(i) = sum };
     }
     cy
@@ -127,13 +127,13 @@ pub unsafe extern "C" fn mpihelp_submul_1(
         let prod = (s1_i as u128) * (s2_limb as u128);
         let (low, carry) = (prod as Limb).overflowing_add(cy);
 
-        cy = (carry as Limb) + (prod >> LIMB_BITS) as Limb;
+        cy = (carry as Limb).wrapping_add((prod >> LIMB_BITS) as Limb);
 
         // SAFETY: as in mpihelp_addmul_1.
         let x = unsafe { *res_ptr.add(i) };
         let (diff, borrow) = x.overflowing_sub(low);
 
-        cy += borrow as Limb;
+        cy = cy.wrapping_add(borrow as Limb);
         unsafe { *res_ptr.add(i) = diff };
     }
     cy
@@ -166,7 +166,7 @@ pub unsafe extern "C" fn mpihelp_add_n(
         let (y, c1) = s2_i.overflowing_add(cy);
         let (sum, c2) = y.overflowing_add(s1_i);
 
-        cy = c1 as Limb + c2 as Limb;
+        cy = (c1 as Limb).wrapping_add(c2 as Limb);
         // SAFETY: caller guarantees `res_ptr` writable for `n` limbs.
         unsafe { *res_ptr.add(i) = sum };
     }
@@ -193,7 +193,7 @@ pub unsafe extern "C" fn mpihelp_sub_n(
         let (y, c1) = s2_i.overflowing_add(cy);
         let (diff, c2) = s1_i.overflowing_sub(y);
 
-        cy = c1 as Limb + c2 as Limb;
+        cy = (c1 as Limb).wrapping_add(c2 as Limb);
         // SAFETY: caller guarantees `res_ptr` writable for `n` limbs.
         unsafe { *res_ptr.add(i) = diff };
     }
@@ -208,6 +208,14 @@ pub unsafe extern "C" fn mpihelp_sub_n(
 /// positive, and **`cnt` must be in 1..LIMB_BITS**. The C is undefined at
 /// `cnt == 0` too -- it shifts a limb by the full width -- so this is the
 /// same contract, not a new one.
+///
+/// The shifts by `cnt`/`LIMB_BITS - cnt` below use `wrapping_shl`/
+/// `wrapping_shr` rather than `<<`/`>>`: under this contract both amounts
+/// are always in `1..LIMB_BITS`, so wrapping and checked shifting produce
+/// the same result and no caller ever hits the checked path's panic --
+/// `rig/uaccess-panic-check.sh` found it live anyway, since rustc can't
+/// see the contract. A caller that violates it was already in C-level UB
+/// before this function does anything.
 #[no_mangle]
 pub unsafe extern "C" fn mpihelp_lshift(
     wp: *mut Limb,
@@ -217,7 +225,7 @@ pub unsafe extern "C" fn mpihelp_lshift(
 ) -> Limb {
     let n = usize_ as usize;
     let sh_1 = cnt;
-    let sh_2 = LIMB_BITS - sh_1;
+    let sh_2 = LIMB_BITS.wrapping_sub(sh_1);
 
     // `wp` and `up` may be the SAME buffer (mpi-bit.c and mpi-div.c both
     // call this in place). A `&mut [Limb]`/`&[Limb]` pair built with
@@ -233,18 +241,18 @@ pub unsafe extern "C" fn mpihelp_lshift(
     // overwritten -- each iteration only ever writes index i, and the
     // next iteration's reads are i-1 and i-2.
     // SAFETY: caller guarantees `up` readable for `usize_` limbs.
-    let retval = unsafe { *up.add(n - 1) } >> sh_2;
+    let retval = unsafe { *up.add(n.wrapping_sub(1)) }.wrapping_shr(sh_2);
 
-    let mut i = n - 1;
+    let mut i = n.wrapping_sub(1);
     while i >= 1 {
         // SAFETY: caller guarantees `up` readable and `wp` writable for
         // `usize_` limbs; `i` and `i - 1` are both in range.
-        let (hi, lo) = unsafe { (*up.add(i), *up.add(i - 1)) };
-        unsafe { *wp.add(i) = (hi << sh_1) | (lo >> sh_2) };
-        i -= 1;
+        let (hi, lo) = unsafe { (*up.add(i), *up.add(i.wrapping_sub(1))) };
+        unsafe { *wp.add(i) = hi.wrapping_shl(sh_1) | lo.wrapping_shr(sh_2) };
+        i = i.wrapping_sub(1);
     }
     // SAFETY: as above, index 0.
-    unsafe { *wp = (*up) << sh_1 };
+    unsafe { *wp = (*up).wrapping_shl(sh_1) };
 
     retval
 }
@@ -263,22 +271,22 @@ pub unsafe extern "C" fn mpihelp_rshift(
 ) -> Limb {
     let n = usize_ as usize;
     let sh_1 = cnt;
-    let sh_2 = LIMB_BITS - sh_1;
+    let sh_2 = LIMB_BITS.wrapping_sub(sh_1);
 
     // As mpihelp_lshift: raw-pointer reads/writes only, no live slice
     // references, since `wp` may equal `up`. Bottom-up (0 .. n-1) so an
     // in-place call reads u[i]/u[i+1] before either has been overwritten.
     // SAFETY: caller guarantees `up` readable for `usize_` limbs.
-    let retval = unsafe { *up } << sh_2;
+    let retval = unsafe { *up }.wrapping_shl(sh_2);
 
-    for i in 0..n - 1 {
+    for i in 0..n.wrapping_sub(1) {
         // SAFETY: caller guarantees `up` readable and `wp` writable for
         // `usize_` limbs; `i` and `i + 1` are both in range.
-        let (lo, hi) = unsafe { (*up.add(i), *up.add(i + 1)) };
-        unsafe { *wp.add(i) = (lo >> sh_1) | (hi << sh_2) };
+        let (lo, hi) = unsafe { (*up.add(i), *up.add(i.wrapping_add(1))) };
+        unsafe { *wp.add(i) = lo.wrapping_shr(sh_1) | hi.wrapping_shl(sh_2) };
     }
     // SAFETY: as above, index n - 1.
-    unsafe { *wp.add(n - 1) = *up.add(n - 1) >> sh_1 };
+    unsafe { *wp.add(n.wrapping_sub(1)) = (*up.add(n.wrapping_sub(1))).wrapping_shr(sh_1) };
 
     retval
 }
@@ -302,7 +310,12 @@ pub unsafe extern "C" fn mpihelp_cmp(
         )
     };
 
-    // Most significant limb first.
+    // Most significant limb first. `a[i]`/`b[i]` keep rustc's bounds
+    // check (found live by `rig/uaccess-panic-check.sh`, deliberately not
+    // silenced) rather than an unchecked index: `i` comes from `(0..n)`,
+    // the exact length both slices were built with above, so it can
+    // never actually be out of range -- the compiler just can't see that
+    // through a `.rev()` iterator shared across two slices.
     for i in (0..n).rev() {
         if a[i] != b[i] {
             // The C's comment warns this cannot be simplified to a

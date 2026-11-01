@@ -205,7 +205,7 @@ unsafe fn c_strcmp_eq(a: *const c_char, b: *const c_char) -> bool {
         if ca == 0 {
             return true;
         }
-        i += 1;
+        i = i.wrapping_add(1);
     }
 }
 
@@ -257,13 +257,13 @@ pub unsafe extern "C" fn sysctl_sys_info_handler(
             if bits & si.bit != 0 {
                 if !first {
                     names[len] = b',';
-                    len += 1;
+                    len = len.wrapping_add(1);
                 }
                 first = false;
                 // name includes its own NUL; copy all but that NUL.
                 let n = si.name.len() - 1;
-                names[len..len + n].copy_from_slice(&si.name[..n]);
-                len += n;
+                names[len..len.wrapping_add(n)].copy_from_slice(&si.name[..n]);
+                len = len.wrapping_add(n);
             }
         }
         names[len] = 0;

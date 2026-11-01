@@ -486,6 +486,7 @@ unsafe fn __gunzip(
 /// `gunzip()`, `lib/decompress_inflate.c`. The dispatcher's `.decompressor`
 /// entry for the `"gzip"` magic (`\x1f\x8b` / `\x1f\x9e`) -- this project's
 /// own initramfs format (see module doc).
+#[cfg(not(boot_gunzip))] // the boot stub's only entry is gunzip_preboot() below
 #[no_mangle]
 #[link_section = ".init.text"]
 pub unsafe extern "C" fn gunzip(
@@ -498,4 +499,26 @@ pub unsafe extern "C" fn gunzip(
     error: Option<ErrorFn>,
 ) -> c_int {
     unsafe { __gunzip(buf, len, fill, flush, out_buf, 0, pos, error) }
+}
+
+/// `__decompress()`'s call into the driver, for the x86 boot stub only
+/// (`--cfg=boot_gunzip`, set by arch/x86/boot/compressed/Makefile; the kernel
+/// build never sets it, so this item does not exist there). The C original is
+/// `__gunzip()` with its `out_len` argument, which the in-kernel `gunzip()`
+/// above fixes at 0. `lib/decompress_inflate.c`'s `__decompress()` (PREBOOT
+/// arm) calls this instead of its own `static __gunzip()`.
+#[cfg(boot_gunzip)]
+#[no_mangle]
+#[link_section = ".init.text"]
+pub unsafe extern "C" fn gunzip_preboot(
+    buf: *mut u8,
+    len: c_long,
+    fill: Option<FillFn>,
+    flush: Option<FlushFn>,
+    out_buf: *mut u8,
+    out_len: c_long,
+    pos: *mut c_long,
+    error: Option<ErrorFn>,
+) -> c_int {
+    unsafe { __gunzip(buf, len, fill, flush, out_buf, out_len, pos, error) }
 }

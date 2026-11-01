@@ -1,4 +1,4 @@
-# config-full -- the authoritative instrument (SCOPE.md §3).
+# config-full -- the authoritative instrument (notes/SCOPE.md §3).
 # Base: x86_64_defconfig. This fragment is the delta, and every line is here
 # for a stated reason.
 
@@ -87,7 +87,7 @@ CONFIG_UCS2_STRING=y
 # --- rowsize x groupsize x ascii combination plus every buffer length from 0
 # --- to the full line, driven through hex_dump_to_buffer() -- which is
 # --- precisely the fiddly part of that port and far better than vectors we
-# --- would have written. Same reasoning as CONFIG_GLOB_SELFTEST; SCOPE.md §4
+# --- would have written. Same reasoning as CONFIG_GLOB_SELFTEST; notes/SCOPE.md §4
 # --- asks for the cheapest thing that satisfies criterion 5, and here the
 # --- cheapest thing already existed.
 # RUNTIME_TESTING_MENU is a menuconfig gate, `default y`, and allnoconfig
@@ -95,3 +95,45 @@ CONFIG_UCS2_STRING=y
 # it silently -- which rig/config.sh caught by reading the built .config back.
 CONFIG_RUNTIME_TESTING_MENU=y
 CONFIG_TEST_HEXDUMP=y
+
+# --- lib/xarray: upstream's own test (lib/test_xarray.c). It caught six real
+# --- lost-WARN/behaviour bugs in the xarray port (notes/STATUS.md, 2026-09-06), so the
+# --- ratchet (notes/GOALS.md §6) is satisfied: a defect earned it. Built in (=y), so
+# --- it runs at boot and prints "XArray: N of N tests passed".
+CONFIG_TEST_XARRAY=y
+
+# --- lib/maple_tree: upstream's own test (lib/test_maple_tree.c), the oracle the maple_tree port (2026-10-24) is boot-checked against.
+# --- Built in (=y), runs at boot and prints "maple_tree: N of N tests passed"; the mm VMA tree is also exercised by every boot.
+CONFIG_TEST_MAPLE_TREE=y
+
+# --- lib/rhashtable: upstream's own test (lib/test_rhashtable.c), the oracle the rhashtable port (2026-10-25) is boot-checked against.
+# --- Built in (=y), runs at boot: insert/remove/lookup/walk over rhashtable and rhltable, nested tables, duplicate handling and the
+# --- multi-threaded insert/remove test (tcount kthreads). It prints "Test passed" or fails the init (returns -EAGAIN to unload either way).
+CONFIG_TEST_RHASHTABLE=y
+
+# --- lib/bitmap: upstream's own test (lib/test_bitmap.c), the oracle the bitmap port (2026-10-24) is boot-checked against.
+# --- Same reasoning as TEST_XARRAY/TEST_HEXDUMP: the cheapest thing that satisfies criterion 5 already existed. Built in (=y),
+# --- runs at boot and prints "test_bitmap: all N tests passed".
+CONFIG_TEST_BITMAP=y
+
+# --- lib/random32: upstream's own selftest (inside lib/random32.c, kept in the C glue): 4 boundary seeds + 100 seed/iteration vectors from the
+# --- L'Ecuyer reference; runs at boot and prints "prandom: 100 self tests passed". The cheapest check for the Tausworthe port.
+CONFIG_RANDOM32_SELFTEST=y
+
+# lib/bootconfig.c is ported (bootconfig_rs.rs): the boot rig appends a boot config to the initramfs (rig/boot.sh) and checks /proc/bootconfig and /proc/cmdline.
+CONFIG_BOOT_CONFIG=y
+
+# kernel/user_namespace.c is ported (user_namespace_rs.rs): out-of-line only with USER_NS (the id-map algorithms live in the file; without it the header inlines identity maps).
+CONFIG_USER_NS=y
+
+# fs/unicode/utf8-norm.c is ported (utf8_norm_rs.rs): UNICODE pulls in the normalization tables (utf8data.c_shipped) and utf8-core.c; libtest normalizes through them.
+CONFIG_UNICODE=y
+
+# net/ipv4/tcp_bic.c is ported (tcp_bic_rs.rs): built in so libtest can reach it.
+CONFIG_TCP_CONG_BIC=y
+
+# net/ipv4/tcp_illinois.c is ported (tcp_illinois_rs.rs): built in so libtest can reach it.
+CONFIG_TCP_CONG_ILLINOIS=y
+
+# net/ipv4/tcp_htcp.c is ported (tcp_htcp_rs.rs): built in so libtest can reach it.
+CONFIG_TCP_CONG_HTCP=y

@@ -1,0 +1,57 @@
+ak_acked~ca.acked = pkts_acked as u16;~ca.acked = 1;
+ak_neg~if rtt_us < 0 {~if rtt_us <= 0 {
+ak_neg_cnt~if rtt_us < 0 {<NL>        return;<NL>    }~if rtt_us < -1 {<NL>        return;<NL>    }
+ak_max_val~rtt = RTT_MAX;~rtt = RTT_MAX - 1;
+ak_base_set~ca.base_rtt = rtt;~ca.base_rtt = rtt + 1;
+ak_basegt~if ca.base_rtt > rtt {~if ca.base_rtt < rtt {
+ak_max_cmp~if ca.max_rtt < rtt {~if ca.max_rtt > rtt {
+ak_max_set~ca.max_rtt = rtt;~ca.max_rtt = rtt - 1;
+ak_cnt~ca.cnt_rtt = ca.cnt_rtt.wrapping_add(1);~ca.cnt_rtt = ca.cnt_rtt.wrapping_add(2);
+ak_sum~ca.sum_rtt = ca.sum_rtt.wrapping_add(rtt as u64);~ca.sum_rtt = ca.sum_rtt.wrapping_add(rtt_us as u64);
+ak_cnt_u16~ca.cnt_rtt = ca.cnt_rtt.wrapping_add(1);~ca.cnt_rtt = ca.cnt_rtt.saturating_add(1);
+md~ca.max_rtt.wrapping_sub(ca.base_rtt)~ca.base_rtt.wrapping_sub(ca.max_rtt)
+ad_div~let t = ca.sum_rtt / ca.cnt_rtt as u64;~let t = ca.sum_rtt / (ca.cnt_rtt as u64 + 1);
+ad_sub~t.wrapping_sub(ca.base_rtt as u64) as u32~t as u32
+al_d1~let d1 = dm / 100; // Low threshold~let d1 = dm / 64; // Low threshold
+al_le~if da <= d1 {~if da < d1 {
+al_above~if ca.rtt_above == 0 {~if ca.rtt_above != 0 {
+al_low_inc~ca.rtt_low = ca.rtt_low.wrapping_add(1);~ca.rtt_low = ca.rtt_low.wrapping_add(2);
+al_low_cmp~if (ca.rtt_low as i32) < theta {~if (ca.rtt_low as i32) <= theta {
+al_low_unsigned~if (ca.rtt_low as i32) < theta {~if (ca.rtt_low as u32) < theta as u32 {
+al_low_ret~return ca.alpha;~return ALPHA_BASE;
+al_reset_low~ca.rtt_low = 0;<NL>        ca.rtt_above = 0;<NL>        return ALPHA_MAX;~ca.rtt_above = 0;<NL>        return ALPHA_MAX;
+al_reset_above~ca.rtt_low = 0;<NL>        ca.rtt_above = 0;<NL>        return ALPHA_MAX;~ca.rtt_low = 0;<NL>        return ALPHA_MAX;
+al_set_above~ca.rtt_above = 1;~ca.rtt_above = 0;
+al_dm~dm = dm.wrapping_sub(d1);~
+al_da~let da = da.wrapping_sub(d1);~
+al_formula~dm.wrapping_mul(ALPHA_MAX) / dm.wrapping_add(da.wrapping_mul(ALPHA_MAX - ALPHA_MIN) / ALPHA_MIN)~dm.wrapping_mul(ALPHA_MAX) / dm.wrapping_add(da.wrapping_mul(ALPHA_MAX) / ALPHA_MIN)
+al_formula2~da.wrapping_mul(ALPHA_MAX - ALPHA_MIN) / ALPHA_MIN~da.wrapping_mul(ALPHA_MAX - ALPHA_MIN) / ALPHA_BASE
+al_formula3~dm.wrapping_mul(ALPHA_MAX) / dm.wrapping_add~dm.wrapping_mul(ALPHA_BASE) / dm.wrapping_add
+be_d2~let d2 = dm / 10;~let d2 = dm / 8;
+be_le~if da <= d2 {~if da < d2 {
+be_d3~let d3 = dm.wrapping_mul(8) / 10;~let d3 = dm.wrapping_mul(9) / 10;
+be_f1~BETA_MIN.wrapping_mul(d3).wrapping_sub(BETA_MAX.wrapping_mul(d2))~BETA_MIN.wrapping_mul(d3).wrapping_sub(BETA_MIN.wrapping_mul(d2))
+be_f2~.wrapping_add((BETA_MAX - BETA_MIN).wrapping_mul(da)) / (d3 - d2)~.wrapping_add((BETA_MAX - BETA_MIN).wrapping_mul(da)) / (d3 - d2 + 1)
+be_f3~(BETA_MAX - BETA_MIN).wrapping_mul(da)~(BETA_MAX - BETA_MIN).wrapping_mul(d2)
+up_win~if cwnd < win_thresh as u32 {~if cwnd <= win_thresh as u32 {
+up_win_signed~if cwnd < win_thresh as u32 {~if (cwnd as i32) < win_thresh {
+up_base~ca.alpha = ALPHA_BASE;<NL>        ca.beta = BETA_BASE;~ca.alpha = ALPHA_MAX;<NL>        ca.beta = BETA_BASE;
+up_basebeta~ca.alpha = ALPHA_BASE;<NL>        ca.beta = BETA_BASE;~ca.alpha = ALPHA_BASE;<NL>        ca.beta = BETA_MIN;
+up_cnt~} else if ca.cnt_rtt > 0 {~} else if ca.cnt_rtt > 1 {
+up_dm_da~let dm = max_delay(ca);<NL>        let da = avg_delay(ca);~let da = max_delay(ca);<NL>        let dm = avg_delay(ca);
+up_alpha_args~ca.alpha = alpha(ca, da, dm, theta);~ca.alpha = alpha(ca, dm, da, theta);
+up_end~ca.end_seq = snd_nxt;~
+up_cnt0~ca.cnt_rtt = 0;<NL>    ca.sum_rtt = 0;~ca.sum_rtt = 0;
+up_sum0~ca.cnt_rtt = 0;<NL>    ca.sum_rtt = 0;~ca.cnt_rtt = 0;
+ai_cnt~*cnt = cnt.wrapping_add(ca.acked as u32);~*cnt = cnt.wrapping_add(1);
+ai_acked~ca.acked = 1;~ca.acked = 0;
+ai_shift~let delta = cnt.wrapping_mul(ca.alpha) >> ALPHA_SHIFT;~let delta = cnt.wrapping_mul(ca.alpha) >> 6;
+ai_ge~if delta >= *cwnd {~if delta > *cwnd {
+ai_div~*cwnd = cwnd.wrapping_add(delta / *cwnd).min(clamp);~*cwnd = cwnd.wrapping_add(delta / *cwnd + 1).min(clamp);
+ai_clamp~.min(clamp);~.min(clamp.wrapping_sub(1));
+ai_noclamp~.min(clamp);~;
+ai_zero~*cnt = 0;<NL>        return 1;~return 1;
+ai_ret~        return 1;<NL>    }<NL>    0~        return 0;<NL>    }<NL>    0
+ss_decr~let decr = cwnd.wrapping_mul(ca.beta) >> BETA_SHIFT;~let decr = cwnd.wrapping_mul(ca.beta) >> 5;
+ss_floor~cwnd.wrapping_sub(decr).max(2)~cwnd.wrapping_sub(decr).max(1)
+ss_sub~cwnd.wrapping_sub(decr).max(2)~decr.max(2)
